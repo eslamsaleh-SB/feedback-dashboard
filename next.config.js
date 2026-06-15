@@ -1,9 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    // Allow Server Actions / route bodies up to 20MB (default is 1MB).
-    serverActions: { bodySizeLimit: "20mb" },
-  },
+  // Videos now stream from Google Drive (no large uploads through our server),
+  // so no special body-size config is needed — ideal for Vercel.
+
   // Pilot: don't fail the production build on type/lint warnings.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
