@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 
 export type SessionVideo = {
   id: string;
-  telegram_file_id: string;
+  drive_file_id: string | null;
+  file_name: string | null;
   mistake_description: string | null;
 };
 
@@ -66,11 +67,8 @@ export default function DashboardClient({
           scored.length
         ).toFixed(1)
       : "—";
-    const mistakes = filtered.reduce(
-      (a, s) =>
-        a + s.videos.filter((v) => (v.mistake_description ?? "").trim() !== "").length,
-      0
-    );
+    // Each imported clip represents a flagged mistake.
+    const mistakes = filtered.reduce((a, s) => a + s.videos.length, 0);
     return { total, avg, mistakes };
   }, [filtered]);
 
@@ -177,21 +175,25 @@ export default function DashboardClient({
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         {s.videos.map((v, i) => (
                           <div key={v.id} className="space-y-2">
-                            <video
-                              src={`/api/video/${encodeURIComponent(
-                                v.telegram_file_id
-                              )}`}
-                              controls
-                              preload="metadata"
-                              className="w-full aspect-video bg-black rounded-lg"
-                            />
+                            {v.drive_file_id ? (
+                              <iframe
+                                src={`https://drive.google.com/file/d/${v.drive_file_id}/preview`}
+                                allow="autoplay"
+                                allowFullScreen
+                                className="w-full aspect-video bg-black rounded-lg border-0"
+                              />
+                            ) : (
+                              <div className="w-full aspect-video bg-slate-100 rounded-lg flex items-center justify-center text-sm text-slate-400">
+                                Video unavailable
+                              </div>
+                            )}
                             <p className="text-sm">
                               <span className="font-medium text-slate-500">
                                 #{i + 1} ·{" "}
                               </span>
                               {v.mistake_description?.trim()
                                 ? v.mistake_description
-                                : "No description"}
+                                : v.file_name || "Untitled clip"}
                             </p>
                           </div>
                         ))}
