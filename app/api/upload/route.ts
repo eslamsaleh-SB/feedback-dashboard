@@ -2,32 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 120; // multiple uploads can take a while
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID!;
-const MAX_BYTES = 20 * 1024 * 1024; // 20MB per file
-const MAX_FILES = 20;
+const DRIVE_API_KEY = process.env.GOOGLE_DRIVE_API_KEY!;
 
-// Send one file to Telegram and return its permanent file_id.
-async function sendToTelegram(file: File): Promise<string> {
-  const tgForm = new FormData();
-  tgForm.append("chat_id", TELEGRAM_CHAT_ID);
-  tgForm.append("video", file, file.name || "clip.mp4");
+// Pull the folder id out of any common Google Drive folder URL,
+// or accept a bare id.
+function extractFolderId(input: string): string | null {
+  const url = input.trim();
+  const folders = url.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (folders) return folders[1];
+  const idParam = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idParam) return idParam[1];
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(url)) return url; // pasted a raw id
+  return null;
+}
 
-  const res = await fetch(
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo`,
-    { method: "POST", body: tgForm }
+// List all video files inside a public Drive folder using an API key.
+async function listDriveVideos(folderId: string) {
+  const q = encodeURIComponent(
+    `'${folderId}' in parents and mimeType contains 'video' and trashed = false`
   );
+  const url =
+    `https://www.googleapis.com/drive/v3/files?q=${q}` +
+    `&key=${DRIVE_API_KEY}` +
+    `&fields=files(id,name,mimeType)` +
+    `&pageSize=1000` +
+    `&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+
+  const res = await fetch(url);
   const json = await res.json();
-  if (!json.ok) {
-    throw new Error(json.description || "Telegram sendVideo failed");
+  if (!res.ok) {
+    throw new Error(
+      json?.error?.message ||
+        "Google Drive API error. Check the API key and that the folder is shared 'Anyone with the link'."
+    );
   }
-  const r = json.result;
-  const fileId: string | undefined =
-    r?.video?.file_id ?? r?.document?.file_id ?? r?.animation?.file_id;
-  if (!fileId) throw new Error("No file_id in Telegram response");
-  return fileId;
+  return (json.files || []) as { id: string; name: string; mimeType: string }[];
 }
 
 export async function POST(req: NextRequest) {
@@ -49,42 +59,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not allowed to upload" }, { status: 403 });
   }
 
-  // ---- Read the form ----
-  const form = await req.formData();
-  const mode = (form.get("mode") as string) || "new"; // "new" | "existing"
-  const files = form.getAll("files").filter((f): f is File => f instanceof File);
-  const descriptions = form.getAll("descriptions").map((d) => String(d ?? ""));
-
-  if (files.length === 0) {
-    return NextResponse.json({ error: "No video files provided" }, { status: 400 });
+  // ---- Read JSON body ----
+  const body = await req.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  if (files.length > MAX_FILES) {
+
+  const mode = body.mode === "existing" ? "existing" : "new";
+  const folderUrl = String(body.folder_url || "");
+  const folderId = extractFolderId(folderUrl);
+  if (!folderId) {
     return NextResponse.json(
-      { error: `Too many files (max ${MAX_FILES})` },
+      { error: "Could not read a folder ID from that Google Drive link." },
       { status: 400 }
     );
-  }
-  for (const f of files) {
-    if (f.size > MAX_BYTES) {
-      return NextResponse.json(
-        { error: `"${f.name}" is larger than 20MB` },
-        { status: 413 }
-      );
-    }
   }
 
   // ---- Resolve / create the match session ----
   let matchSessionId: string;
 
   if (mode === "existing") {
-    matchSessionId = String(form.get("match_session_id") || "");
+    matchSessionId = String(body.match_session_id || "");
     if (!matchSessionId) {
       return NextResponse.json(
-        { error: "match_session_id is required when adding to an existing session" },
+        { error: "Pick an existing match session." },
         { status: 400 }
       );
     }
-    // Confirm the session exists and the user can see it (RLS-scoped read).
     const { data: ms, error } = await supabase
       .from("match_sessions")
       .select("id")
@@ -97,21 +98,18 @@ export async function POST(req: NextRequest) {
       );
     }
   } else {
-    const collectorId = String(form.get("collector_id") || "");
-    const matchName = String(form.get("match_name") || "").trim();
-    const reviewDate = String(form.get("review_date") || "") || null;
-    const notes = String(form.get("overall_notes") || "");
-    const scoreRaw = form.get("quality_score") as string | null;
-    const score = scoreRaw ? parseInt(scoreRaw, 10) : null;
+    const collectorId = String(body.collector_id || "");
+    const matchName = String(body.match_name || "").trim();
+    const reviewDate = String(body.review_date || "") || null;
+    const notes = String(body.overall_notes || "");
+    const score =
+      body.quality_score != null ? parseInt(String(body.quality_score), 10) : null;
 
     if (!collectorId || !matchName) {
       return NextResponse.json(
-        { error: "collector_id and match_name are required for a new session" },
+        { error: "collector and match name are required" },
         { status: 400 }
       );
-    }
-    if (score !== null && (score < 1 || score > 10)) {
-      return NextResponse.json({ error: "quality_score must be 1–10" }, { status: 400 });
     }
 
     const { data: created, error } = await supabase
@@ -136,41 +134,41 @@ export async function POST(req: NextRequest) {
     matchSessionId = created.id;
   }
 
-  // ---- Upload every file to Telegram, then save the rows ----
-  const rows: {
-    match_session_id: string;
-    telegram_file_id: string;
-    mistake_description: string;
-  }[] = [];
-  const failures: { name: string; error: string }[] = [];
-
-  for (let i = 0; i < files.length; i++) {
-    try {
-      const fileId = await sendToTelegram(files[i]);
-      rows.push({
-        match_session_id: matchSessionId,
-        telegram_file_id: fileId,
-        mistake_description: descriptions[i] ?? "",
-      });
-    } catch (e: any) {
-      failures.push({ name: files[i].name, error: e.message });
-    }
+  // ---- Fetch the videos from Google Drive ----
+  let files: { id: string; name: string }[];
+  try {
+    files = await listDriveVideos(folderId);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 502 });
   }
 
-  if (rows.length > 0) {
-    const { error: insertError } = await supabase
-      .from("session_videos")
-      .insert(rows);
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 400 });
-    }
+  if (files.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "No video files found in that folder. Make sure it contains videos and is shared 'Anyone with the link'.",
+      },
+      { status: 404 }
+    );
+  }
+
+  // ---- Save the file references ----
+  const rows = files.map((f) => ({
+    match_session_id: matchSessionId,
+    drive_file_id: f.id,
+    file_name: f.name,
+  }));
+
+  const { error: insertError } = await supabase
+    .from("session_videos")
+    .insert(rows);
+  if (insertError) {
+    return NextResponse.json({ error: insertError.message }, { status: 400 });
   }
 
   return NextResponse.json({
     ok: true,
     match_session_id: matchSessionId,
-    uploaded: rows.length,
-    failed: failures.length,
-    failures,
+    imported: rows.length,
   });
 }
