@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     supabase
       .from("match_sessions")
       .select(
-        "id, match_name, review_date, quality_score, overall_notes, created_at, collector_id, collectors(name), session_videos(id, telegram_file_id, mistake_description)"
+        "id, match_name, review_date, quality_score, overall_notes, created_at, collector_id, collectors(name), session_videos(id, drive_file_id, file_name, mistake_description)"
       )
       .order("review_date", { ascending: false }),
     supabase.from("collectors").select("id, name").order("name"),
@@ -38,7 +38,8 @@ export default async function DashboardPage() {
     collector_name: s.collectors?.name ?? "Unknown",
     videos: (s.session_videos ?? []).map((v: any) => ({
       id: v.id,
-      telegram_file_id: v.telegram_file_id,
+      drive_file_id: v.drive_file_id,
+      file_name: v.file_name,
       mistake_description: v.mistake_description,
     })),
   }));
