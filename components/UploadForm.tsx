@@ -11,9 +11,6 @@ export type ExistingSession = {
   collector_id: string;
 };
 
-const MAX_BYTES = 20 * 1024 * 1024;
-const MAX_FILES = 20;
-
 type Mode = "new" | "existing";
 
 export default function UploadForm({
@@ -29,8 +26,7 @@ export default function UploadForm({
 
   // shared
   const [collectorId, setCollectorId] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-  const [descriptions, setDescriptions] = useState<string[]>([]);
+  const [folderUrl, setFolderUrl] = useState("");
 
   // new-session fields
   const [matchName, setMatchName] = useState("");
@@ -46,22 +42,10 @@ export default function UploadForm({
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  // Match sessions filtered to the selected collector (for "existing" mode).
   const sessionsForCollector = useMemo(
     () => existingSessions.filter((s) => s.collector_id === collectorId),
     [existingSessions, collectorId]
   );
-
-  function onFilesChosen(list: FileList | null) {
-    const arr = list ? Array.from(list).slice(0, MAX_FILES) : [];
-    setFiles(arr);
-    setDescriptions(arr.map(() => ""));
-    setMsg(null);
-  }
-
-  function setDescription(i: number, value: string) {
-    setDescriptions((prev) => prev.map((d, idx) => (idx === i ? value : d)));
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,37 +56,36 @@ export default function UploadForm({
       return setMsg({ type: "err", text: "Enter a match name." });
     if (mode === "existing" && !sessionId)
       return setMsg({ type: "err", text: "Pick an existing match session." });
-    if (files.length === 0)
-      return setMsg({ type: "err", text: "Choose at least one video." });
-    if (files.some((f) => f.size > MAX_BYTES))
-      return setMsg({ type: "err", text: "Each video must be under 20MB." });
+    if (!folderUrl.trim())
+      return setMsg({ type: "err", text: "Paste the Google Drive folder link." });
 
     setLoading(true);
-    const fd = new FormData();
-    fd.append("mode", mode);
-    files.forEach((f) => fd.append("files", f));
-    descriptions.forEach((d) => fd.append("descriptions", d));
-
+    const payload: Record<string, unknown> = {
+      mode,
+      folder_url: folderUrl.trim(),
+    };
     if (mode === "new") {
-      fd.append("collector_id", collectorId);
-      fd.append("match_name", matchName);
-      fd.append("review_date", reviewDate);
-      fd.append("quality_score", String(score));
-      fd.append("overall_notes", overallNotes);
+      payload.collector_id = collectorId;
+      payload.match_name = matchName;
+      payload.review_date = reviewDate;
+      payload.quality_score = score;
+      payload.overall_notes = overallNotes;
     } else {
-      fd.append("match_session_id", sessionId);
+      payload.match_session_id = sessionId;
     }
 
     try {
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Upload failed");
+      if (!res.ok) throw new Error(json.error || "Import failed");
 
-      const failedNote =
-        json.failed > 0 ? ` (${json.failed} failed to send)` : "";
       setMsg({
         type: "ok",
-        text: `Uploaded ${json.uploaded} video(s)${failedNote}. Redirecting…`,
+        text: `Imported ${json.imported} video(s) from Drive. Redirecting…`,
       });
       setTimeout(() => router.push("/dashboard"), 1100);
     } catch (err: any) {
@@ -115,7 +98,12 @@ export default function UploadForm({
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold mb-6">Upload match videos</h1>
+      <h1 className="text-2xl font-bold mb-2">Add match videos from Google Drive</h1>
+      <p className="text-sm text-slate-500 mb-6">
+        Upload the videos to a Google Drive folder, set the folder’s sharing to
+        <span className="font-medium"> “Anyone with the link”</span>, then paste the
+        folder link below — we’ll pull in every video automatically.
+      </p>
 
       {/* Mode switch */}
       <div className="inline-flex rounded-xl border border-slate-300 bg-white p-1 mb-6">
@@ -230,51 +218,25 @@ export default function UploadForm({
                 </option>
               ))}
             </select>
-            {collectorId && sessionsForCollector.length === 0 && (
-              <p className="text-xs text-amber-600 mt-1">
-                No sessions yet for this collector — create a new one instead.
-              </p>
-            )}
           </div>
         )}
 
-        {/* Videos + per-file mistake descriptions */}
+        {/* Google Drive folder link */}
         <div>
           <label className="block text-sm font-medium mb-1">
-            Videos (up to {MAX_FILES}, each under 20MB)
+            Google Drive folder link
           </label>
           <input
-            type="file"
-            accept="video/*"
-            multiple
-            onChange={(e) => onFilesChosen(e.target.files)}
-            className="w-full text-sm"
+            className={inputCls}
+            placeholder="https://drive.google.com/drive/folders/…"
+            value={folderUrl}
+            onChange={(e) => setFolderUrl(e.target.value)}
+            required
           />
+          <p className="text-xs text-slate-400 mt-1">
+            The folder must be shared as “Anyone with the link”.
+          </p>
         </div>
-
-        {files.length > 0 && (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-500">
-              {files.length} video(s) selected — add a mistake description for each:
-            </p>
-            {files.map((f, i) => (
-              <div
-                key={i}
-                className="rounded-lg border border-slate-200 p-3 space-y-2"
-              >
-                <p className="text-xs text-slate-500 truncate">
-                  🎬 {f.name} ({(f.size / 1024 / 1024).toFixed(1)} MB)
-                </p>
-                <input
-                  className={inputCls}
-                  placeholder="Mistake description (e.g. wrong offside call)"
-                  value={descriptions[i] ?? ""}
-                  onChange={(e) => setDescription(i, e.target.value)}
-                />
-              </div>
-            ))}
-          </div>
-        )}
 
         <button
           type="submit"
@@ -285,10 +247,10 @@ export default function UploadForm({
             <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
           )}
           {loading
-            ? "Uploading…"
+            ? "Importing…"
             : mode === "new"
-            ? "Create session & upload"
-            : "Upload to session"}
+            ? "Create session & import videos"
+            : "Import videos to session"}
         </button>
 
         {msg && (
