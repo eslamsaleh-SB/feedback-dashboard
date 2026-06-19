@@ -29,7 +29,6 @@ export default async function AnalyticsPage({
     .single();
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
 
-  // Filters from the URL.
   const from = searchParams.from && ISO.test(searchParams.from) ? searchParams.from : null;
   const to = searchParams.to && ISO.test(searchParams.to) ? searchParams.to : null;
   const collector =
@@ -46,56 +45,32 @@ export default async function AnalyticsPage({
     if (c.hr_code) nameByHr.set(c.hr_code, c.name);
   });
 
-  // ---- Match View: per-part summary (RLS-scoped), filtered, most recent ----
-  let sq = supabase
-    .from("match_part_summary")
-    .select(
-      "matchid, partid, hr_code, date, players, event, formation_tactical, location, impact, extras, freeze_frame, total"
-    )
-    .order("date", { ascending: false })
-    .limit(PART_LIMIT);
-  if (from) sq = sq.gte("date", from);
-  if (to) sq = sq.lte("date", to);
-  if (collector) sq = sq.eq("hr_code", collector);
-  const { data: sumRows } = await sq;
-
+  // ---- Match View: per-part totals from the lean module_totals table (RPC) ----
+  const { data: sumRows } = await supabase.rpc("match_part_summary_fast", {
+    p_from: from,
+    p_to: to,
+    p_collector: collector,
+    p_limit: PART_LIMIT,
+  });
   const parts: PartSummary[] = (sumRows ?? []).map((r: any) => ({
     matchid: r.matchid,
     partid: r.partid,
     hr_code: r.hr_code,
-    collector_name: r.hr_code
-      ? nameByHr.get(r.hr_code) ?? r.hr_code
-      : "Unassigned",
+    collector_name: r.hr_code ? nameByHr.get(r.hr_code) ?? r.hr_code : "Unassigned",
     date: r.date,
     counts: {
-      players: r.players,
-      event: r.event,
-      formation_tactical: r.formation_tactical,
-      location: r.location,
-      impact: r.impact,
-      extras: r.extras,
-      freeze_frame: r.freeze_frame,
+      players: Number(r.players),
+      event: Number(r.event),
+      formation_tactical: Number(r.formation_tactical),
+      location: Number(r.location),
+      impact: Number(r.impact),
+      extras: Number(r.extras),
+      freeze_frame: Number(r.freeze_frame),
     },
-    total: r.total,
+    total: Number(r.total),
   }));
 
-  // ---- Module View: exact totals across ALL filtered data (no row cap) ----
-  const totalsArr = await Promise.all(
-    MODULES.map(async (m) => {
-      let q = supabase.from(m.value).select("*", { count: "exact", head: true });
-      if (from) q = q.gte("review_date", from);
-      if (to) q = q.lte("review_date", to);
-      if (collector) q = q.eq("hr_code", collector);
-      const { count } = await q;
-      return [m.value, count ?? 0] as const;
-    })
-  );
-  const moduleTotals = Object.fromEntries(totalsArr) as Record<
-    ModuleValue,
-    number
-  >;
-
-  // ---- Collectors View: per-collector per-module counts (RPC, RLS-aware) ----
+  // ---- Collectors ranking from module_totals (RPC) ----
   const { data: rpcRows } = await supabase.rpc("collector_module_totals", {
     p_from: from,
     p_to: to,
@@ -115,6 +90,14 @@ export default async function AnalyticsPage({
     total: Number(r.total),
   }));
   if (collector) collectorRows = collectorRows.filter((c) => c.hr_code === collector);
+
+  // ---- Module View totals: summed from the collector ranking (no raw queries) ----
+  const moduleTotals = Object.fromEntries(
+    MODULES.map((m) => [
+      m.value,
+      collectorRows.reduce((a, c) => a + (c.counts[m.value] ?? 0), 0),
+    ])
+  ) as Record<ModuleValue, number>;
 
   let myName: string | null = null;
   if (role === "Viewer" && profile?.collector_id) {

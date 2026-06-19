@@ -3,200 +3,70 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-// ---- Per-module column configuration -------------------------------------
-// Maps each module to its table, the CSV header that holds the collector HR
-// code, the date column + its format, and the extra columns to store.
-// Header keys are matched case-insensitively against the CSV.
-type FieldType = "text" | "num";
-type ModuleConfig = {
-  table: string;
-  hrHeader: string; // CSV header for the collector HR code
-  dateHeader: string;
-  dateFormat: "dmy" | "mdy";
-  // extra columns: csv header (lowercased) -> { col, type }
-  fields: { csv: string; col: string; type: FieldType }[];
+// Allowed modules (the `module` dimension of module_totals).
+export const MODULES = [
+  "players",
+  "event",
+  "formation_tactical",
+  "location",
+  "impact",
+  "extras",
+  "freeze_frame",
+] as const;
+type Module = (typeof MODULES)[number];
+
+// Header aliases (lowercased) we accept for each field.
+const ALIASES = {
+  matchid: ["matchid", "match_id", "match id"],
+  partid: ["partid", "part_id", "part id"],
+  hr_code: [
+    "collector",
+    "hr_code",
+    "collector_hr_code",
+    "base_hr_code",
+    "players_hr_code",
+    "formation_hr_code",
+    "location_hr_code",
+    "impact_hr_code",
+    "extras_hr_code",
+  ],
+  review_date: ["review_date", "a_review_date", "date"],
+  total_mistakes: ["total_mistakes", "total", "mistakes", "count"],
 };
 
-const COMMON = (hr: string): { csv: string; col: string; type: FieldType }[] => [
-  { csv: "review_type", col: "review_type", type: "text" },
-  { csv: "reviewer_code", col: "reviewer_code", type: "text" },
-  { csv: hr, col: "hr_code", type: "text" },
-  { csv: "collector_event", col: "collector_event", type: "text" },
-  { csv: "video_timestamp", col: "video_timestamp", type: "text" },
-  { csv: "error_type", col: "error_type", type: "text" },
-  { csv: "defect_type", col: "defect_type", type: "text" },
-];
-
-export const MODULE_CONFIG: Record<string, ModuleConfig> = {
-  event: {
-    table: "event",
-    hrHeader: "base_hr_code",
-    dateHeader: "review_date",
-    dateFormat: "dmy",
-    fields: [
-      ...COMMON("base_hr_code"),
-      { csv: "base_squad", col: "squad", type: "text" },
-      { csv: "reviewer event", col: "reviewer_event", type: "text" },
-    ],
-  },
-  players: {
-    table: "players",
-    hrHeader: "players_hr_code",
-    dateHeader: "review_date",
-    dateFormat: "dmy",
-    fields: [
-      ...COMMON("players_hr_code"),
-      { csv: "players_squad", col: "squad", type: "text" },
-      { csv: "team_type", col: "team_type", type: "text" },
-      { csv: "player_1_jersey_collector", col: "player_1_jersey_collector", type: "text" },
-      { csv: "player_1_jersey_reviewer", col: "player_1_jersey_reviewer", type: "text" },
-      { csv: "player_2_jersey_collector", col: "player_2_jersey_collector", type: "text" },
-      { csv: "player_2_jersey_reviewer", col: "player_2_jersey_reviewer", type: "text" },
-    ],
-  },
-  formation_tactical: {
-    table: "formation_tactical",
-    hrHeader: "formation_hr_code",
-    dateHeader: "review_date",
-    dateFormat: "dmy",
-    fields: [
-      ...COMMON("formation_hr_code"),
-      { csv: "formation_squad", col: "squad", type: "text" },
-      { csv: "formation_collector", col: "formation_collector", type: "text" },
-      { csv: "formation_reviewer", col: "formation_reviewer", type: "text" },
-    ],
-  },
-  location: {
-    table: "location",
-    hrHeader: "location_hr_code",
-    dateHeader: "review_date",
-    dateFormat: "dmy",
-    fields: [
-      ...COMMON("location_hr_code"),
-      { csv: "location_squad", col: "squad", type: "text" },
-      { csv: "actual_location_diff", col: "actual_location_diff", type: "num" },
-    ],
-  },
-  impact: {
-    table: "impact",
-    hrHeader: "impact_hr_code",
-    dateHeader: "review_date",
-    dateFormat: "dmy",
-    fields: [
-      { csv: "reviewer_code", col: "reviewer_code", type: "text" },
-      { csv: "impact_hr_code", col: "hr_code", type: "text" },
-      { csv: "impact_squad", col: "squad", type: "text" },
-      { csv: "collector_event", col: "collector_event", type: "text" },
-      { csv: "video_timestamp", col: "video_timestamp", type: "text" },
-      { csv: "error_type", col: "error_type", type: "text" },
-      { csv: "impact_collector", col: "impact_collector", type: "num" },
-      { csv: "impact_reviewer", col: "impact_reviewer", type: "num" },
-      { csv: "impact_difference", col: "impact_difference", type: "num" },
-    ],
-  },
-  extras: {
-    table: "extras",
-    hrHeader: "extras_hr_code",
-    dateHeader: "review_date",
-    dateFormat: "dmy",
-    fields: [
-      ...COMMON("extras_hr_code"),
-      { csv: "extras_squad", col: "squad", type: "text" },
-      { csv: "body-part_collector", col: "body_part_collector", type: "text" },
-      { csv: "body-part_reviewer", col: "body_part_reviewer", type: "text" },
-      { csv: "new extras collector", col: "new_extras_collector", type: "text" },
-      { csv: "new extras reviewer", col: "new_extras_reviewer", type: "text" },
-      { csv: "type_collector", col: "type_collector", type: "text" },
-      { csv: "type_reviewer", col: "type_reviewer", type: "text" },
-      { csv: "height_collector", col: "height_collector", type: "text" },
-      { csv: "height_reviewer", col: "height_reviewer", type: "text" },
-      { csv: "technique_collector", col: "technique_collector", type: "text" },
-      { csv: "technique_reviewer", col: "technique_reviewer", type: "text" },
-      { csv: "location_collector", col: "location_collector", type: "text" },
-      { csv: "location_reviewer", col: "location_reviewer", type: "text" },
-    ],
-  },
-  freeze_frame: {
-    table: "freeze_frame",
-    hrHeader: "collector_hr_code",
-    dateHeader: "a_review_date",
-    dateFormat: "mdy",
-    fields: [
-      { csv: "collector_hr_code", col: "hr_code", type: "text" },
-      { csv: "videotimestamp", col: "video_timestamp", type: "text" },
-      { csv: "avg. ff_score", col: "avg_ff_score", type: "text" },
-      { csv: "total_errors", col: "total_errors", type: "num" },
-      { csv: "player_count", col: "player_count", type: "num" },
-      { csv: "a_shots", col: "a_shots", type: "num" },
-      { csv: "changed_shooter", col: "changed_shooter", type: "num" },
-      { csv: "changed_keeper", col: "changed_keeper", type: "num" },
-      { csv: "changed_opponent", col: "changed_opponent", type: "num" },
-      { csv: "changed_team", col: "changed_team", type: "num" },
-      { csv: "added_player", col: "added_player", type: "num" },
-      { csv: "deleted_player", col: "deleted_player", type: "num" },
-      { csv: "changed_location", col: "changed_location", type: "num" },
-      { csv: "added_shot", col: "added_shot", type: "num" },
-      { csv: "changed_impact", col: "changed_impact", type: "num" },
-    ],
-  },
-};
-
-// ---- helpers --------------------------------------------------------------
-function parseDate(v: unknown, fmt: "dmy" | "mdy"): string | null {
-  const s = String(v ?? "").trim();
-  if (!s) return null;
-  // dd/mm/yyyy or m/d/yyyy (also tolerate '-')
-  const m = s.match(/^(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{1,4})/);
-  if (!m) {
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+function pick(row: Record<string, unknown>, aliases: string[]): string {
+  for (const a of aliases) {
+    if (row[a] != null && String(row[a]).trim() !== "") return String(row[a]).trim();
   }
-  let a = m[1], b = m[2], c = m[3];
-  let day: string, mon: string, year: string;
-  if (a.length === 4) {
-    // yyyy-mm-dd
-    year = a; mon = b; day = c;
-  } else if (fmt === "dmy") {
-    day = a; mon = b; year = c;
-  } else {
-    mon = a; day = b; year = c;
+  return "";
+}
+
+function cleanDate(v: string): string | null {
+  if (!v) return null;
+  const m = v.match(/^(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{1,4})/);
+  if (m) {
+    let [, a, b, c] = m;
+    let Y: string, M: string, D: string;
+    if (a.length === 4) {
+      Y = a; M = b; D = c; // yyyy-mm-dd
+    } else if (Number(a) > 12) {
+      D = a; M = b; Y = c; // dd/mm/yyyy
+    } else {
+      D = a; M = b; Y = c; // assume dd/mm/yyyy (Tableau/Hudl exports)
+    }
+    const iso = `${Y.padStart(4, "20")}-${M.padStart(2, "0")}-${D.padStart(2, "0")}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
   }
-  const Y = year.padStart(4, "20");
-  const M = mon.padStart(2, "0");
-  const D = day.padStart(2, "0");
-  const iso = `${Y}-${M}-${D}`;
-  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : null;
-}
-
-function parseNum(v: unknown): number | null {
-  const s = String(v ?? "").trim().replace(/%$/, "");
-  if (!s || s.toLowerCase() === "nan") return null;
-  const n = Number(s);
-  return isNaN(n) ? null : n;
-}
-
-function clean(v: unknown): string | null {
-  const s = String(v ?? "").trim();
-  if (!s || s.toLowerCase() === "nan") return null;
-  return s;
-}
-
-// Lowercase every key of an incoming row so header matching is case-insensitive.
-function lc(row: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const k of Object.keys(row)) out[k.trim().toLowerCase()] = row[k];
-  return out;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
 export async function POST(req: NextRequest) {
-  // ---- Auth + role (Admin/Uploader only) ----
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
+  if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -204,144 +74,109 @@ export async function POST(req: NextRequest) {
     .eq("id", user.id)
     .single();
   if (!profile || !["Admin", "Uploader"].includes(profile.role)) {
-    return NextResponse.json(
-      { error: "Only Admins/Uploaders can upload module data" },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: "Only Admins/Uploaders can upload" }, { status: 403 });
   }
 
-  // ---- Validate body ----
   const body = await req.json().catch(() => null);
-  if (!body) {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
-  }
+  if (!body) return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
 
-  const module = String(body.module || "");
-  const cfg = MODULE_CONFIG[module];
-  if (!cfg) {
+  const module = String(body.module || "") as Module;
+  if (!MODULES.includes(module)) {
     return NextResponse.json(
-      { error: `Unknown module. Pick one of: ${Object.keys(MODULE_CONFIG).join(", ")}` },
+      { error: `Unknown module. Pick one of: ${MODULES.join(", ")}` },
       { status: 400 }
     );
   }
 
-  const rawRows: Record<string, unknown>[] = Array.isArray(body.rows)
-    ? body.rows
-    : [];
+  const rawRows: Record<string, unknown>[] = Array.isArray(body.rows) ? body.rows : [];
   if (rawRows.length === 0) {
-    return NextResponse.json(
-      { error: "No rows found in the uploaded CSV." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "No rows found in the uploaded CSV." }, { status: 400 });
   }
 
-  // ---- Transform rows ----
-  const childRows: Record<string, unknown>[] = [];
-  // matchid|partid -> { matchid, partid, hr_code, date }
-  const assignments = new Map<
-    string,
-    { matchid: string; partid: number; hr_code: string | null; date: string | null }
-  >();
-  const hrCodes = new Set<string>();
+  // Detect whether the file is pre-aggregated (has a total_mistakes column).
+  const lcFirst = Object.fromEntries(
+    Object.keys(rawRows[0]).map((k) => [k.trim().toLowerCase(), k])
+  );
+  const hasTotal = ALIASES.total_mistakes.some((a) => a in lcFirst);
+
+  // Aggregate by (matchid, partid): sum total_mistakes if present, else count rows.
+  type Agg = { matchid: string; partid: number; hr_code: string | null; review_date: string | null; total: number };
+  const map = new Map<string, Agg>();
   const problems: string[] = [];
 
   rawRows.forEach((raw, i) => {
-    const r = lc(raw);
-    const matchid = clean(r["matchid"]);
-    const partidRaw = clean(r["partid"]);
-    const key = clean(r["key"]);
+    const row: Record<string, unknown> = {};
+    for (const k of Object.keys(raw)) row[k.trim().toLowerCase()] = raw[k];
 
-    if (!matchid) return problems.push(`Row ${i + 1}: missing matchid`);
-    if (!partidRaw) return problems.push(`Row ${i + 1}: missing partid`);
-    if (!key) return problems.push(`Row ${i + 1}: missing key`);
-
-    const partid = parseInt(partidRaw, 10);
-    if (isNaN(partid))
-      return problems.push(`Row ${i + 1}: bad partid "${partidRaw}"`);
-
-    const hr_code = clean(r[cfg.hrHeader]);
-    const date = parseDate(r[cfg.dateHeader], cfg.dateFormat);
-    if (hr_code) hrCodes.add(hr_code);
-
-    const akey = `${matchid}|${partid}`;
-    if (!assignments.has(akey))
-      assignments.set(akey, { matchid, partid, hr_code, date });
-
-    // Build the child row.
-    const child: Record<string, unknown> = { matchid, partid, key, review_date: date };
-    for (const f of cfg.fields) {
-      child[f.col] = f.type === "num" ? parseNum(r[f.csv]) : clean(r[f.csv]);
+    const matchid = pick(row, ALIASES.matchid);
+    const partidStr = pick(row, ALIASES.partid);
+    if (!matchid || !partidStr) {
+      problems.push(`Row ${i + 1}: missing matchid/partid`);
+      return;
     }
-    childRows.push(child);
+    const partid = parseInt(partidStr, 10);
+    if (isNaN(partid)) return problems.push(`Row ${i + 1}: bad partid`);
+
+    const hr = pick(row, ALIASES.hr_code) || null;
+    const date = cleanDate(pick(row, ALIASES.review_date));
+    const inc = hasTotal ? Number(pick(row, ALIASES.total_mistakes)) || 0 : 1;
+
+    const key = `${matchid}|${partid}`;
+    const cur = map.get(key);
+    if (cur) {
+      cur.total += inc;
+      if (!cur.hr_code && hr) cur.hr_code = hr;
+      if (date && (!cur.review_date || date > cur.review_date)) cur.review_date = date;
+    } else {
+      map.set(key, { matchid, partid, hr_code: hr, review_date: date, total: inc });
+    }
   });
 
-  if (childRows.length === 0) {
+  const aggregated = Array.from(map.values());
+  if (aggregated.length === 0) {
     return NextResponse.json(
       { error: `Nothing to import. ${problems.slice(0, 3).join("; ")}` },
       { status: 400 }
     );
   }
 
-  // ---- 1) Ensure a collector row exists for every HR code (auto-create) ----
-  if (hrCodes.size > 0) {
-    const collectorRows = Array.from(hrCodes).map((hr) => ({
-      hr_code: hr,
-      name: hr, // placeholder name; Admin can rename on the Collectors page
-    }));
-    const { error: cErr } = await supabase
+  // Ensure a collector row exists for each HR code (for names + RLS).
+  const hrCodes = Array.from(
+    new Set(aggregated.map((a) => a.hr_code).filter(Boolean) as string[])
+  );
+  if (hrCodes.length) {
+    await supabase
       .from("collectors")
-      .upsert(collectorRows, { onConflict: "hr_code", ignoreDuplicates: true });
-    if (cErr) {
-      return NextResponse.json(
-        { error: `Could not ensure collectors: ${cErr.message}` },
-        { status: 400 }
-      );
-    }
+      .upsert(hrCodes.map((hr) => ({ hr_code: hr, name: hr })), {
+        onConflict: "hr_code",
+        ignoreDuplicates: true,
+      });
   }
 
-  // ---- 2) Upsert match_assignments on (matchid, partid) ----
-  const assignmentPayload = Array.from(assignments.values()).map((a) => ({
+  // Upsert the per-part totals for this module (replace on conflict).
+  const payload = aggregated.map((a) => ({
     matchid: a.matchid,
     partid: a.partid,
+    module,
     hr_code: a.hr_code,
-    uploaded_by: user.id,
-    ...(a.date ? { date: a.date } : {}),
+    review_date: a.review_date,
+    total_mistakes: a.total,
   }));
 
-  const { error: aErr } = await supabase
-    .from("match_assignments")
-    .upsert(assignmentPayload, { onConflict: "matchid,partid" });
-  if (aErr) {
-    return NextResponse.json(
-      { error: `Could not save match assignments: ${aErr.message}` },
-      { status: 400 }
-    );
-  }
-
-  // ---- 3) Upsert child rows on key (dedup within module) ----
-  // Collapse duplicate keys inside this CSV (last wins) to avoid a Postgres
-  // "ON CONFLICT cannot affect row a second time" error.
-  const seen = new Map<string, Record<string, unknown>>();
-  for (const row of childRows) seen.set(String(row.key), row);
-  const dedupedChild = Array.from(seen.values());
-
-  const { error: childErr, count } = await supabase
-    .from(cfg.table)
-    .upsert(dedupedChild, { onConflict: "key", count: "exact" });
-  if (childErr) {
-    return NextResponse.json(
-      { error: `Could not save ${cfg.table} rows: ${childErr.message}` },
-      { status: 400 }
-    );
+  const { error, count } = await supabase
+    .from("module_totals")
+    .upsert(payload, { onConflict: "matchid,partid,module", count: "exact" });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
   return NextResponse.json({
     ok: true,
     module,
-    assignments_upserted: assignmentPayload.length,
-    collectors_touched: hrCodes.size,
-    rows_upserted: count ?? dedupedChild.length,
-    duplicates_collapsed: childRows.length - dedupedChild.length,
+    aggregated: hasTotal ? "pre-aggregated (summed total_mistakes)" : "counted raw rows",
+    parts_upserted: count ?? payload.length,
+    mistakes_total: aggregated.reduce((s, a) => s + a.total, 0),
+    collectors_touched: hrCodes.length,
     skipped: problems.length,
     notes: problems.slice(0, 5),
   });

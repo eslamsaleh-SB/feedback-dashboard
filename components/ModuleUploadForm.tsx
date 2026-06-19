@@ -6,33 +6,31 @@ import Papa from "papaparse";
 
 type Collector = { id: string; name: string };
 
-// Must match the keys in MODULE_CONFIG in /api/modules/upload/route.ts
 const MODULES = [
-  { value: "players", label: "Players", file: "changed players details.csv" },
-  { value: "event", label: "Event", file: "Event Error Details.csv" },
-  { value: "formation_tactical", label: "Formation / Tactical", file: "changed formation details.csv" },
-  { value: "location", label: "Location", file: "changed location details.csv" },
-  { value: "impact", label: "Impact", file: "changed impact details.csv" },
-  { value: "extras", label: "Extras", file: "changed extras details.csv" },
-  { value: "freeze_frame", label: "Freeze Frame", file: "Shot Details.csv" },
+  { value: "players", label: "Players" },
+  { value: "event", label: "Event" },
+  { value: "formation_tactical", label: "Formation / Tactical" },
+  { value: "location", label: "Location" },
+  { value: "impact", label: "Impact" },
+  { value: "extras", label: "Extras" },
+  { value: "freeze_frame", label: "Freeze Frame" },
 ] as const;
 
-// Decode a file's bytes, honouring a UTF-16 / UTF-8 BOM if present.
+// Decode bytes honouring a UTF-16 / UTF-8 BOM.
 function decodeBytes(buf: ArrayBuffer): string {
   const b = new Uint8Array(buf);
   let enc = "utf-8";
   if (b.length >= 2 && b[0] === 0xff && b[1] === 0xfe) enc = "utf-16le";
   else if (b.length >= 2 && b[0] === 0xfe && b[1] === 0xff) enc = "utf-16be";
-  // TextDecoder strips the BOM automatically for these encodings.
   return new TextDecoder(enc).decode(b);
 }
 
-// Turn the parsed 2-D rows into objects keyed by the real header row.
-// Handles files where the header isn't the first line (e.g. the location
-// export, which has a junk row above the real header).
+// Turn 2-D rows into objects keyed by the real header row (the row containing
+// a "matchid" column), tolerating a junk row above the header.
 function toRecords(rows: string[][]): Record<string, string>[] {
+  const norm = (c: string) => String(c).trim().toLowerCase().replace(/\s+/g, "");
   const headerIdx = rows.findIndex((r) =>
-    r.some((c) => String(c).trim().toLowerCase() === "key")
+    r.some((c) => ["matchid", "match_id"].includes(norm(c)))
   );
   if (headerIdx < 0) return [];
   const headers = rows[headerIdx].map((h) => String(h).trim());
@@ -42,8 +40,8 @@ function toRecords(rows: string[][]): Record<string, string>[] {
     if (!cells || cells.every((c) => String(c).trim() === "")) continue;
     const obj: Record<string, string> = {};
     headers.forEach((h, j) => {
-      if (!h) return; // skip blank headers (junk pivot columns)
-      if (obj[h] === undefined) obj[h] = String(cells[j] ?? ""); // first wins
+      if (!h) return;
+      if (obj[h] === undefined) obj[h] = String(cells[j] ?? "");
     });
     out.push(obj);
   }
@@ -64,12 +62,9 @@ export default function ModuleUploadForm({
   const [records, setRecords] = useState<Record<string, string>[]>([]);
   const [parsing, setParsing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
-    null
-  );
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  const inputCls =
-    "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -84,17 +79,12 @@ export default function ModuleUploadForm({
     reader.onload = () => {
       try {
         const text = decodeBytes(reader.result as ArrayBuffer);
-        // Tab-delimited; parse without a header so we can locate the real one.
-        const parsed = Papa.parse<string[]>(text, {
-          delimiter: "\t",
-          skipEmptyLines: "greedy",
-        });
+        // Auto-detect the delimiter (comma, tab, ;, …). No header so we can
+        // locate the real header row ourselves.
+        const parsed = Papa.parse<string[]>(text, { skipEmptyLines: "greedy" });
         const recs = toRecords(parsed.data as string[][]);
         if (recs.length === 0) {
-          setMsg({
-            type: "err",
-            text: "Couldn't find a header row containing a 'key' column.",
-          });
+          setMsg({ type: "err", text: "Couldn't find a header row with a 'matchid' column." });
         } else {
           setHeaders(Object.keys(recs[0]));
           setRecords(recs);
@@ -119,8 +109,7 @@ export default function ModuleUploadForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (records.length === 0)
-      return setMsg({ type: "err", text: "Choose a CSV file first." });
+    if (records.length === 0) return setMsg({ type: "err", text: "Choose a CSV file first." });
 
     setLoading(true);
     try {
@@ -133,14 +122,11 @@ export default function ModuleUploadForm({
       if (!res.ok) throw new Error(json.error || "Upload failed");
 
       const bits = [
-        `Imported ${json.rows_upserted} row(s) into ${json.module}`,
-        `${json.assignments_upserted} match-part assignment(s)`,
+        `${json.parts_upserted} match-part total(s) saved for ${json.module}`,
+        `${json.mistakes_total} mistakes`,
         `${json.collectors_touched} collector(s)`,
       ];
-      if (json.duplicates_collapsed > 0)
-        bits.push(`${json.duplicates_collapsed} duplicate key(s) collapsed`);
       if (json.skipped > 0) bits.push(`${json.skipped} row(s) skipped`);
-
       setMsg({ type: "ok", text: bits.join(", ") + ". Redirecting…" });
       setTimeout(() => router.push("/analytics"), 1600);
     } catch (err: any) {
@@ -153,12 +139,12 @@ export default function ModuleUploadForm({
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold mb-2">Upload module data (CSV)</h1>
       <p className="text-sm text-slate-500 mb-6">
-        Pick the module and choose its export file. Files are read as
-        UTF-16/tab-delimited automatically. Each row is linked to a collector by{" "}
+        Pick the module and choose its CSV file. Comma or tab delimiters and
+        UTF-8/UTF-16 are detected automatically — upload Tableau exports
+        directly. Each row is linked to a collector by{" "}
         <span className="font-medium">HR code</span> and to a match part by{" "}
-        <span className="font-medium">matchid + partid</span>. Rows upsert on
-        their <span className="font-medium">key</span>, so re-uploading cleans
-        duplicates instead of adding copies.
+        <span className="font-medium">matchid + partid</span>; totals upsert per
+        part, so re-uploading replaces cleanly (no duplicates).
       </p>
 
       <form
@@ -178,11 +164,12 @@ export default function ModuleUploadForm({
               </option>
             ))}
           </select>
-          {selected && (
-            <p className="text-xs text-slate-400 mt-1">
-              Expected file: <span className="font-mono">{selected.file}</span>
-            </p>
-          )}
+          <p className="text-xs text-slate-400 mt-1">
+            Expected columns: <span className="font-mono">matchid, partid,
+            collector (HR code), review_date</span> and either{" "}
+            <span className="font-mono">total_mistakes</span> (pre-aggregated) or
+            one row per mistake (counted automatically).
+          </p>
         </div>
 
         <div>
@@ -205,11 +192,11 @@ export default function ModuleUploadForm({
             </p>
           )}
           <p className="text-xs text-amber-600 mt-1">
-            Keep files under ~4 MB (Vercel request limit). Split larger exports.
+            Keep files under ~4 MB (Vercel request limit). Aggregated exports are
+            tiny; split larger raw files.
           </p>
         </div>
 
-        {/* Preview (first columns / rows) */}
         {preview.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full text-xs">
@@ -259,7 +246,7 @@ export default function ModuleUploadForm({
           {loading && (
             <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
           )}
-          {loading ? "Uploading…" : "Upload & upsert"}
+          {loading ? "Uploading…" : "Upload & save totals"}
         </button>
 
         {msg && (
