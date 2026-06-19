@@ -1,42 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { MODULES, type AssignmentRow, type Mistake } from "@/lib/modules";
 
-export const MODULES = [
-  { value: "players", label: "Players" },
-  { value: "event", label: "Event" },
-  { value: "formation_tactical", label: "Formation / Tactical" },
-  { value: "location", label: "Location" },
-  { value: "impact", label: "Impact" },
-  { value: "extras", label: "Extras" },
-  { value: "freeze_frame", label: "Freeze Frame" },
-] as const;
+// Re-export so existing imports from this component keep working.
+export { MODULES };
+export type { AssignmentRow, Mistake };
 
-export type ModuleValue = (typeof MODULES)[number]["value"];
 const MODULE_LABEL: Record<string, string> = Object.fromEntries(
   MODULES.map((m) => [m.value, m.label])
 );
-
-export type AssignmentRow = {
-  matchid: string;
-  partid: number;
-  hr_code: string | null;
-  collector_name: string;
-  date: string | null;
-};
-
-export type Mistake = {
-  id: string;
-  module: ModuleValue;
-  matchid: string;
-  partid: number;
-  key: string;
-  hr_code: string | null;
-  error_type: string | null;
-  defect_type: string | null;
-  collector_event: string | null;
-  video_timestamp: string | null;
-};
 
 type CollectorOpt = { hr_code: string; name: string };
 type Role = "Admin" | "Uploader" | "Viewer";

@@ -1,9 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import AnalyticsDashboard, {
-  type AssignmentRow,
-  type Mistake,
-  MODULES,
-} from "@/components/AnalyticsDashboard";
+import AnalyticsDashboard from "@/components/AnalyticsDashboard";
+import { MODULES, type AssignmentRow, type Mistake } from "@/lib/modules";
 
 export const dynamic = "force-dynamic";
 
