@@ -68,29 +68,4 @@ export default async function AnalyticsPage() {
         collector_event: r.collector_event,
         video_timestamp: r.video_timestamp,
       });
-    });
-  });
-
-  let myName: string | null = null;
-  if (role === "Viewer" && profile?.collector_id) {
-    myName =
-      (collectors ?? []).find((c: any) => c.id === profile.collector_id)?.name ??
-      null;
-  }
-
-  // Collectors that actually have an hr_code (for the Admin filter dropdown).
-  const collectorOptions = (collectors ?? [])
-    .filter((c: any) => c.hr_code)
-    .map((c: any) => ({ hr_code: c.hr_code as string, name: c.name as string }));
-
-  return (
-    <AnalyticsDashboard
-      role={role}
-      myName={myName}
-      isLinked={role !== "Viewer" || !!profile?.collector_id}
-      assignments={assignmentRows}
-      mistakes={mistakes}
-      collectors={collectorOptions}
-    />
-  );
-}
+    })
