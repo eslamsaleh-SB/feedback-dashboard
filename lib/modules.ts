@@ -1,11 +1,10 @@
 // Shared module metadata + types used by BOTH the server analytics page and
-// the client AnalyticsDashboard.
+// the client dashboards.
 //
-// IMPORTANT: this file is intentionally NOT a "use client" module. A Server
-// Component (app/(app)/analytics/page.tsx) imports MODULES from here. If these
-// values lived in a "use client" file, the server would receive a client-
-// reference stub instead of the real array and `MODULES.map(...)` would throw
-// at request time (HTTP 500). Keeping them here avoids that.
+// IMPORTANT: this file is intentionally NOT a "use client" module. Server
+// Components import these values; if they lived in a "use client" file the
+// server would receive client-reference stubs and `.map(...)` would throw at
+// request time (HTTP 500). Keep all shared constants/types here.
 
 export const MODULES = [
   { value: "players", label: "Players" },
@@ -18,6 +17,21 @@ export const MODULES = [
 ] as const;
 
 export type ModuleValue = (typeof MODULES)[number]["value"];
+
+// Kept for backward compatibility with any older component still importing it.
+export type Period = "this_week" | "last_week" | "this_month" | "all";
+
+// Order used for the collector dashboard's bottom metric cards
+// (matches the order the product owner requested).
+export const CARD_ORDER: ModuleValue[] = [
+  "players",
+  "event",
+  "extras",
+  "location",
+  "formation_tactical",
+  "freeze_frame",
+  "impact",
+];
 
 // One row of the Match View (per match part + its per-module counts).
 export type PartSummary = {
@@ -36,4 +50,21 @@ export type CollectorRow = {
   name: string;
   counts: Record<ModuleValue, number>;
   total: number;
+};
+
+// A report sent to a collector.
+export type Report = {
+  id: string;
+  title: string;
+  body: string | null;
+  url: string | null;
+  report_date: string | null;
+};
+
+// A feedback session (online / offline meeting).
+export type FeedbackSession = {
+  id: string;
+  session_date: string | null;
+  mode: "Online" | "Offline" | string;
+  notes: string | null;
 };
