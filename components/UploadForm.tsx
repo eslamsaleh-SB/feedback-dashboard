@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Combobox, { type ComboOption } from "@/components/Combobox";
 
 type Collector = { id: string; name: string };
 export type ExistingSession = {
@@ -29,11 +30,10 @@ export default function UploadForm({
   const [folderUrl, setFolderUrl] = useState("");
 
   // new-session fields
-  const [matchName, setMatchName] = useState("");
+  const [matchId, setMatchId] = useState("");
   const [reviewDate, setReviewDate] = useState(
     () => new Date().toISOString().slice(0, 10)
   );
-  const [score, setScore] = useState(5);
   const [overallNotes, setOverallNotes] = useState("");
 
   // existing-session field
@@ -47,13 +47,22 @@ export default function UploadForm({
     [existingSessions, collectorId]
   );
 
+  const collectorOptions: ComboOption[] = collectors.map((c) => ({
+    value: c.id,
+    label: c.name,
+  }));
+  const sessionOptions: ComboOption[] = sessionsForCollector.map((s) => ({
+    value: s.id,
+    label: `${s.match_name}${s.review_date ? ` — ${s.review_date}` : ""}`,
+  }));
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
 
     if (!collectorId) return setMsg({ type: "err", text: "Pick a collector." });
-    if (mode === "new" && !matchName.trim())
-      return setMsg({ type: "err", text: "Enter a match name." });
+    if (mode === "new" && !matchId.trim())
+      return setMsg({ type: "err", text: "Enter a Match ID." });
     if (mode === "existing" && !sessionId)
       return setMsg({ type: "err", text: "Pick an existing match session." });
     if (!folderUrl.trim())
@@ -66,9 +75,8 @@ export default function UploadForm({
     };
     if (mode === "new") {
       payload.collector_id = collectorId;
-      payload.match_name = matchName;
+      payload.match_name = matchId; // stored in match_sessions.match_name
       payload.review_date = reviewDate;
-      payload.quality_score = score;
       payload.overall_notes = overallNotes;
     } else {
       payload.match_session_id = sessionId;
@@ -125,64 +133,43 @@ export default function UploadForm({
         onSubmit={handleSubmit}
         className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5"
       >
-        {/* Collector — always shown */}
+        {/* Collector — always shown, searchable */}
         <div>
           <label className="block text-sm font-medium mb-1">Collector</label>
-          <select
+          <Combobox
+            options={collectorOptions}
             value={collectorId}
-            onChange={(e) => {
-              setCollectorId(e.target.value);
+            onChange={(v) => {
+              setCollectorId(v);
               setSessionId("");
             }}
-            className={inputCls}
-            required
-          >
-            <option value="">Select a collector…</option>
-            {collectors.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            placeholder="Select a collector…"
+            searchPlaceholder="Search collectors…"
+          />
         </div>
 
         {mode === "new" ? (
           <>
             <div>
-              <label className="block text-sm font-medium mb-1">Match name</label>
+              <label className="block text-sm font-medium mb-1">Match ID</label>
               <input
                 className={inputCls}
-                placeholder="e.g. Round 14 — Team A vs Team B"
-                value={matchName}
-                onChange={(e) => setMatchName(e.target.value)}
+                placeholder="e.g. 2453817"
+                value={matchId}
+                onChange={(e) => setMatchId(e.target.value)}
                 required
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Review date</label>
-                <input
-                  type="date"
-                  className={inputCls}
-                  value={reviewDate}
-                  onChange={(e) => setReviewDate(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Quality score: <span className="font-bold">{score}/10</span>
-                </label>
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={score}
-                  onChange={(e) => setScore(Number(e.target.value))}
-                  className="w-full mt-3"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Review date</label>
+              <input
+                type="date"
+                className={inputCls}
+                value={reviewDate}
+                onChange={(e) => setReviewDate(e.target.value)}
+                required
+              />
             </div>
 
             <div>
@@ -201,23 +188,14 @@ export default function UploadForm({
             <label className="block text-sm font-medium mb-1">
               Existing match session
             </label>
-            <select
+            <Combobox
+              options={sessionOptions}
               value={sessionId}
-              onChange={(e) => setSessionId(e.target.value)}
-              className={inputCls}
-              required
+              onChange={setSessionId}
               disabled={!collectorId}
-            >
-              <option value="">
-                {collectorId ? "Select a match…" : "Pick a collector first"}
-              </option>
-              {sessionsForCollector.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.match_name}
-                  {s.review_date ? ` — ${s.review_date}` : ""}
-                </option>
-              ))}
-            </select>
+              placeholder={collectorId ? "Select a match…" : "Pick a collector first"}
+              searchPlaceholder="Search matches…"
+            />
           </div>
         )}
 

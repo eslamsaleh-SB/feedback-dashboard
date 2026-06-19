@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
+import Combobox, { type ComboOption } from "@/components/Combobox";
 
 type Collector = { id: string; name: string };
 
@@ -65,6 +66,10 @@ export default function ModuleUploadForm({
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const moduleOptions: ComboOption[] = MODULES.map((m) => ({
+    value: m.value,
+    label: m.label,
+  }));
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -104,7 +109,6 @@ export default function ModuleUploadForm({
 
   const preview = useMemo(() => records.slice(0, 5), [records]);
   const previewCols = useMemo(() => headers.slice(0, 8), [headers]);
-  const selected = MODULES.find((m) => m.value === module);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -153,17 +157,13 @@ export default function ModuleUploadForm({
       >
         <div>
           <label className="block text-sm font-medium mb-1">Module</label>
-          <select
+          <Combobox
+            options={moduleOptions}
             value={module}
-            onChange={(e) => setModule(e.target.value)}
-            className={inputCls}
-          >
-            {MODULES.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+            onChange={setModule}
+            placeholder="Select a module…"
+            searchPlaceholder="Search modules…"
+          />
           <p className="text-xs text-slate-400 mt-1">
             Expected columns: <span className="font-mono">matchid, partid,
             collector (HR code), review_date</span> and either{" "}
