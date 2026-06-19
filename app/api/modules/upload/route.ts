@@ -17,7 +17,7 @@ export const MODULES = [
 ] as const;
 type Module = (typeof MODULES)[number];
 
-// Columns the client is allowed to map CSV headers into.
+// Columns the client is allowed to map CSV headers into (child-table columns).
 const CHILD_FIELDS = [
   "key",
   "review_date",
@@ -31,6 +31,7 @@ const CHILD_FIELDS = [
 type IncomingRow = {
   match_id?: string;
   key?: string;
+  collector?: string | null; // collector NAME from the CSV (mapped per row)
   review_date?: string | null;
   description?: string | null;
   category?: string | null;
@@ -46,6 +47,13 @@ function cleanDate(v: unknown): string | null {
   if (isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
+
+// Normalise a collector name for case/spacing-insensitive matching.
+const normName = (s: unknown) =>
+  String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 
 export async function POST(req: NextRequest) {
   // ---- Auth + role (Admin/Uploader only) ----
@@ -83,13 +91,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const collectorId = String(body.collector_id || "");
-  if (!collectorId) {
-    return NextResponse.json(
-      { error: "A collector must be assigned to these matches." },
-      { status: 400 }
-    );
-  }
+  // Optional fallback collector, used only for rows that don't carry one.
+  const defaultCollectorId = String(body.default_collector_id || "") || null;
 
   const rawRows: IncomingRow[] = Array.isArray(body.rows) ? body.rows : [];
   if (rawRows.length === 0) {
@@ -99,11 +102,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ---- Normalise the child rows + collect the parent matches ----
+  // ---- Build a collector NAME -> id map (RLS allows reading collectors) ----
+  const { data: collectorsData, error: collErr } = await supabase
+    .from("collectors")
+    .select("id, name");
+  if (collErr) {
+    return NextResponse.json(
+      { error: `Could not load collectors: ${collErr.message}` },
+      { status: 400 }
+    );
+  }
+  const collectorByName = new Map<string, string>();
+  (collectorsData ?? []).forEach((c: any) =>
+    collectorByName.set(normName(c.name), c.id)
+  );
+
+  // ---- Normalise child rows + resolve each match's collector ----
   const childRows: Record<string, unknown>[] = [];
-  const matchesById = new Map<string, string | null>(); // match_id -> date
+  // match_id -> { date, collector_id }
+  const matchesById = new Map<
+    string,
+    { date: string | null; collector_id: string }
+  >();
 
   const problems: string[] = [];
+  const unknownCollectors = new Set<string>();
 
   rawRows.forEach((r, i) => {
     const match_id = String(r.match_id ?? "").trim();
@@ -117,12 +140,34 @@ export async function POST(req: NextRequest) {
       return;
     }
 
+    // Resolve this row's collector: CSV column first, then default fallback.
+    const rawCollector = String(r.collector ?? "").trim();
+    let collector_id: string | null = null;
+    if (rawCollector) {
+      collector_id = collectorByName.get(normName(rawCollector)) ?? null;
+      if (!collector_id) {
+        unknownCollectors.add(rawCollector);
+        problems.push(`Row ${i + 1}: unknown collector "${rawCollector}"`);
+        return;
+      }
+    } else {
+      collector_id = defaultCollectorId;
+    }
+    if (!collector_id) {
+      problems.push(`Row ${i + 1}: no collector (map a Collector column or pick a default)`);
+      return;
+    }
+
     const review_date = cleanDate(r.review_date);
 
-    // Parent match: keep the most recent non-null date we see for it.
-    if (!matchesById.has(match_id)) matchesById.set(match_id, review_date);
-    else if (review_date && !matchesById.get(match_id))
-      matchesById.set(match_id, review_date);
+    // Parent match: record its collector + keep a non-null date if we find one.
+    const existing = matchesById.get(match_id);
+    if (!existing) {
+      matchesById.set(match_id, { date: review_date, collector_id });
+    } else {
+      if (review_date && !existing.date) existing.date = review_date;
+      // collector stays as first-seen for this match_id
+    }
 
     const row: Record<string, unknown> = { match_id, key, review_date };
     for (const f of CHILD_FIELDS) {
@@ -135,19 +180,21 @@ export async function POST(req: NextRequest) {
 
   if (childRows.length === 0) {
     return NextResponse.json(
-      { error: `Nothing to import. ${problems.slice(0, 3).join("; ")}` },
+      {
+        error: `Nothing to import. ${problems.slice(0, 3).join("; ")}`,
+        unknown_collectors: Array.from(unknownCollectors),
+      },
       { status: 400 }
     );
   }
 
   // ---- 1) Upsert the parent matches (onConflict: match_id) ----
   const matchPayload = Array.from(matchesById.entries()).map(
-    ([match_id, date]) => ({
+    ([match_id, info]) => ({
       match_id,
-      collector_id: collectorId,
+      collector_id: info.collector_id,
       uploaded_by: user.id,
-      // Only set date if we parsed one; let the DB default handle the rest.
-      ...(date ? { date } : {}),
+      ...(info.date ? { date: info.date } : {}),
     })
   );
 
@@ -182,9 +229,11 @@ export async function POST(req: NextRequest) {
     ok: true,
     module,
     matches_upserted: matchPayload.length,
+    collectors_matched: new Set(matchPayload.map((m) => m.collector_id)).size,
     rows_upserted: count ?? dedupedChild.length,
     duplicates_collapsed: childRows.length - dedupedChild.length,
     skipped: problems.length,
+    unknown_collectors: Array.from(unknownCollectors),
     notes: problems.slice(0, 5),
   });
 }
