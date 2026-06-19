@@ -17,9 +17,10 @@ const MODULE_LABEL: Record<string, string> = Object.fromEntries(
   MODULES.map((m) => [m.value, m.label])
 );
 
-export type MatchRow = {
-  match_id: string;
-  collector_id: string;
+export type AssignmentRow = {
+  matchid: string;
+  partid: number;
+  hr_code: string | null;
   collector_name: string;
   date: string | null;
 };
@@ -27,16 +28,17 @@ export type MatchRow = {
 export type Mistake = {
   id: string;
   module: ModuleValue;
-  match_id: string;
+  matchid: string;
+  partid: number;
   key: string;
-  description: string | null;
-  category: string | null;
-  severity: string | null;
+  hr_code: string | null;
+  error_type: string | null;
+  defect_type: string | null;
+  collector_event: string | null;
   video_timestamp: string | null;
-  notes: string | null;
 };
 
-type Collector = { id: string; name: string };
+type CollectorOpt = { hr_code: string; name: string };
 type Role = "Admin" | "Uploader" | "Viewer";
 type Period = "this_week" | "last_week" | "this_month" | "all";
 
@@ -71,18 +73,19 @@ function rangeFor(period: Period): { from: Date; to: Date } | null {
     from.setDate(monday.getDate() - 7);
     return { from, to: monday };
   }
-  // this_month
   const from = new Date(today.getFullYear(), today.getMonth(), 1);
   const to = new Date(today.getFullYear(), today.getMonth() + 1, 1);
   return { from, to };
 }
 function inRange(dateStr: string | null, r: { from: Date; to: Date } | null) {
-  if (!r) return true; // All Time
+  if (!r) return true;
   if (!dateStr) return false;
   const d = startOfDay(new Date(dateStr));
   if (isNaN(d.getTime())) return false;
   return d >= r.from && d < r.to;
 }
+
+const partKey = (matchid: string, partid: number) => `${matchid}|${partid}`;
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -97,62 +100,62 @@ export default function AnalyticsDashboard({
   role,
   myName,
   isLinked,
-  matches,
+  assignments,
   mistakes,
   collectors,
 }: {
   role: Role;
   myName: string | null;
   isLinked: boolean;
-  matches: MatchRow[];
+  assignments: AssignmentRow[];
   mistakes: Mistake[];
-  collectors: Collector[];
+  collectors: CollectorOpt[];
 }) {
   const isPersonal = role === "Viewer";
   const [tab, setTab] = useState<"matches" | "modules">("matches");
   const [period, setPeriod] = useState<Period>("all");
-  const [collectorFilter, setCollectorFilter] = useState("all");
+  const [collectorFilter, setCollectorFilter] = useState("all"); // hr_code
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const range = useMemo(() => rangeFor(period), [period]);
 
-  // Collector filter (Admin/Uploader only — Viewers are scoped by RLS).
-  const scopedMatches = useMemo(
+  // Collector filter (Admin/Uploader only — Viewers scoped by RLS).
+  const scoped = useMemo(
     () =>
       isPersonal || collectorFilter === "all"
-        ? matches
-        : matches.filter((m) => m.collector_id === collectorFilter),
-    [isPersonal, collectorFilter, matches]
+        ? assignments
+        : assignments.filter((a) => a.hr_code === collectorFilter),
+    [isPersonal, collectorFilter, assignments]
   );
 
-  // Global date filter drives BOTH views, based on the match's date.
-  const visibleMatches = useMemo(
-    () => scopedMatches.filter((m) => inRange(m.date, range)),
-    [scopedMatches, range]
+  // Global date filter drives BOTH views, based on the assignment date.
+  const visibleParts = useMemo(
+    () => scoped.filter((a) => inRange(a.date, range)),
+    [scoped, range]
   );
 
-  // match_id -> match (only those that pass the date + collector filters)
-  const matchById = useMemo(() => {
-    const map = new Map<string, MatchRow>();
-    visibleMatches.forEach((m) => map.set(m.match_id, m));
-    return map;
-  }, [visibleMatches]);
+  // (matchid|partid) -> assignment, for the parts passing the filters.
+  const partById = useMemo(() => {
+    const m = new Map<string, AssignmentRow>();
+    visibleParts.forEach((a) => m.set(partKey(a.matchid, a.partid), a));
+    return m;
+  }, [visibleParts]);
 
-  // Mistakes whose parent match is currently visible.
   const visibleMistakes = useMemo(
-    () => mistakes.filter((mk) => matchById.has(mk.match_id)),
-    [mistakes, matchById]
+    () => mistakes.filter((mk) => partById.has(partKey(mk.matchid, mk.partid))),
+    [mistakes, partById]
   );
 
-  // View 1: mistakes grouped by match_id.
-  const mistakesByMatch = useMemo(() => {
-    const map = new Map<string, Mistake[]>();
+  // View 1: mistakes grouped by match part.
+  const mistakesByPart = useMemo(() => {
+    const m = new Map<string, Mistake[]>();
     visibleMistakes.forEach((mk) => {
-      const arr = map.get(mk.match_id) ?? [];
+      const k = partKey(mk.matchid, mk.partid);
+      const arr = m.get(k) ?? [];
       arr.push(mk);
-      map.set(mk.match_id, arr);
+      m.set(k, arr);
     });
-    return map;
+    return m;
   }, [visibleMistakes]);
 
   // View 2: totals per module.
@@ -168,14 +171,25 @@ export default function AnalyticsDashboard({
   const maxCount = Math.max(1, ...Object.values(countsByModule));
   const totalMistakes = visibleMistakes.length;
 
-  // Viewer not yet linked to a collector.
+  // Sort parts by date desc then matchid/partid.
+  const sortedParts = useMemo(
+    () =>
+      [...visibleParts].sort((a, b) => {
+        const d = (b.date ?? "").localeCompare(a.date ?? "");
+        if (d !== 0) return d;
+        if (a.matchid !== b.matchid) return a.matchid.localeCompare(b.matchid);
+        return a.partid - b.partid;
+      }),
+    [visibleParts]
+  );
+
   if (isPersonal && !isLinked) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
         <h1 className="text-xl font-bold mb-2">My Analytics</h1>
         <p className="text-slate-600">
           Your account isn’t linked to a collector profile yet. Please ask an
-          Admin to assign you on the Accounts page.
+          Admin to assign you (and set your HR code) on the Accounts page.
         </p>
       </div>
     );
@@ -205,7 +219,7 @@ export default function AnalyticsDashboard({
               >
                 <option value="all">All collectors</option>
                 {collectors.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.hr_code} value={c.hr_code}>
                     {c.name}
                   </option>
                 ))}
@@ -231,7 +245,7 @@ export default function AnalyticsDashboard({
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Matches" value={visibleMatches.length} />
+        <StatCard label="Match parts" value={visibleParts.length} />
         <StatCard label="Total mistakes" value={totalMistakes} />
         <StatCard
           label="Modules with mistakes"
@@ -260,16 +274,16 @@ export default function AnalyticsDashboard({
         ))}
       </div>
 
-      {/* ---- View 1: Match View ---- */}
+      {/* ---- View 1: Match View (grouped by matchid + partid) ---- */}
       {tab === "matches" &&
-        (visibleMatches.length === 0 ? (
-          <p className="text-slate-500">No matches in this period.</p>
+        (sortedParts.length === 0 ? (
+          <p className="text-slate-500">No match parts in this period.</p>
         ) : (
           <div className="space-y-3">
-            {visibleMatches.map((m) => {
-              const open = expanded === m.match_id;
-              const ms = mistakesByMatch.get(m.match_id) ?? [];
-              // group this match's mistakes by module
+            {sortedParts.map((a) => {
+              const k = partKey(a.matchid, a.partid);
+              const open = expanded === k;
+              const ms = mistakesByPart.get(k) ?? [];
               const byModule = new Map<string, Mistake[]>();
               ms.forEach((mk) => {
                 const arr = byModule.get(mk.module) ?? [];
@@ -278,18 +292,20 @@ export default function AnalyticsDashboard({
               });
               return (
                 <div
-                  key={m.match_id}
+                  key={k}
                   className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
                 >
                   <button
-                    onClick={() => setExpanded(open ? null : m.match_id)}
+                    onClick={() => setExpanded(open ? null : k)}
                     className="w-full text-left p-5 flex items-center justify-between gap-4 hover:bg-slate-50"
                   >
                     <div className="min-w-0">
-                      <p className="font-semibold truncate">{m.match_id}</p>
+                      <p className="font-semibold truncate">
+                        Match {a.matchid} · Part {a.partid}
+                      </p>
                       <p className="text-sm text-slate-500">
-                        {!isPersonal && <>{m.collector_name} · </>}
-                        {m.date ?? "—"} · {ms.length} mistake(s)
+                        {!isPersonal && <>{a.collector_name} · </>}
+                        {a.date ?? "—"} · {ms.length} mistake(s)
                       </p>
                     </div>
                     <span className="text-slate-400 text-sm shrink-0">
@@ -301,7 +317,7 @@ export default function AnalyticsDashboard({
                     <div className="border-t border-slate-100 p-5 space-y-5">
                       {ms.length === 0 ? (
                         <p className="text-sm text-slate-400">
-                          No mistakes recorded for this match.
+                          No mistakes recorded for this part.
                         </p>
                       ) : (
                         MODULES.filter((mod) => byModule.has(mod.value)).map(
@@ -321,19 +337,19 @@ export default function AnalyticsDashboard({
                                   >
                                     <div className="flex items-start justify-between gap-3">
                                       <p className="text-sm text-slate-700">
-                                        {mk.description?.trim() ||
-                                          mk.notes?.trim() ||
-                                          mk.key}
+                                        {mk.error_type || "mistake"}
+                                        {mk.collector_event
+                                          ? ` · ${mk.collector_event}`
+                                          : ""}
                                       </p>
-                                      {mk.severity && (
+                                      {mk.defect_type && (
                                         <span className="shrink-0 rounded-full bg-amber-100 text-amber-700 text-xs font-medium px-2 py-0.5">
-                                          {mk.severity}
+                                          {mk.defect_type}
                                         </span>
                                       )}
                                     </div>
                                     <p className="text-xs text-slate-400 mt-0.5">
                                       key: {mk.key}
-                                      {mk.category ? ` · ${mk.category}` : ""}
                                       {mk.video_timestamp
                                         ? ` · @${mk.video_timestamp}`
                                         : ""}

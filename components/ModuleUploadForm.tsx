@@ -2,114 +2,67 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Papa from "papaparse";
 
 type Collector = { id: string; name: string };
 
-// Must match the allowlist in /api/modules/upload/route.ts
+// Must match the keys in MODULE_CONFIG in /api/modules/upload/route.ts
 const MODULES = [
-  { value: "players", label: "Players" },
-  { value: "event", label: "Event" },
-  { value: "formation_tactical", label: "Formation / Tactical" },
-  { value: "location", label: "Location" },
-  { value: "impact", label: "Impact" },
-  { value: "extras", label: "Extras" },
-  { value: "freeze_frame", label: "Freeze Frame" },
+  { value: "players", label: "Players", file: "changed players details.csv" },
+  { value: "event", label: "Event", file: "Event Error Details.csv" },
+  { value: "formation_tactical", label: "Formation / Tactical", file: "changed formation details.csv" },
+  { value: "location", label: "Location", file: "changed location details.csv" },
+  { value: "impact", label: "Impact", file: "changed impact details.csv" },
+  { value: "extras", label: "Extras", file: "changed extras details.csv" },
+  { value: "freeze_frame", label: "Freeze Frame", file: "Shot Details.csv" },
 ] as const;
 
-// Target columns the CSV headers get mapped into.
-// `collector` and `match_id` + `key` drive how rows are assigned & deduped.
-const TARGETS = [
-  { field: "match_id", label: "Match ID", required: true },
-  { field: "key", label: "Key (dedup)", required: true },
-  { field: "collector", label: "Collector", required: false },
-  { field: "review_date", label: "Match date", required: false },
-  { field: "description", label: "Description", required: false },
-  { field: "category", label: "Category", required: false },
-  { field: "severity", label: "Severity", required: false },
-  { field: "video_timestamp", label: "Video timestamp", required: false },
-  { field: "notes", label: "Notes", required: false },
-] as const;
-
-type Field = (typeof TARGETS)[number]["field"];
-
-// ---- Tiny dependency-free CSV parser (handles quotes, commas, newlines) ----
-function parseCSV(text: string): { headers: string[]; rows: string[][] } {
-  const out: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let inQuotes = false;
-
-  // Strip a leading UTF-8 BOM if present.
-  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else inQuotes = false;
-      } else field += c;
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ",") {
-      row.push(field);
-      field = "";
-    } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(field);
-      field = "";
-      if (row.some((v) => v.trim() !== "")) out.push(row);
-      row = [];
-    } else field += c;
-  }
-  if (field !== "" || row.length) {
-    row.push(field);
-    if (row.some((v) => v.trim() !== "")) out.push(row);
-  }
-
-  const headers = (out.shift() ?? []).map((h) => h.trim());
-  return { headers, rows: out };
+// Decode a file's bytes, honouring a UTF-16 / UTF-8 BOM if present.
+function decodeBytes(buf: ArrayBuffer): string {
+  const b = new Uint8Array(buf);
+  let enc = "utf-8";
+  if (b.length >= 2 && b[0] === 0xff && b[1] === 0xfe) enc = "utf-16le";
+  else if (b.length >= 2 && b[0] === 0xfe && b[1] === 0xff) enc = "utf-16be";
+  // TextDecoder strips the BOM automatically for these encodings.
+  return new TextDecoder(enc).decode(b);
 }
 
-// Best-effort auto-mapping based on header names.
-function guessMapping(headers: string[]): Record<Field, string> {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const find = (...needles: string[]) =>
-    headers.find((h) => needles.some((n) => norm(h).includes(n))) ?? "";
-
-  return {
-    match_id: find("matchid", "match", "fixture", "game"),
-    key: find("key", "uniqueid", "uid", "hash"),
-    collector: find("collector", "analyst", "scout", "operator", "reviewer"),
-    review_date: find("reviewdate", "matchdate", "date"),
-    description: find("description", "mistake", "issue", "desc"),
-    category: find("category", "type", "module"),
-    severity: find("severity", "priority", "level"),
-    video_timestamp: find("timestamp", "time", "clip", "video"),
-    notes: find("notes", "comment", "remark"),
-  };
+// Turn the parsed 2-D rows into objects keyed by the real header row.
+// Handles files where the header isn't the first line (e.g. the location
+// export, which has a junk row above the real header).
+function toRecords(rows: string[][]): Record<string, string>[] {
+  const headerIdx = rows.findIndex((r) =>
+    r.some((c) => String(c).trim().toLowerCase() === "key")
+  );
+  if (headerIdx < 0) return [];
+  const headers = rows[headerIdx].map((h) => String(h).trim());
+  const out: Record<string, string>[] = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const cells = rows[i];
+    if (!cells || cells.every((c) => String(c).trim() === "")) continue;
+    const obj: Record<string, string> = {};
+    headers.forEach((h, j) => {
+      if (!h) return; // skip blank headers (junk pivot columns)
+      if (obj[h] === undefined) obj[h] = String(cells[j] ?? ""); // first wins
+    });
+    out.push(obj);
+  }
+  return out;
 }
 
 export default function ModuleUploadForm({
-  collectors,
+  collectors = [],
 }: {
-  collectors: Collector[];
+  collectors?: Collector[];
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [module, setModule] = useState<string>("players");
-  // Optional fallback collector — only used for rows that lack one in the CSV.
-  const [defaultCollectorId, setDefaultCollectorId] = useState("");
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
-  const [rows, setRows] = useState<string[][]>([]);
-  const [mapping, setMapping] = useState<Record<Field, string>>(
-    {} as Record<Field, string>
-  );
-
+  const [records, setRecords] = useState<Record<string, string>[]>([]);
+  const [parsing, setParsing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
@@ -118,103 +71,71 @@ export default function ModuleUploadForm({
   const inputCls =
     "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
 
-  // Known collector names (normalised) for a quick client-side preview check.
-  const knownNames = useMemo(() => {
-    const s = new Set<string>();
-    collectors.forEach((c) =>
-      s.add(c.name.trim().toLowerCase().replace(/\s+/g, " "))
-    );
-    return s;
-  }, [collectors]);
-
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     setMsg(null);
+    setHeaders([]);
+    setRecords([]);
     if (!file) return;
     setFileName(file.name);
+    setParsing(true);
+
     const reader = new FileReader();
     reader.onload = () => {
-      const { headers, rows } = parseCSV(String(reader.result ?? ""));
-      if (headers.length === 0) {
-        setMsg({ type: "err", text: "That CSV has no header row." });
-        return;
+      try {
+        const text = decodeBytes(reader.result as ArrayBuffer);
+        // Tab-delimited; parse without a header so we can locate the real one.
+        const parsed = Papa.parse<string[]>(text, {
+          delimiter: "\t",
+          skipEmptyLines: "greedy",
+        });
+        const recs = toRecords(parsed.data as string[][]);
+        if (recs.length === 0) {
+          setMsg({
+            type: "err",
+            text: "Couldn't find a header row containing a 'key' column.",
+          });
+        } else {
+          setHeaders(Object.keys(recs[0]));
+          setRecords(recs);
+        }
+      } catch (err: any) {
+        setMsg({ type: "err", text: `Could not read file: ${err.message}` });
+      } finally {
+        setParsing(false);
       }
-      setHeaders(headers);
-      setRows(rows);
-      setMapping(guessMapping(headers));
     };
-    reader.readAsText(file);
+    reader.onerror = () => {
+      setParsing(false);
+      setMsg({ type: "err", text: "Could not read that file." });
+    };
+    reader.readAsArrayBuffer(file);
   }
 
-  const preview = useMemo(() => rows.slice(0, 5), [rows]);
-
-  function buildRows() {
-    const idx = (field: Field) => headers.indexOf(mapping[field]);
-    return rows.map((cells) => {
-      const obj: Record<string, string | null> = {};
-      for (const t of TARGETS) {
-        const i = idx(t.field);
-        obj[t.field] = i >= 0 ? cells[i] ?? null : null;
-      }
-      return obj;
-    });
-  }
-
-  // How many CSV rows reference a collector name we don't recognise.
-  const unknownCollectorCount = useMemo(() => {
-    if (!mapping.collector) return 0;
-    const i = headers.indexOf(mapping.collector);
-    if (i < 0) return 0;
-    let n = 0;
-    rows.forEach((cells) => {
-      const name = String(cells[i] ?? "")
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, " ");
-      if (name && !knownNames.has(name)) n++;
-    });
-    return n;
-  }, [mapping.collector, headers, rows, knownNames]);
+  const preview = useMemo(() => records.slice(0, 5), [records]);
+  const previewCols = useMemo(() => headers.slice(0, 8), [headers]);
+  const selected = MODULES.find((m) => m.value === module);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-
-    if (!headers.length)
+    if (records.length === 0)
       return setMsg({ type: "err", text: "Choose a CSV file first." });
-    if (!mapping.match_id)
-      return setMsg({ type: "err", text: "Map the Match ID column." });
-    if (!mapping.key)
-      return setMsg({ type: "err", text: "Map the Key column." });
-    if (!mapping.collector && !defaultCollectorId)
-      return setMsg({
-        type: "err",
-        text: "Map a Collector column, or pick a default collector for rows without one.",
-      });
 
     setLoading(true);
     try {
       const res = await fetch("/api/modules/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          module,
-          default_collector_id: defaultCollectorId || null,
-          rows: buildRows(),
-        }),
+        body: JSON.stringify({ module, rows: records }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        const unknown =
-          json.unknown_collectors?.length
-            ? ` Unknown collectors: ${json.unknown_collectors.join(", ")}.`
-            : "";
-        throw new Error((json.error || "Upload failed") + unknown);
-      }
+      if (!res.ok) throw new Error(json.error || "Upload failed");
 
       const bits = [
         `Imported ${json.rows_upserted} row(s) into ${json.module}`,
-        `across ${json.matches_upserted} match(es) for ${json.collectors_matched} collector(s)`,
+        `${json.assignments_upserted} match-part assignment(s)`,
+        `${json.collectors_touched} collector(s)`,
       ];
       if (json.duplicates_collapsed > 0)
         bits.push(`${json.duplicates_collapsed} duplicate key(s) collapsed`);
@@ -232,54 +153,36 @@ export default function ModuleUploadForm({
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold mb-2">Upload module data (CSV)</h1>
       <p className="text-sm text-slate-500 mb-6">
-        Pick the module, then map the CSV columns. Each row is assigned to a
-        collector via the mapped <span className="font-medium">Collector</span>{" "}
-        column (matched by name), so one CSV can cover all collectors. Rows are
-        upserted on their <span className="font-medium">key</span> — re-uploading
-        a duplicate key overwrites the existing row instead of creating a copy.
+        Pick the module and choose its export file. Files are read as
+        UTF-16/tab-delimited automatically. Each row is linked to a collector by{" "}
+        <span className="font-medium">HR code</span> and to a match part by{" "}
+        <span className="font-medium">matchid + partid</span>. Rows upsert on
+        their <span className="font-medium">key</span>, so re-uploading cleans
+        duplicates instead of adding copies.
       </p>
 
       <form
         onSubmit={handleSubmit}
         className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5"
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Module</label>
-            <select
-              value={module}
-              onChange={(e) => setModule(e.target.value)}
-              className={inputCls}
-            >
-              {MODULES.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Default collector{" "}
-              <span className="text-slate-400 font-normal">(optional)</span>
-            </label>
-            <select
-              value={defaultCollectorId}
-              onChange={(e) => setDefaultCollectorId(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">None — use the Collector column</option>
-              {collectors.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+        <div>
+          <label className="block text-sm font-medium mb-1">Module</label>
+          <select
+            value={module}
+            onChange={(e) => setModule(e.target.value)}
+            className={inputCls}
+          >
+            {MODULES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          {selected && (
             <p className="text-xs text-slate-400 mt-1">
-              Only applied to rows that have no collector in the CSV.
+              Expected file: <span className="font-mono">{selected.file}</span>
             </p>
-          </div>
+          )}
         </div>
 
         <div>
@@ -293,66 +196,26 @@ export default function ModuleUploadForm({
           />
           {fileName && (
             <p className="text-xs text-slate-400 mt-1">
-              {fileName} · {rows.length} data row(s) · {headers.length} column(s)
+              {fileName}
+              {parsing
+                ? " · parsing…"
+                : records.length > 0
+                ? ` · ${records.length} row(s) · ${headers.length} column(s)`
+                : ""}
             </p>
           )}
+          <p className="text-xs text-amber-600 mt-1">
+            Keep files under ~4 MB (Vercel request limit). Split larger exports.
+          </p>
         </div>
 
-        {/* Column mapping — key/collector/date can differ per CSV */}
-        {headers.length > 0 && (
-          <div className="rounded-xl border border-slate-200 p-4">
-            <p className="text-sm font-medium mb-3">
-              Map CSV columns → fields
-              <span className="text-slate-400 font-normal">
-                {" "}
-                (collector & key columns differ per CSV, so confirm them here)
-              </span>
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {TARGETS.map((t) => (
-                <div key={t.field}>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">
-                    {t.label}
-                    {t.required && <span className="text-red-500"> *</span>}
-                    {t.field === "collector" && (
-                      <span className="text-slate-400"> (matched by name)</span>
-                    )}
-                  </label>
-                  <select
-                    value={mapping[t.field] ?? ""}
-                    onChange={(e) =>
-                      setMapping((m) => ({ ...m, [t.field]: e.target.value }))
-                    }
-                    className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm bg-white"
-                  >
-                    <option value="">— not mapped —</option>
-                    {headers.map((h) => (
-                      <option key={h} value={h}>
-                        {h}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-
-            {mapping.collector && unknownCollectorCount > 0 && (
-              <p className="text-xs text-amber-600 mt-3">
-                ⚠ {unknownCollectorCount} row(s) reference a collector name that
-                doesn’t match any existing collector — those rows will be
-                skipped. Add the collectors first, or fix the names.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Preview */}
+        {/* Preview (first columns / rows) */}
         {preview.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full text-xs">
               <thead className="bg-slate-50">
                 <tr>
-                  {headers.map((h) => (
+                  {previewCols.map((h) => (
                     <th
                       key={h}
                       className="text-left font-medium text-slate-500 px-3 py-2 whitespace-nowrap"
@@ -360,19 +223,27 @@ export default function ModuleUploadForm({
                       {h}
                     </th>
                   ))}
+                  {headers.length > previewCols.length && (
+                    <th className="px-3 py-2 text-slate-400">
+                      +{headers.length - previewCols.length} more
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {preview.map((r, i) => (
                   <tr key={i} className="border-t border-slate-100">
-                    {headers.map((_, j) => (
+                    {previewCols.map((h) => (
                       <td
-                        key={j}
-                        className="px-3 py-1.5 text-slate-600 whitespace-nowrap"
+                        key={h}
+                        className="px-3 py-1.5 text-slate-600 whitespace-nowrap max-w-[180px] truncate"
                       >
-                        {r[j]}
+                        {r[h]}
                       </td>
                     ))}
+                    {headers.length > previewCols.length && (
+                      <td className="px-3 py-1.5 text-slate-300">…</td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -382,7 +253,7 @@ export default function ModuleUploadForm({
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || parsing || records.length === 0}
           className="w-full rounded-lg bg-slate-900 text-white py-2.5 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {loading && (
