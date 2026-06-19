@@ -39,9 +39,9 @@ export default function AnalyticsDashboard({
   role: Role;
   myName: string | null;
   isLinked: boolean;
-  from: string; // YYYY-MM-DD or ""
+  from: string;
   to: string;
-  collector: string; // hr_code or "all"
+  collector: string;
   parts: PartSummary[];
   moduleTotals: Record<ModuleValue, number>;
   collectorRows: CollectorRow[];
@@ -54,7 +54,6 @@ export default function AnalyticsDashboard({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("total");
 
-  // Filters live in the URL; changing them re-runs the server query.
   function applyFilters(next: { from?: string; to?: string; collector?: string }) {
     const f = next.from ?? from;
     const t = next.to ?? to;
@@ -94,7 +93,6 @@ export default function AnalyticsDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Header + global filters */}
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">
@@ -106,9 +104,7 @@ export default function AnalyticsDashboard({
         <div className="flex items-end gap-3 flex-wrap">
           {!isPersonal && (
             <div>
-              <label className="block text-xs text-slate-500 mb-1">
-                Collector
-              </label>
+              <label className="block text-xs text-slate-500 mb-1">Collector</label>
               <select
                 value={collector}
                 onChange={(e) => applyFilters({ collector: e.target.value })}
@@ -155,17 +151,12 @@ export default function AnalyticsDashboard({
         </div>
       </div>
 
-      {/* Summary cards (totals are exact across all filtered data) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard
-          label="Match parts"
-          value={limited ? `${parts.length}+` : parts.length}
-        />
+        <StatCard label="Match parts" value={limited ? `${parts.length}+` : parts.length} />
         <StatCard label="Total mistakes" value={totalMistakes} />
         <StatCard label="Modules with mistakes" value={modulesWith} />
       </div>
 
-      {/* Tabs */}
       <div className="inline-flex rounded-xl border border-slate-300 bg-white p-1">
         {(
           [
@@ -187,7 +178,7 @@ export default function AnalyticsDashboard({
         ))}
       </div>
 
-      {/* ---- View 1: Match View (grouped by matchid + partid) ---- */}
+      {/* View 1: Match View */}
       {tab === "matches" &&
         (parts.length === 0 ? (
           <p className="text-slate-500">No match parts for this filter.</p>
@@ -241,9 +232,7 @@ export default function AnalyticsDashboard({
                                 className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
                               >
                                 {m.label}:{" "}
-                                <span className="font-semibold">
-                                  {p.counts[m.value]}
-                                </span>
+                                <span className="font-semibold">{p.counts[m.value]}</span>
                               </span>
                             ))}
                           </div>
@@ -257,7 +246,7 @@ export default function AnalyticsDashboard({
           </>
         ))}
 
-      {/* ---- View 2: Module View ---- */}
+      {/* View 2: Module View */}
       {tab === "modules" && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="font-semibold mb-4">Mistakes by module</h2>
@@ -270,18 +259,14 @@ export default function AnalyticsDashboard({
                 const pct = Math.round((c / maxCount) * 100);
                 return (
                   <div key={mod.value} className="flex items-center gap-3">
-                    <span className="w-44 shrink-0 text-sm text-slate-600">
-                      {mod.label}
-                    </span>
+                    <span className="w-44 shrink-0 text-sm text-slate-600">{mod.label}</span>
                     <div className="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
                       <div
                         className="h-6 bg-slate-900 rounded-full transition-all"
                         style={{ width: `${c === 0 ? 0 : Math.max(pct, 4)}%` }}
                       />
                     </div>
-                    <span className="w-12 text-right text-sm font-semibold tabular-nums">
-                      {c}
-                    </span>
+                    <span className="w-12 text-right text-sm font-semibold tabular-nums">{c}</span>
                   </div>
                 );
               })}
@@ -290,15 +275,13 @@ export default function AnalyticsDashboard({
         </div>
       )}
 
-      {/* ---- View 3: Collectors (ranked; click a column to sort) ---- */}
+      {/* View 3: Collectors */}
       {tab === "collectors" && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 text-sm text-slate-500">
             Ranked by{" "}
             <span className="font-medium text-slate-700">
-              {sortKey === "total"
-                ? "total"
-                : MODULES.find((m) => m.value === sortKey)?.label}
+              {sortKey === "total" ? "total" : MODULES.find((m) => m.value === sortKey)?.label}
             </span>{" "}
             — click a column to rank by that module.
           </div>
@@ -317,9 +300,7 @@ export default function AnalyticsDashboard({
                         key={m.value}
                         onClick={() => setSortKey(m.value)}
                         className={`text-right font-medium px-3 py-3 whitespace-nowrap cursor-pointer hover:text-slate-900 ${
-                          sortKey === m.value
-                            ? "text-slate-900"
-                            : "text-slate-500"
+                          sortKey === m.value ? "text-slate-900" : "text-slate-500"
                         }`}
                         title={`Sort by ${m.label}`}
                       >
@@ -340,14 +321,9 @@ export default function AnalyticsDashboard({
                 </thead>
                 <tbody>
                   {sortedCollectors.map((c) => (
-                    <tr
-                      key={c.hr_code}
-                      className="border-t border-slate-100 hover:bg-slate-50"
-                    >
+                    <tr key={c.hr_code} className="border-t border-slate-100 hover:bg-slate-50">
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span className="font-medium text-slate-800">
-                          {c.name}
-                        </span>
+                        <span className="font-medium text-slate-800">{c.name}</span>
                         {c.name !== c.hr_code && (
                           <span className="text-slate-400"> · {c.hr_code}</span>
                         )}
@@ -356,17 +332,13 @@ export default function AnalyticsDashboard({
                         <td
                           key={m.value}
                           className={`px-3 py-2.5 text-right tabular-nums ${
-                            sortKey === m.value
-                              ? "text-slate-900 font-semibold"
-                              : "text-slate-600"
+                            sortKey === m.value ? "text-slate-900 font-semibold" : "text-slate-600"
                           }`}
                         >
                           {c.counts[m.value]}
                         </td>
                       ))}
-                      <td className="px-4 py-2.5 text-right font-bold tabular-nums">
-                        {c.total}
-                      </td>
+                      <td className="px-4 py-2.5 text-right font-bold tabular-nums">{c.total}</td>
                     </tr>
                   ))}
                 </tbody>

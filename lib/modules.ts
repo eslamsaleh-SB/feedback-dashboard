@@ -19,7 +19,7 @@ export const MODULES = [
 
 export type ModuleValue = (typeof MODULES)[number]["value"];
 
-// One row of the match_part_summary view: a match part + its per-module counts.
+// One row of the Match View (per match part + its per-module counts).
 export type PartSummary = {
   matchid: string;
   partid: number;
@@ -30,7 +30,7 @@ export type PartSummary = {
   total: number;
 };
 
-// One row of the collector ranking (collector_module_totals RPC).
+// One row of the collector ranking.
 export type CollectorRow = {
   hr_code: string;
   name: string;
