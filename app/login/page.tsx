@@ -12,8 +12,11 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [hrCode, setHrCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(
+    null
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,19 +24,71 @@ export default function LoginPage() {
     setMessage(null);
 
     if (mode === "signin") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setMessage(error.message);
-      else router.replace("/dashboard");
-    } else {
-      const { error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
-        options: { data: { full_name: fullName } },
       });
-      if (error) setMessage(error.message);
-      else setMessage("Account created. You can sign in now (new users start as 'Viewer').");
-      setMode("signin");
+      if (error) setMessage({ type: "err", text: error.message });
+      else router.replace("/dashboard");
+      setLoading(false);
+      return;
     }
+
+    // ---- Sign up ----
+    const code = hrCode.trim();
+    if (!code) {
+      setLoading(false);
+      return setMessage({ type: "err", text: "Enter your HR code." });
+    }
+    if (/\s/.test(code)) {
+      setLoading(false);
+      return setMessage({
+        type: "err",
+        text: "HR code cannot contain spaces.",
+      });
+    }
+
+    // Reject a code that's already linked to an account (friendly pre-check;
+    // the database also enforces this).
+    const { data: available, error: checkErr } = await supabase.rpc(
+      "hr_code_available",
+      { p_code: code }
+    );
+    if (checkErr) {
+      setLoading(false);
+      return setMessage({ type: "err", text: checkErr.message });
+    }
+    if (available === false) {
+      setLoading(false);
+      return setMessage({
+        type: "err",
+        text: `HR code "${code}" is already registered to another account.`,
+      });
+    }
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName, hr_code: code } },
+    });
+    if (error) {
+      // Trigger raises unique_violation if the code was taken in a race.
+      const taken = /already registered|duplicate|unique/i.test(error.message);
+      setMessage({
+        type: "err",
+        text: taken
+          ? `HR code "${code}" is already registered to another account.`
+          : error.message,
+      });
+      setLoading(false);
+      return;
+    }
+
+    setMessage({
+      type: "ok",
+      text: "Account created and linked to your HR code. You can sign in now.",
+    });
+    setMode("signin");
     setLoading(false);
   }
 
@@ -48,13 +103,29 @@ export default function LoginPage() {
         </h1>
 
         {mode === "signup" && (
-          <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="Full name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-          />
+          <>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Full name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
+            <div>
+              <input
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                placeholder="HR code (e.g. A-2074)"
+                value={hrCode}
+                // Trim spaces as the user types so the code is always clean.
+                onChange={(e) => setHrCode(e.target.value.replace(/\s/g, ""))}
+                autoCapitalize="characters"
+                required
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Links your account to your data. No spaces.
+              </p>
+            </div>
+          </>
         )}
 
         <input
@@ -82,11 +153,22 @@ export default function LoginPage() {
           {loading ? "Please wait…" : mode === "signin" ? "Sign in" : "Sign up"}
         </button>
 
-        {message && <p className="text-sm text-center text-slate-600">{message}</p>}
+        {message && (
+          <p
+            className={`text-sm text-center ${
+              message.type === "ok" ? "text-emerald-600" : "text-red-600"
+            }`}
+          >
+            {message.text}
+          </p>
+        )}
 
         <button
           type="button"
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+          onClick={() => {
+            setMode(mode === "signin" ? "signup" : "signin");
+            setMessage(null);
+          }}
           className="w-full text-sm text-slate-500 hover:text-slate-800"
         >
           {mode === "signin"
