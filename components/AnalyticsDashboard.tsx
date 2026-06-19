@@ -4,18 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   MODULES,
-  PERIODS,
   type ModuleValue,
   type PartSummary,
-  type Period,
+  type CollectorRow,
 } from "@/lib/modules";
 
 type CollectorOpt = { hr_code: string; name: string };
 type Role = "Admin" | "Uploader" | "Viewer";
-
-const MODULE_LABEL: Record<string, string> = Object.fromEntries(
-  MODULES.map((m) => [m.value, m.label])
-);
+type Tab = "matches" | "modules" | "collectors";
+type SortKey = ModuleValue | "total";
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -30,34 +27,41 @@ export default function AnalyticsDashboard({
   role,
   myName,
   isLinked,
-  period,
+  from,
+  to,
   collector,
   parts,
   moduleTotals,
+  collectorRows,
   collectors,
   limited,
 }: {
   role: Role;
   myName: string | null;
   isLinked: boolean;
-  period: Period;
+  from: string; // YYYY-MM-DD or ""
+  to: string;
   collector: string; // hr_code or "all"
   parts: PartSummary[];
   moduleTotals: Record<ModuleValue, number>;
+  collectorRows: CollectorRow[];
   collectors: CollectorOpt[];
   limited: boolean;
 }) {
   const router = useRouter();
   const isPersonal = role === "Viewer";
-  const [tab, setTab] = useState<"matches" | "modules">("matches");
+  const [tab, setTab] = useState<Tab>("matches");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("total");
 
   // Filters live in the URL; changing them re-runs the server query.
-  function applyFilters(next: { period?: Period; collector?: string }) {
-    const p = next.period ?? period;
+  function applyFilters(next: { from?: string; to?: string; collector?: string }) {
+    const f = next.from ?? from;
+    const t = next.to ?? to;
     const c = next.collector ?? collector;
     const params = new URLSearchParams();
-    if (p && p !== "all") params.set("period", p);
+    if (f) params.set("from", f);
+    if (t) params.set("to", t);
     if (c && c !== "all") params.set("collector", c);
     const qs = params.toString();
     router.push(`/analytics${qs ? `?${qs}` : ""}`);
@@ -67,6 +71,14 @@ export default function AnalyticsDashboard({
   const maxCount = Math.max(1, ...Object.values(moduleTotals));
   const modulesWith = Object.values(moduleTotals).filter((c) => c > 0).length;
   const partKey = (p: PartSummary) => `${p.matchid}|${p.partid}`;
+
+  const sortedCollectors = [...collectorRows].sort((a, b) => {
+    const av = sortKey === "total" ? a.total : a.counts[sortKey];
+    const bv = sortKey === "total" ? b.total : b.counts[sortKey];
+    return bv - av;
+  });
+
+  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
 
   if (isPersonal && !isLinked) {
     return (
@@ -100,7 +112,7 @@ export default function AnalyticsDashboard({
               <select
                 value={collector}
                 onChange={(e) => applyFilters({ collector: e.target.value })}
-                className="rounded-lg border border-slate-300 px-3 py-2 bg-white"
+                className={inputCls}
               >
                 <option value="all">All collectors</option>
                 {collectors.map((c) => (
@@ -112,21 +124,34 @@ export default function AnalyticsDashboard({
             </div>
           )}
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Period</label>
-            <select
-              value={period}
-              onChange={(e) =>
-                applyFilters({ period: e.target.value as Period })
-              }
-              className="rounded-lg border border-slate-300 px-3 py-2 bg-white"
-            >
-              {PERIODS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+            <label className="block text-xs text-slate-500 mb-1">From</label>
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => applyFilters({ from: e.target.value })}
+              className={inputCls}
+            />
           </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">To</label>
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => applyFilters({ to: e.target.value })}
+              className={inputCls}
+            />
+          </div>
+          {(from || to || collector !== "all") && (
+            <button
+              type="button"
+              onClick={() => router.push("/analytics")}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
@@ -146,6 +171,7 @@ export default function AnalyticsDashboard({
           [
             { id: "matches", label: "Match View" },
             { id: "modules", label: "Module View" },
+            { id: "collectors", label: "Collectors" },
           ] as const
         ).map((t) => (
           <button
@@ -164,13 +190,13 @@ export default function AnalyticsDashboard({
       {/* ---- View 1: Match View (grouped by matchid + partid) ---- */}
       {tab === "matches" &&
         (parts.length === 0 ? (
-          <p className="text-slate-500">No match parts in this period.</p>
+          <p className="text-slate-500">No match parts for this filter.</p>
         ) : (
           <>
             {limited && (
               <p className="text-xs text-amber-600">
                 Showing the {parts.length} most recent match parts. Narrow the
-                period or pick a collector to see a specific set.
+                dates or pick a collector to see a specific set.
               </p>
             )}
             <div className="space-y-3">
@@ -234,15 +260,9 @@ export default function AnalyticsDashboard({
       {/* ---- View 2: Module View ---- */}
       {tab === "modules" && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <h2 className="font-semibold mb-4">
-            Mistakes by module
-            <span className="text-slate-400 font-normal">
-              {" "}
-              · {PERIODS.find((p) => p.value === period)?.label}
-            </span>
-          </h2>
+          <h2 className="font-semibold mb-4">Mistakes by module</h2>
           {totalMistakes === 0 ? (
-            <p className="text-slate-500">No mistakes in this period.</p>
+            <p className="text-slate-500">No mistakes for this filter.</p>
           ) : (
             <div className="space-y-3">
               {MODULES.map((mod) => {
@@ -265,6 +285,92 @@ export default function AnalyticsDashboard({
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---- View 3: Collectors (ranked; click a column to sort) ---- */}
+      {tab === "collectors" && (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100 text-sm text-slate-500">
+            Ranked by{" "}
+            <span className="font-medium text-slate-700">
+              {sortKey === "total"
+                ? "total"
+                : MODULES.find((m) => m.value === sortKey)?.label}
+            </span>{" "}
+            — click a column to rank by that module.
+          </div>
+          {sortedCollectors.length === 0 ? (
+            <p className="text-slate-500 p-5">No collectors for this filter.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">
+                      Collector
+                    </th>
+                    {MODULES.map((m) => (
+                      <th
+                        key={m.value}
+                        onClick={() => setSortKey(m.value)}
+                        className={`text-right font-medium px-3 py-3 whitespace-nowrap cursor-pointer hover:text-slate-900 ${
+                          sortKey === m.value
+                            ? "text-slate-900"
+                            : "text-slate-500"
+                        }`}
+                        title={`Sort by ${m.label}`}
+                      >
+                        {m.label}
+                        {sortKey === m.value ? " ↓" : ""}
+                      </th>
+                    ))}
+                    <th
+                      onClick={() => setSortKey("total")}
+                      className={`text-right font-semibold px-4 py-3 cursor-pointer hover:text-slate-900 ${
+                        sortKey === "total" ? "text-slate-900" : "text-slate-600"
+                      }`}
+                      title="Sort by total"
+                    >
+                      Total{sortKey === "total" ? " ↓" : ""}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedCollectors.map((c) => (
+                    <tr
+                      key={c.hr_code}
+                      className="border-t border-slate-100 hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <span className="font-medium text-slate-800">
+                          {c.name}
+                        </span>
+                        {c.name !== c.hr_code && (
+                          <span className="text-slate-400"> · {c.hr_code}</span>
+                        )}
+                      </td>
+                      {MODULES.map((m) => (
+                        <td
+                          key={m.value}
+                          className={`px-3 py-2.5 text-right tabular-nums ${
+                            sortKey === m.value
+                              ? "text-slate-900 font-semibold"
+                              : "text-slate-600"
+                          }`}
+                        >
+                          {c.counts[m.value]}
+                        </td>
+                      ))}
+                      <td className="px-4 py-2.5 text-right font-bold tabular-nums">
+                        {c.total}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

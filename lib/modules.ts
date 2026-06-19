@@ -19,15 +19,6 @@ export const MODULES = [
 
 export type ModuleValue = (typeof MODULES)[number]["value"];
 
-export type Period = "this_week" | "last_week" | "this_month" | "all";
-
-export const PERIODS: { value: Period; label: string }[] = [
-  { value: "this_week", label: "This Week" },
-  { value: "last_week", label: "Last Week" },
-  { value: "this_month", label: "This Month" },
-  { value: "all", label: "All Time" },
-];
-
 // One row of the match_part_summary view: a match part + its per-module counts.
 export type PartSummary = {
   matchid: string;
@@ -35,6 +26,14 @@ export type PartSummary = {
   hr_code: string | null;
   collector_name: string;
   date: string | null;
+  counts: Record<ModuleValue, number>;
+  total: number;
+};
+
+// One row of the collector ranking (collector_module_totals RPC).
+export type CollectorRow = {
+  hr_code: string;
+  name: string;
   counts: Record<ModuleValue, number>;
   total: number;
 };

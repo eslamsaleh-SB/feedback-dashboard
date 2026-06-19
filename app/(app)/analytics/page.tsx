@@ -1,40 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
-import { MODULES, type ModuleValue, type PartSummary, type Period } from "@/lib/modules";
+import {
+  MODULES,
+  type ModuleValue,
+  type PartSummary,
+  type CollectorRow,
+} from "@/lib/modules";
 
 export const dynamic = "force-dynamic";
 
-// Date range for a period, as YYYY-MM-DD strings (week starts Monday).
-function rangeFor(period: Period): { from: string; to: string } | null {
-  if (period === "all") return null;
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const dow = (today.getDay() + 6) % 7; // 0 = Monday
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - dow);
-
-  if (period === "this_week") {
-    const to = new Date(monday);
-    to.setDate(monday.getDate() + 7);
-    return { from: iso(monday), to: iso(to) };
-  }
-  if (period === "last_week") {
-    const from = new Date(monday);
-    from.setDate(monday.getDate() - 7);
-    return { from: iso(from), to: iso(monday) };
-  }
-  const from = new Date(today.getFullYear(), today.getMonth(), 1);
-  const to = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  return { from: iso(from), to: iso(to) };
-}
-
 const PART_LIMIT = 500;
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: { period?: string; collector?: string };
+  searchParams: { from?: string; to?: string; collector?: string };
 }) {
   const supabase = createClient();
   const {
@@ -48,16 +29,13 @@ export default async function AnalyticsPage({
     .single();
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
 
-  const period = (["this_week", "last_week", "this_month", "all"].includes(
-    searchParams.period || ""
-  )
-    ? searchParams.period
-    : "all") as Period;
+  // Filters from the URL.
+  const from = searchParams.from && ISO.test(searchParams.from) ? searchParams.from : null;
+  const to = searchParams.to && ISO.test(searchParams.to) ? searchParams.to : null;
   const collector =
     searchParams.collector && searchParams.collector !== "all"
       ? searchParams.collector
       : null; // hr_code
-  const range = rangeFor(period);
 
   const { data: collectors } = await supabase
     .from("collectors")
@@ -76,7 +54,8 @@ export default async function AnalyticsPage({
     )
     .order("date", { ascending: false })
     .limit(PART_LIMIT);
-  if (range) sq = sq.gte("date", range.from).lt("date", range.to);
+  if (from) sq = sq.gte("date", from);
+  if (to) sq = sq.lte("date", to);
   if (collector) sq = sq.eq("hr_code", collector);
   const { data: sumRows } = await sq;
 
@@ -104,7 +83,8 @@ export default async function AnalyticsPage({
   const totalsArr = await Promise.all(
     MODULES.map(async (m) => {
       let q = supabase.from(m.value).select("*", { count: "exact", head: true });
-      if (range) q = q.gte("review_date", range.from).lt("review_date", range.to);
+      if (from) q = q.gte("review_date", from);
+      if (to) q = q.lte("review_date", to);
       if (collector) q = q.eq("hr_code", collector);
       const { count } = await q;
       return [m.value, count ?? 0] as const;
@@ -114,6 +94,27 @@ export default async function AnalyticsPage({
     ModuleValue,
     number
   >;
+
+  // ---- Collectors View: per-collector per-module counts (RPC, RLS-aware) ----
+  const { data: rpcRows } = await supabase.rpc("collector_module_totals", {
+    p_from: from,
+    p_to: to,
+  });
+  let collectorRows: CollectorRow[] = (rpcRows ?? []).map((r: any) => ({
+    hr_code: r.hr_code,
+    name: nameByHr.get(r.hr_code) ?? r.hr_code,
+    counts: {
+      players: Number(r.players),
+      event: Number(r.event),
+      formation_tactical: Number(r.formation_tactical),
+      location: Number(r.location),
+      impact: Number(r.impact),
+      extras: Number(r.extras),
+      freeze_frame: Number(r.freeze_frame),
+    },
+    total: Number(r.total),
+  }));
+  if (collector) collectorRows = collectorRows.filter((c) => c.hr_code === collector);
 
   let myName: string | null = null;
   if (role === "Viewer" && profile?.collector_id) {
@@ -131,10 +132,12 @@ export default async function AnalyticsPage({
       role={role}
       myName={myName}
       isLinked={role !== "Viewer" || !!profile?.collector_id}
-      period={period}
+      from={from ?? ""}
+      to={to ?? ""}
       collector={collector ?? "all"}
       parts={parts}
       moduleTotals={moduleTotals}
+      collectorRows={collectorRows}
       collectors={collectorOptions}
       limited={(sumRows?.length ?? 0) >= PART_LIMIT}
     />
