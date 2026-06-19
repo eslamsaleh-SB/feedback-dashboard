@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import AnalyticsDashboard, {
-  type MatchRow,
+  type AssignmentRow,
   type Mistake,
   MODULES,
 } from "@/components/AnalyticsDashboard";
@@ -21,32 +21,38 @@ export default async function AnalyticsPage() {
 
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
 
-  // RLS scopes every query below to what this user may see:
-  //   Admin -> all, Uploader -> own uploads, Viewer -> own collector.
-  const [{ data: matches }, { data: collectors }] = await Promise.all([
+  // RLS scopes every query to what this user may see:
+  //   Admin -> all, Uploader -> own uploads, Viewer -> own hr_code.
+  const [{ data: assignments }, { data: collectors }] = await Promise.all([
     supabase
-      .from("matches")
-      .select("match_id, collector_id, date, collectors(name)")
+      .from("match_assignments")
+      .select("matchid, partid, hr_code, date")
       .order("date", { ascending: false }),
-    supabase.from("collectors").select("id, name").order("name"),
+    supabase.from("collectors").select("id, name, hr_code").order("name"),
   ]);
 
-  // Pull every module's rows in parallel.
+  // Map hr_code -> collector name for display.
+  const nameByHr = new Map<string, string>();
+  (collectors ?? []).forEach((c: any) => {
+    if (c.hr_code) nameByHr.set(c.hr_code, c.name);
+  });
+
+  // Pull every module's rows in parallel (only key fields needed for counts +
+  // the per-mistake detail shown when expanding a match part).
+  // Select * because columns differ per module (e.g. freeze_frame has no
+  // error_type/defect_type); we read whichever detail fields exist.
   const moduleResults = await Promise.all(
-    MODULES.map((m) =>
-      supabase
-        .from(m.value)
-        .select(
-          "id, match_id, key, review_date, description, category, severity, video_timestamp, notes"
-        )
-    )
+    MODULES.map((m) => supabase.from(m.value).select("*"))
   );
 
-  const matchRows: MatchRow[] = (matches ?? []).map((m: any) => ({
-    match_id: m.match_id,
-    collector_id: m.collector_id,
-    collector_name: m.collectors?.name ?? "Unknown",
-    date: m.date,
+  const assignmentRows: AssignmentRow[] = (assignments ?? []).map((a: any) => ({
+    matchid: a.matchid,
+    partid: a.partid,
+    hr_code: a.hr_code,
+    collector_name: a.hr_code
+      ? nameByHr.get(a.hr_code) ?? a.hr_code
+      : "Unassigned",
+    date: a.date,
   }));
 
   const mistakes: Mistake[] = [];
@@ -56,13 +62,14 @@ export default async function AnalyticsPage() {
       mistakes.push({
         id: r.id,
         module: moduleValue,
-        match_id: r.match_id,
+        matchid: r.matchid,
+        partid: r.partid,
         key: r.key,
-        description: r.description,
-        category: r.category,
-        severity: r.severity,
+        hr_code: r.hr_code,
+        error_type: r.error_type,
+        defect_type: r.defect_type,
+        collector_event: r.collector_event,
         video_timestamp: r.video_timestamp,
-        notes: r.notes,
       });
     });
   });
@@ -70,18 +77,23 @@ export default async function AnalyticsPage() {
   let myName: string | null = null;
   if (role === "Viewer" && profile?.collector_id) {
     myName =
-      (collectors ?? []).find((c) => c.id === profile.collector_id)?.name ??
+      (collectors ?? []).find((c: any) => c.id === profile.collector_id)?.name ??
       null;
   }
+
+  // Collectors that actually have an hr_code (for the Admin filter dropdown).
+  const collectorOptions = (collectors ?? [])
+    .filter((c: any) => c.hr_code)
+    .map((c: any) => ({ hr_code: c.hr_code as string, name: c.name as string }));
 
   return (
     <AnalyticsDashboard
       role={role}
       myName={myName}
       isLinked={role !== "Viewer" || !!profile?.collector_id}
-      matches={matchRows}
+      assignments={assignmentRows}
       mistakes={mistakes}
-      collectors={collectors ?? []}
+      collectors={collectorOptions}
     />
   );
 }
