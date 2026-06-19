@@ -1,10 +1,41 @@
 import { createClient } from "@/lib/supabase/server";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
-import { MODULES, type AssignmentRow, type Mistake } from "@/lib/modules";
+import { MODULES, type ModuleValue, type PartSummary, type Period } from "@/lib/modules";
 
 export const dynamic = "force-dynamic";
 
-export default async function AnalyticsPage() {
+// Date range for a period, as YYYY-MM-DD strings (week starts Monday).
+function rangeFor(period: Period): { from: string; to: string } | null {
+  if (period === "all") return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const dow = (today.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - dow);
+
+  if (period === "this_week") {
+    const to = new Date(monday);
+    to.setDate(monday.getDate() + 7);
+    return { from: iso(monday), to: iso(to) };
+  }
+  if (period === "last_week") {
+    const from = new Date(monday);
+    from.setDate(monday.getDate() - 7);
+    return { from: iso(from), to: iso(monday) };
+  }
+  const from = new Date(today.getFullYear(), today.getMonth(), 1);
+  const to = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  return { from: iso(from), to: iso(to) };
+}
+
+const PART_LIMIT = 500;
+
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: { period?: string; collector?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
@@ -15,57 +46,97 @@ export default async function AnalyticsPage() {
     .select("role, collector_id")
     .eq("id", user!.id)
     .single();
-
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
 
-  // RLS scopes every query to what this user may see:
-  //   Admin -> all, Uploader -> own uploads, Viewer -> own hr_code.
-  const [{ data: assignments }, { data: collectors }] = await Promise.all([
-    supabase
-      .from("match_assignments")
-      .select("matchid, partid, hr_code, date")
-      .order("date", { ascending: false }),
-    supabase.from("collectors").select("id, name, hr_code").order("name"),
-  ]);
+  const period = (["this_week", "last_week", "this_month", "all"].includes(
+    searchParams.period || ""
+  )
+    ? searchParams.period
+    : "all") as Period;
+  const collector =
+    searchParams.collector && searchParams.collector !== "all"
+      ? searchParams.collector
+      : null; // hr_code
+  const range = rangeFor(period);
 
-  // Map hr_code -> collector name for display.
+  const { data: collectors } = await supabase
+    .from("collectors")
+    .select("id, name, hr_code")
+    .order("name");
   const nameByHr = new Map<string, string>();
   (collectors ?? []).forEach((c: any) => {
     if (c.hr_code) nameByHr.set(c.hr_code, c.name);
   });
 
-  // Pull every module's rows in parallel (only key fields needed for counts +
-  // the per-mistake detail shown when expanding a match part).
-  // Select * because columns differ per module (e.g. freeze_frame has no
-  // error_type/defect_type); we read whichever detail fields exist.
-  const moduleResults = await Promise.all(
-    MODULES.map((m) => supabase.from(m.value).select("*"))
-  );
+  // ---- Match View: per-part summary (RLS-scoped), filtered, most recent ----
+  let sq = supabase
+    .from("match_part_summary")
+    .select(
+      "matchid, partid, hr_code, date, players, event, formation_tactical, location, impact, extras, freeze_frame, total"
+    )
+    .order("date", { ascending: false })
+    .limit(PART_LIMIT);
+  if (range) sq = sq.gte("date", range.from).lt("date", range.to);
+  if (collector) sq = sq.eq("hr_code", collector);
+  const { data: sumRows } = await sq;
 
-  const assignmentRows: AssignmentRow[] = (assignments ?? []).map((a: any) => ({
-    matchid: a.matchid,
-    partid: a.partid,
-    hr_code: a.hr_code,
-    collector_name: a.hr_code
-      ? nameByHr.get(a.hr_code) ?? a.hr_code
+  const parts: PartSummary[] = (sumRows ?? []).map((r: any) => ({
+    matchid: r.matchid,
+    partid: r.partid,
+    hr_code: r.hr_code,
+    collector_name: r.hr_code
+      ? nameByHr.get(r.hr_code) ?? r.hr_code
       : "Unassigned",
-    date: a.date,
+    date: r.date,
+    counts: {
+      players: r.players,
+      event: r.event,
+      formation_tactical: r.formation_tactical,
+      location: r.location,
+      impact: r.impact,
+      extras: r.extras,
+      freeze_frame: r.freeze_frame,
+    },
+    total: r.total,
   }));
 
-  const mistakes: Mistake[] = [];
-  moduleResults.forEach((res, i) => {
-    const moduleValue = MODULES[i].value;
-    (res.data ?? []).forEach((r: any) => {
-      mistakes.push({
-        id: r.id,
-        module: moduleValue,
-        matchid: r.matchid,
-        partid: r.partid,
-        key: r.key,
-        hr_code: r.hr_code,
-        error_type: r.error_type,
-        defect_type: r.defect_type,
-        collector_event: r.collector_event,
-        video_timestamp: r.video_timestamp,
-      });
+  // ---- Module View: exact totals across ALL filtered data (no row cap) ----
+  const totalsArr = await Promise.all(
+    MODULES.map(async (m) => {
+      let q = supabase.from(m.value).select("*", { count: "exact", head: true });
+      if (range) q = q.gte("review_date", range.from).lt("review_date", range.to);
+      if (collector) q = q.eq("hr_code", collector);
+      const { count } = await q;
+      return [m.value, count ?? 0] as const;
     })
+  );
+  const moduleTotals = Object.fromEntries(totalsArr) as Record<
+    ModuleValue,
+    number
+  >;
+
+  let myName: string | null = null;
+  if (role === "Viewer" && profile?.collector_id) {
+    myName =
+      (collectors ?? []).find((c: any) => c.id === profile.collector_id)?.name ??
+      null;
+  }
+
+  const collectorOptions = (collectors ?? [])
+    .filter((c: any) => c.hr_code)
+    .map((c: any) => ({ hr_code: c.hr_code as string, name: c.name as string }));
+
+  return (
+    <AnalyticsDashboard
+      role={role}
+      myName={myName}
+      isLinked={role !== "Viewer" || !!profile?.collector_id}
+      period={period}
+      collector={collector ?? "all"}
+      parts={parts}
+      moduleTotals={moduleTotals}
+      collectors={collectorOptions}
+      limited={(sumRows?.length ?? 0) >= PART_LIMIT}
+    />
+  );
+}

@@ -1,64 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { MODULES, type AssignmentRow, type Mistake } from "@/lib/modules";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  MODULES,
+  PERIODS,
+  type ModuleValue,
+  type PartSummary,
+  type Period,
+} from "@/lib/modules";
 
-// Re-export so existing imports from this component keep working.
-export { MODULES };
-export type { AssignmentRow, Mistake };
+type CollectorOpt = { hr_code: string; name: string };
+type Role = "Admin" | "Uploader" | "Viewer";
 
 const MODULE_LABEL: Record<string, string> = Object.fromEntries(
   MODULES.map((m) => [m.value, m.label])
 );
-
-type CollectorOpt = { hr_code: string; name: string };
-type Role = "Admin" | "Uploader" | "Viewer";
-type Period = "this_week" | "last_week" | "this_month" | "all";
-
-const PERIODS: { value: Period; label: string }[] = [
-  { value: "this_week", label: "This Week" },
-  { value: "last_week", label: "Last Week" },
-  { value: "this_month", label: "This Month" },
-  { value: "all", label: "All Time" },
-];
-
-// ---- Date range helpers (week starts Monday) ----
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function rangeFor(period: Period): { from: Date; to: Date } | null {
-  if (period === "all") return null;
-  const now = new Date();
-  const today = startOfDay(now);
-  const dow = (today.getDay() + 6) % 7; // 0 = Monday
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - dow);
-
-  if (period === "this_week") {
-    const to = new Date(monday);
-    to.setDate(monday.getDate() + 7);
-    return { from: monday, to };
-  }
-  if (period === "last_week") {
-    const from = new Date(monday);
-    from.setDate(monday.getDate() - 7);
-    return { from, to: monday };
-  }
-  const from = new Date(today.getFullYear(), today.getMonth(), 1);
-  const to = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  return { from, to };
-}
-function inRange(dateStr: string | null, r: { from: Date; to: Date } | null) {
-  if (!r) return true;
-  if (!dateStr) return false;
-  const d = startOfDay(new Date(dateStr));
-  if (isNaN(d.getTime())) return false;
-  return d >= r.from && d < r.to;
-}
-
-const partKey = (matchid: string, partid: number) => `${matchid}|${partid}`;
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -73,88 +30,43 @@ export default function AnalyticsDashboard({
   role,
   myName,
   isLinked,
-  assignments,
-  mistakes,
+  period,
+  collector,
+  parts,
+  moduleTotals,
   collectors,
+  limited,
 }: {
   role: Role;
   myName: string | null;
   isLinked: boolean;
-  assignments: AssignmentRow[];
-  mistakes: Mistake[];
+  period: Period;
+  collector: string; // hr_code or "all"
+  parts: PartSummary[];
+  moduleTotals: Record<ModuleValue, number>;
   collectors: CollectorOpt[];
+  limited: boolean;
 }) {
+  const router = useRouter();
   const isPersonal = role === "Viewer";
   const [tab, setTab] = useState<"matches" | "modules">("matches");
-  const [period, setPeriod] = useState<Period>("all");
-  const [collectorFilter, setCollectorFilter] = useState("all"); // hr_code
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const range = useMemo(() => rangeFor(period), [period]);
+  // Filters live in the URL; changing them re-runs the server query.
+  function applyFilters(next: { period?: Period; collector?: string }) {
+    const p = next.period ?? period;
+    const c = next.collector ?? collector;
+    const params = new URLSearchParams();
+    if (p && p !== "all") params.set("period", p);
+    if (c && c !== "all") params.set("collector", c);
+    const qs = params.toString();
+    router.push(`/analytics${qs ? `?${qs}` : ""}`);
+  }
 
-  // Collector filter (Admin/Uploader only — Viewers scoped by RLS).
-  const scoped = useMemo(
-    () =>
-      isPersonal || collectorFilter === "all"
-        ? assignments
-        : assignments.filter((a) => a.hr_code === collectorFilter),
-    [isPersonal, collectorFilter, assignments]
-  );
-
-  // Global date filter drives BOTH views, based on the assignment date.
-  const visibleParts = useMemo(
-    () => scoped.filter((a) => inRange(a.date, range)),
-    [scoped, range]
-  );
-
-  // (matchid|partid) -> assignment, for the parts passing the filters.
-  const partById = useMemo(() => {
-    const m = new Map<string, AssignmentRow>();
-    visibleParts.forEach((a) => m.set(partKey(a.matchid, a.partid), a));
-    return m;
-  }, [visibleParts]);
-
-  const visibleMistakes = useMemo(
-    () => mistakes.filter((mk) => partById.has(partKey(mk.matchid, mk.partid))),
-    [mistakes, partById]
-  );
-
-  // View 1: mistakes grouped by match part.
-  const mistakesByPart = useMemo(() => {
-    const m = new Map<string, Mistake[]>();
-    visibleMistakes.forEach((mk) => {
-      const k = partKey(mk.matchid, mk.partid);
-      const arr = m.get(k) ?? [];
-      arr.push(mk);
-      m.set(k, arr);
-    });
-    return m;
-  }, [visibleMistakes]);
-
-  // View 2: totals per module.
-  const countsByModule = useMemo(() => {
-    const counts: Record<string, number> = {};
-    MODULES.forEach((m) => (counts[m.value] = 0));
-    visibleMistakes.forEach((mk) => {
-      counts[mk.module] = (counts[mk.module] ?? 0) + 1;
-    });
-    return counts;
-  }, [visibleMistakes]);
-
-  const maxCount = Math.max(1, ...Object.values(countsByModule));
-  const totalMistakes = visibleMistakes.length;
-
-  // Sort parts by date desc then matchid/partid.
-  const sortedParts = useMemo(
-    () =>
-      [...visibleParts].sort((a, b) => {
-        const d = (b.date ?? "").localeCompare(a.date ?? "");
-        if (d !== 0) return d;
-        if (a.matchid !== b.matchid) return a.matchid.localeCompare(b.matchid);
-        return a.partid - b.partid;
-      }),
-    [visibleParts]
-  );
+  const totalMistakes = Object.values(moduleTotals).reduce((a, b) => a + b, 0);
+  const maxCount = Math.max(1, ...Object.values(moduleTotals));
+  const modulesWith = Object.values(moduleTotals).filter((c) => c > 0).length;
+  const partKey = (p: PartSummary) => `${p.matchid}|${p.partid}`;
 
   if (isPersonal && !isLinked) {
     return (
@@ -186,8 +98,8 @@ export default function AnalyticsDashboard({
                 Collector
               </label>
               <select
-                value={collectorFilter}
-                onChange={(e) => setCollectorFilter(e.target.value)}
+                value={collector}
+                onChange={(e) => applyFilters({ collector: e.target.value })}
                 className="rounded-lg border border-slate-300 px-3 py-2 bg-white"
               >
                 <option value="all">All collectors</option>
@@ -203,7 +115,9 @@ export default function AnalyticsDashboard({
             <label className="block text-xs text-slate-500 mb-1">Period</label>
             <select
               value={period}
-              onChange={(e) => setPeriod(e.target.value as Period)}
+              onChange={(e) =>
+                applyFilters({ period: e.target.value as Period })
+              }
               className="rounded-lg border border-slate-300 px-3 py-2 bg-white"
             >
               {PERIODS.map((p) => (
@@ -216,14 +130,14 @@ export default function AnalyticsDashboard({
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary cards (totals are exact across all filtered data) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Match parts" value={visibleParts.length} />
-        <StatCard label="Total mistakes" value={totalMistakes} />
         <StatCard
-          label="Modules with mistakes"
-          value={Object.values(countsByModule).filter((c) => c > 0).length}
+          label="Match parts"
+          value={limited ? `${parts.length}+` : parts.length}
         />
+        <StatCard label="Total mistakes" value={totalMistakes} />
+        <StatCard label="Modules with mistakes" value={modulesWith} />
       </div>
 
       {/* Tabs */}
@@ -249,97 +163,72 @@ export default function AnalyticsDashboard({
 
       {/* ---- View 1: Match View (grouped by matchid + partid) ---- */}
       {tab === "matches" &&
-        (sortedParts.length === 0 ? (
+        (parts.length === 0 ? (
           <p className="text-slate-500">No match parts in this period.</p>
         ) : (
-          <div className="space-y-3">
-            {sortedParts.map((a) => {
-              const k = partKey(a.matchid, a.partid);
-              const open = expanded === k;
-              const ms = mistakesByPart.get(k) ?? [];
-              const byModule = new Map<string, Mistake[]>();
-              ms.forEach((mk) => {
-                const arr = byModule.get(mk.module) ?? [];
-                arr.push(mk);
-                byModule.set(mk.module, arr);
-              });
-              return (
-                <div
-                  key={k}
-                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
-                >
-                  <button
-                    onClick={() => setExpanded(open ? null : k)}
-                    className="w-full text-left p-5 flex items-center justify-between gap-4 hover:bg-slate-50"
+          <>
+            {limited && (
+              <p className="text-xs text-amber-600">
+                Showing the {parts.length} most recent match parts. Narrow the
+                period or pick a collector to see a specific set.
+              </p>
+            )}
+            <div className="space-y-3">
+              {parts.map((p) => {
+                const k = partKey(p);
+                const open = expanded === k;
+                const present = MODULES.filter((m) => p.counts[m.value] > 0);
+                return (
+                  <div
+                    key={k}
+                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
                   >
-                    <div className="min-w-0">
-                      <p className="font-semibold truncate">
-                        Match {a.matchid} · Part {a.partid}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {!isPersonal && <>{a.collector_name} · </>}
-                        {a.date ?? "—"} · {ms.length} mistake(s)
-                      </p>
-                    </div>
-                    <span className="text-slate-400 text-sm shrink-0">
-                      {open ? "▲" : "▼"}
-                    </span>
-                  </button>
-
-                  {open && (
-                    <div className="border-t border-slate-100 p-5 space-y-5">
-                      {ms.length === 0 ? (
-                        <p className="text-sm text-slate-400">
-                          No mistakes recorded for this part.
+                    <button
+                      onClick={() => setExpanded(open ? null : k)}
+                      className="w-full text-left p-5 flex items-center justify-between gap-4 hover:bg-slate-50"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate">
+                          Match {p.matchid} · Part {p.partid}
                         </p>
-                      ) : (
-                        MODULES.filter((mod) => byModule.has(mod.value)).map(
-                          (mod) => (
-                            <div key={mod.value}>
-                              <p className="text-sm font-semibold text-slate-700 mb-2">
-                                {mod.label}{" "}
-                                <span className="text-slate-400 font-normal">
-                                  ({byModule.get(mod.value)!.length})
+                        <p className="text-sm text-slate-500">
+                          {!isPersonal && <>{p.collector_name} · </>}
+                          {p.date ?? "—"} · {p.total} mistake(s)
+                        </p>
+                      </div>
+                      <span className="text-slate-400 text-sm shrink-0">
+                        {open ? "▲" : "▼"}
+                      </span>
+                    </button>
+
+                    {open && (
+                      <div className="border-t border-slate-100 p-5">
+                        {present.length === 0 ? (
+                          <p className="text-sm text-slate-400">
+                            No mistakes recorded for this part.
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {present.map((m) => (
+                              <span
+                                key={m.value}
+                                className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
+                              >
+                                {m.label}:{" "}
+                                <span className="font-semibold">
+                                  {p.counts[m.value]}
                                 </span>
-                              </p>
-                              <ul className="space-y-2">
-                                {byModule.get(mod.value)!.map((mk) => (
-                                  <li
-                                    key={mk.id}
-                                    className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2"
-                                  >
-                                    <div className="flex items-start justify-between gap-3">
-                                      <p className="text-sm text-slate-700">
-                                        {mk.error_type || "mistake"}
-                                        {mk.collector_event
-                                          ? ` · ${mk.collector_event}`
-                                          : ""}
-                                      </p>
-                                      {mk.defect_type && (
-                                        <span className="shrink-0 rounded-full bg-amber-100 text-amber-700 text-xs font-medium px-2 py-0.5">
-                                          {mk.defect_type}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-slate-400 mt-0.5">
-                                      key: {mk.key}
-                                      {mk.video_timestamp
-                                        ? ` · @${mk.video_timestamp}`
-                                        : ""}
-                                    </p>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )
-                        )
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         ))}
 
       {/* ---- View 2: Module View ---- */}
@@ -357,7 +246,7 @@ export default function AnalyticsDashboard({
           ) : (
             <div className="space-y-3">
               {MODULES.map((mod) => {
-                const c = countsByModule[mod.value] ?? 0;
+                const c = moduleTotals[mod.value] ?? 0;
                 const pct = Math.round((c / maxCount) * 100);
                 return (
                   <div key={mod.value} className="flex items-center gap-3">
@@ -370,7 +259,7 @@ export default function AnalyticsDashboard({
                         style={{ width: `${c === 0 ? 0 : Math.max(pct, 4)}%` }}
                       />
                     </div>
-                    <span className="w-10 text-right text-sm font-semibold tabular-nums">
+                    <span className="w-12 text-right text-sm font-semibold tabular-nums">
                       {c}
                     </span>
                   </div>
@@ -383,4 +272,3 @@ export default function AnalyticsDashboard({
     </div>
   );
 }
-                                                                                                 

@@ -19,23 +19,22 @@ export const MODULES = [
 
 export type ModuleValue = (typeof MODULES)[number]["value"];
 
-export type AssignmentRow = {
+export type Period = "this_week" | "last_week" | "this_month" | "all";
+
+export const PERIODS: { value: Period; label: string }[] = [
+  { value: "this_week", label: "This Week" },
+  { value: "last_week", label: "Last Week" },
+  { value: "this_month", label: "This Month" },
+  { value: "all", label: "All Time" },
+];
+
+// One row of the match_part_summary view: a match part + its per-module counts.
+export type PartSummary = {
   matchid: string;
   partid: number;
   hr_code: string | null;
   collector_name: string;
   date: string | null;
-};
-
-export type Mistake = {
-  id: string;
-  module: ModuleValue;
-  matchid: string;
-  partid: number;
-  key: string;
-  hr_code: string | null;
-  error_type: string | null;
-  defect_type: string | null;
-  collector_event: string | null;
-  video_timestamp: string | null;
+  counts: Record<ModuleValue, number>;
+  total: number;
 };
