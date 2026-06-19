@@ -30,9 +30,17 @@ export default function NavBar({
           <Link href="/dashboard" className="text-sm text-slate-600 hover:text-slate-900">
             {role === "Viewer" ? "My Profile" : "Dashboard"}
           </Link>
+          <Link href="/analytics" className="text-sm text-slate-600 hover:text-slate-900">
+            {role === "Viewer" ? "My Analytics" : "Analytics"}
+          </Link>
           {canUpload && (
             <Link href="/upload" className="text-sm text-slate-600 hover:text-slate-900">
               Upload
+            </Link>
+          )}
+          {canUpload && (
+            <Link href="/module-upload" className="text-sm text-slate-600 hover:text-slate-900">
+              Module Data
             </Link>
           )}
           {role === "Admin" && (
