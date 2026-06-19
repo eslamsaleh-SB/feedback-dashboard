@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardClient, { type MatchSession } from "@/components/DashboardClient";
 
@@ -16,6 +17,10 @@ export default async function DashboardPage() {
     .single();
 
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
+
+  // Collectors have a dedicated dashboard at /analytics (Reports, Feedback
+  // Sessions, Match Details + per-module totals). Send them there.
+  if (role === "Viewer") redirect("/analytics");
 
   // RLS automatically scopes match_sessions to what this user may see.
   const [{ data: sessions }, { data: collectors }] = await Promise.all([
@@ -44,18 +49,11 @@ export default async function DashboardPage() {
     })),
   }));
 
-  // For a Viewer, find their own collector name for the "My Profile" header.
-  let myName: string | null = null;
-  if (role === "Viewer" && profile?.collector_id) {
-    myName =
-      (collectors ?? []).find((c) => c.id === profile.collector_id)?.name ?? null;
-  }
-
   return (
     <DashboardClient
       role={role}
-      myName={myName}
-      isLinked={role !== "Viewer" || !!profile?.collector_id}
+      myName={null}
+      isLinked={true}
       sessions={rows}
       collectors={collectors ?? []}
     />
