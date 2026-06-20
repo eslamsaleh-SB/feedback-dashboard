@@ -39,11 +39,12 @@ export default async function MatchTotalsPage({
     if (c.hr_code) byHr.set(c.hr_code, { name: c.name, team: c.team ?? null });
   });
 
-  const { data: partRows } = await supabase.rpc("match_part_summary_fast", {
+  // Per (match, part, collector) — so EVERY collector who contributed shows up.
+  const { data: partRows } = await supabase.rpc("match_module_breakdown", {
     p_from: from,
     p_to: to,
     p_collector: collector,
-    p_limit: 5000,
+    p_limit: 8000,
   });
 
   const rows: EnrichedPart[] = (partRows ?? []).map((r: any) => ({
@@ -80,7 +81,7 @@ export default async function MatchTotalsPage({
       collector={collector ?? "all"}
       rows={rows}
       collectors={collectorOptions}
-      limited={(partRows?.length ?? 0) >= 5000}
+      limited={(partRows?.length ?? 0) >= 8000}
     />
   );
 }
