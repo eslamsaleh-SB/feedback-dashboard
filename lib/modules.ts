@@ -1,10 +1,5 @@
-// Shared module metadata + types used by BOTH the server analytics page and
-// the client dashboards.
-//
-// IMPORTANT: this file is intentionally NOT a "use client" module. Server
-// Components import these values; if they lived in a "use client" file the
-// server would receive client-reference stubs and `.map(...)` would throw at
-// request time (HTTP 500). Keep all shared constants/types here.
+// Shared module metadata + types used by BOTH the server pages and the
+// client dashboards. NOT a "use client" module (server components import it).
 
 export const MODULES = [
   { value: "players", label: "Players" },
@@ -21,8 +16,7 @@ export type ModuleValue = (typeof MODULES)[number]["value"];
 // Kept for backward compatibility with any older component still importing it.
 export type Period = "this_week" | "last_week" | "this_month" | "all";
 
-// Order used for the collector dashboard's bottom metric cards
-// (matches the order the product owner requested).
+// Order used for the collector dashboard's bottom metric cards.
 export const CARD_ORDER: ModuleValue[] = [
   "players",
   "event",
@@ -32,6 +26,15 @@ export const CARD_ORDER: ModuleValue[] = [
   "freeze_frame",
   "impact",
 ];
+
+// Format a collector as "Code - Name - Team".
+export function collectorLabel(
+  hr_code: string | null,
+  name: string | null,
+  team: string | null
+): string {
+  return [hr_code || "—", name || hr_code || "—", team || "—"].join(" - ");
+}
 
 // One row of the Match View (per match part + its per-module counts).
 export type PartSummary = {
@@ -44,10 +47,12 @@ export type PartSummary = {
   total: number;
 };
 
-// One row of the collector ranking.
+// One row of the collector ranking (now carries team + title).
 export type CollectorRow = {
   hr_code: string;
   name: string;
+  team: string | null;
+  title: string | null;
   counts: Record<ModuleValue, number>;
   total: number;
 };
@@ -67,4 +72,14 @@ export type FeedbackSession = {
   session_date: string | null;
   mode: "Online" | "Offline" | string;
   notes: string | null;
+};
+
+// One match-part row for the "Match Total per Module" page.
+export type MatchPartRow = {
+  matchid: string;
+  partid: number;
+  hr_code: string | null;
+  date: string | null;
+  counts: Record<ModuleValue, number>;
+  total: number;
 };
