@@ -17,7 +17,7 @@ export type EnrichedPart = {
 };
 
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
-type SortBy = "match" | "part";
+type ErrOp = "gte" | "eq" | "lte";
 
 const MAX_MATCHES = 250;
 
@@ -46,7 +46,8 @@ export default function MatchTotals({
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState<"" | ModuleValue>("");
-  const [sortBy, setSortBy] = useState<SortBy>("match");
+  const [errOp, setErrOp] = useState<ErrOp>("gte");
+  const [errVal, setErrVal] = useState("");
 
   function applyFilters(next: { from?: string; to?: string; collector?: string }) {
     const f = next.from ?? from;
@@ -62,6 +63,16 @@ export default function MatchTotals({
 
   const metric = (p: EnrichedPart) => (moduleFilter ? p.counts[moduleFilter] : p.total);
 
+  // Error threshold test (applies to the metric: total, or selected module).
+  const errN = parseInt(errVal, 10);
+  const errActive = Number.isFinite(errN);
+  const passErr = (v: number) => {
+    if (!errActive) return true;
+    if (errOp === "gte") return v >= errN;
+    if (errOp === "lte") return v <= errN;
+    return v === errN;
+  };
+
   const matches = useMemo(() => {
     const map = new Map<
       string,
@@ -76,22 +87,20 @@ export default function MatchTotals({
       m.parts.push(r);
       if (r.date && (!m.date || r.date > m.date)) m.date = r.date;
     }
-    let arr = Array.from(map.values()).map((m) => {
-      const matchSum = m.parts.reduce((s, p) => s + metric(p), 0);
-      const maxPart = m.parts.reduce((mx, p) => Math.max(mx, metric(p)), 0);
-      return { ...m, matchSum, maxPart };
-    });
     const q = search.trim().toLowerCase();
+    let arr = Array.from(map.values()).map((m) => {
+      const parts = m.parts
+        .filter((p) => passErr(metric(p)))
+        .sort((a, b) => a.partid - b.partid || metric(b) - metric(a));
+      const total = parts.reduce((s, p) => s + metric(p), 0);
+      return { ...m, parts, total };
+    });
+    arr = arr.filter((m) => m.parts.length > 0);
     if (q) arr = arr.filter((m) => m.matchid.toLowerCase().includes(q));
-    arr.sort((a, b) => (sortBy === "part" ? b.maxPart - a.maxPart : b.matchSum - a.matchSum));
-    arr.forEach((m) =>
-      m.parts.sort((a, b) =>
-        sortBy === "part" ? metric(b) - metric(a) : a.partid - b.partid
-      )
-    );
+    arr.sort((a, b) => b.total - a.total);
     return arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, search, moduleFilter, sortBy]);
+  }, [rows, search, moduleFilter, errOp, errVal]);
 
   const shown = matches.slice(0, MAX_MATCHES);
 
@@ -109,16 +118,14 @@ export default function MatchTotals({
       <div>
         <h1 className="text-2xl font-bold">Match Total per Module</h1>
         <p className="text-slate-500">
-          Module totals by Match → Collector → Part.{" "}
-          {sortBy === "part"
-            ? "Sorted by the highest-error part first."
-            : "Sorted by total match errors first."}
+          Module totals by Match → Collector → Part. Every collector who worked on a
+          match is listed.
         </p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="lg:col-span-2">
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3">
+        <div className="w-64">
           <label className="block text-xs text-slate-500 mb-1">Collector</label>
           <Combobox
             options={collectorOptions}
@@ -127,7 +134,7 @@ export default function MatchTotals({
             placeholder="All collectors"
           />
         </div>
-        <div>
+        <div className="w-44">
           <label className="block text-xs text-slate-500 mb-1">Module</label>
           <select
             value={moduleFilter}
@@ -142,47 +149,58 @@ export default function MatchTotals({
             ))}
           </select>
         </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Sort by</label>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-            className={`${inputCls} w-full`}
-          >
-            <option value="match">Match total (highest)</option>
-            <option value="part">Top part (highest)</option>
-          </select>
+        <div className="w-56">
+          <label className="block text-xs text-slate-500 mb-1">
+            Errors {moduleLabel ? `(${moduleLabel})` : "(total)"}
+          </label>
+          <div className="flex gap-2">
+            <select
+              value={errOp}
+              onChange={(e) => setErrOp(e.target.value as ErrOp)}
+              className={`${inputCls} w-20`}
+            >
+              <option value="gte">≥</option>
+              <option value="eq">=</option>
+              <option value="lte">≤</option>
+            </select>
+            <input
+              type="number"
+              min={0}
+              value={errVal}
+              onChange={(e) => setErrVal(e.target.value)}
+              placeholder="any"
+              className={`${inputCls} w-full`}
+            />
+          </div>
         </div>
-        <div>
+        <div className="w-40">
           <label className="block text-xs text-slate-500 mb-1">Search Match ID</label>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="e.g. 1460872"
+            placeholder="e.g. 1457319"
             className={`${inputCls} w-full`}
           />
         </div>
-        <div className="lg:col-span-3 grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Review date — from</label>
-            <input
-              type="date"
-              value={from}
-              max={to || undefined}
-              onChange={(e) => applyFilters({ from: e.target.value })}
-              className={`${inputCls} w-full`}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">to</label>
-            <input
-              type="date"
-              value={to}
-              min={from || undefined}
-              onChange={(e) => applyFilters({ to: e.target.value })}
-              className={`${inputCls} w-full`}
-            />
-          </div>
+        <div className="w-40">
+          <label className="block text-xs text-slate-500 mb-1">Review date — from</label>
+          <input
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => applyFilters({ from: e.target.value })}
+            className={`${inputCls} w-full`}
+          />
+        </div>
+        <div className="w-40">
+          <label className="block text-xs text-slate-500 mb-1">to</label>
+          <input
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => applyFilters({ to: e.target.value })}
+            className={`${inputCls} w-full`}
+          />
         </div>
       </div>
 
@@ -190,12 +208,12 @@ export default function MatchTotals({
         {matches.length} match(es){" "}
         {matches.length > MAX_MATCHES && (
           <span className="text-amber-600">
-            — showing the top {MAX_MATCHES}. Narrow by collector, date, or Match ID.
+            — showing the top {MAX_MATCHES} by errors. Narrow by collector, date, or Match ID.
           </span>
         )}
         {limited && (
           <span className="text-amber-600">
-            {" "}(data capped at 5,000 parts — narrow the date range for a complete view.)
+            {" "}(data capped at 8,000 rows — narrow the date range for a complete view.)
           </span>
         )}
       </div>
@@ -233,7 +251,7 @@ export default function MatchTotals({
                   const first = idx === 0;
                   return (
                     <tr
-                      key={`${m.matchid}-${p.partid}`}
+                      key={`${m.matchid}-${p.partid}-${p.hr_code ?? "x"}`}
                       className={`${first ? "border-t-2 border-slate-200" : "border-t border-slate-100"} hover:bg-slate-50`}
                     >
                       <td className="px-4 py-2.5 whitespace-nowrap align-top">

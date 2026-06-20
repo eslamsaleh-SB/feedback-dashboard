@@ -53,7 +53,6 @@ export default function CollectorsPerformance({
   const applyDates = (next: { from?: string; to?: string }) =>
     pushDates(next.from ?? from, next.to ?? to);
 
-  // Month filter <-> from/to (whole calendar month)
   const monthValue = useMemo(() => {
     if (!from || !to) return "";
     const [y, m, d] = from.split("-").map(Number);
@@ -67,7 +66,6 @@ export default function CollectorsPerformance({
     pushDates(`${val}-01`, `${val}-${pad(lastDayOfMonth(y, m))}`);
   }
 
-  // Week filter (Sunday → Saturday) <-> from/to
   const weekValue = useMemo(() => {
     if (!from || !to) return "";
     const f = new Date(from + "T00:00:00");
@@ -79,7 +77,7 @@ export default function CollectorsPerformance({
     if (!val) return pushDates("", "");
     const d = new Date(val + "T00:00:00");
     const sun = new Date(d);
-    sun.setDate(d.getDate() - d.getDay()); // 0 = Sunday
+    sun.setDate(d.getDate() - d.getDay());
     const sat = new Date(sun);
     sat.setDate(sun.getDate() + 6);
     pushDates(iso(sun), iso(sat));
@@ -157,92 +155,8 @@ export default function CollectorsPerformance({
         </p>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Match Count" value={matchCount} hint="distinct matches in range" />
-        <StatCard label="Filtered Collectors" value={filtered.length} />
-        <StatCard
-          label={activeModuleLabel ? `Total ${activeModuleLabel}` : "Total mistakes"}
-          value={totalMistakes}
-        />
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 text-sm text-slate-500">
-          Sorted by{" "}
-          <span className="font-medium text-slate-700">{activeModuleLabel ?? "Total"}</span>{" "}
-          (highest first).{" "}
-          {!moduleFilter && "Click a module header to show only that module."}
-        </div>
-        {filtered.length === 0 ? (
-          <p className="text-slate-500 p-5">No collectors for this filter.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="text-left font-medium text-slate-500 px-4 py-3">#</th>
-                  <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">
-                    Collector
-                  </th>
-                  {moduleFilter ? (
-                    <th className="text-right font-semibold text-slate-900 px-4 py-3 whitespace-nowrap">
-                      {activeModuleLabel}
-                    </th>
-                  ) : (
-                    <>
-                      {MODULES.map((m) => (
-                        <th
-                          key={m.value}
-                          onClick={() => setModuleFilter(m.value)}
-                          className="text-right font-medium text-slate-500 px-3 py-3 whitespace-nowrap cursor-pointer hover:text-slate-900"
-                          title={`Show only ${m.label}`}
-                        >
-                          {m.label}
-                        </th>
-                      ))}
-                      <th className="text-right font-semibold text-slate-600 px-4 py-3">Total ↓</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c, i) => (
-                  <tr key={c.hr_code} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-2.5 text-slate-400 tabular-nums">{i + 1}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="font-medium text-slate-800">{c.hr_code ?? "—"}</span>
-                      {c.name && c.name !== c.hr_code && (
-                        <span className="text-slate-500"> - {c.name}</span>
-                      )}
-                      {c.team && <span className="text-slate-500"> - {c.team}</span>}
-                    </td>
-                    {moduleFilter ? (
-                      <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
-                        {c.counts[moduleFilter]}
-                      </td>
-                    ) : (
-                      <>
-                        {MODULES.map((m) => (
-                          <td key={m.value} className="px-3 py-2.5 text-right tabular-nums text-slate-600">
-                            {c.counts[m.value]}
-                          </td>
-                        ))}
-                        <td className="px-4 py-2.5 text-right font-bold tabular-nums">{c.total}</td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Filters (moved to the bottom) */}
+      {/* Filters (at the top) */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
-        {/* Date section (kept inside the card) */}
         <div>
           <p className="text-xs font-medium text-slate-500 mb-2">Review date</p>
           <div className="flex flex-wrap gap-3">
@@ -264,8 +178,6 @@ export default function CollectorsPerformance({
             </div>
           </div>
         </div>
-
-        {/* Other filters */}
         <div className="flex flex-wrap gap-3">
           <div className="w-64">
             <label className="block text-xs text-slate-500 mb-1">Collector</label>
@@ -295,6 +207,81 @@ export default function CollectorsPerformance({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard label="Match Count" value={matchCount} hint="distinct matches in range" />
+        <StatCard label="Filtered Collectors" value={filtered.length} />
+        <StatCard label={activeModuleLabel ? `Total ${activeModuleLabel}` : "Total mistakes"} value={totalMistakes} />
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100 text-sm text-slate-500">
+          Sorted by{" "}
+          <span className="font-medium text-slate-700">{activeModuleLabel ?? "Total"}</span>{" "}
+          (highest first). {!moduleFilter && "Click a module header to show only that module."}
+        </div>
+        {filtered.length === 0 ? (
+          <p className="text-slate-500 p-5">No collectors for this filter.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="text-left font-medium text-slate-500 px-4 py-3">#</th>
+                  <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Collector</th>
+                  {moduleFilter ? (
+                    <th className="text-right font-semibold text-slate-900 px-4 py-3 whitespace-nowrap">
+                      {activeModuleLabel}
+                    </th>
+                  ) : (
+                    <>
+                      {MODULES.map((m) => (
+                        <th
+                          key={m.value}
+                          onClick={() => setModuleFilter(m.value)}
+                          className="text-right font-medium text-slate-500 px-3 py-3 whitespace-nowrap cursor-pointer hover:text-slate-900"
+                          title={`Show only ${m.label}`}
+                        >
+                          {m.label}
+                        </th>
+                      ))}
+                      <th className="text-right font-semibold text-slate-600 px-4 py-3">Total ↓</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((c, i) => (
+                  <tr key={c.hr_code} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="px-4 py-2.5 text-slate-400 tabular-nums">{i + 1}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      <span className="font-medium text-slate-800">{c.hr_code ?? "—"}</span>
+                      {c.name && c.name !== c.hr_code && <span className="text-slate-500"> - {c.name}</span>}
+                      {c.team && <span className="text-slate-500"> - {c.team}</span>}
+                    </td>
+                    {moduleFilter ? (
+                      <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
+                        {c.counts[moduleFilter]}
+                      </td>
+                    ) : (
+                      <>
+                        {MODULES.map((m) => (
+                          <td key={m.value} className="px-3 py-2.5 text-right tabular-nums text-slate-600">
+                            {c.counts[m.value]}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2.5 text-right font-bold tabular-nums">{c.total}</td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
