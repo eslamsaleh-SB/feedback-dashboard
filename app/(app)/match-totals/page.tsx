@@ -9,7 +9,7 @@ const isoOk = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
 export default async function MatchTotalsPage({
   searchParams,
 }: {
-  searchParams: { from?: string; to?: string; collector?: string };
+  searchParams: { from?: string; to?: string; collector?: string; match?: string };
 }) {
   const supabase = createClient();
   const {
@@ -29,6 +29,7 @@ export default async function MatchTotalsPage({
     searchParams.collector && searchParams.collector !== "all"
       ? searchParams.collector
       : null;
+  const matchId = searchParams.match?.trim() || null;
 
   const { data: collectors } = await supabase
     .from("collectors")
@@ -39,11 +40,13 @@ export default async function MatchTotalsPage({
     if (c.hr_code) byHr.set(c.hr_code, { name: c.name, team: c.team ?? null });
   });
 
-  // Per (match, part, collector) — so EVERY collector who contributed shows up.
+  // Per (match, part, collector) — every collector who contributed shows up.
+  // A specific Match ID search is done server-side so any match is findable.
   const { data: partRows } = await supabase.rpc("match_module_breakdown", {
     p_from: from,
     p_to: to,
     p_collector: collector,
+    p_matchid: matchId,
     p_limit: 8000,
   });
 
@@ -79,9 +82,10 @@ export default async function MatchTotalsPage({
       from={from ?? ""}
       to={to ?? ""}
       collector={collector ?? "all"}
+      matchId={matchId ?? ""}
       rows={rows}
       collectors={collectorOptions}
-      limited={(partRows?.length ?? 0) >= 8000}
+      limited={!matchId && (partRows?.length ?? 0) >= 8000}
     />
   );
 }
