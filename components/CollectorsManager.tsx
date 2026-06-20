@@ -10,6 +10,9 @@ export type Collector = {
   team: string | null;
 };
 
+// Real name = a name that isn't just the HR code.
+const hasName = (c: Collector) => !!c.name && c.name !== c.hr_code;
+
 export default function CollectorsManager({
   initial,
   teams,
@@ -21,6 +24,8 @@ export default function CollectorsManager({
   const [items, setItems] = useState<Collector[]>(initial);
   const [name, setName] = useState("");
   const [search, setSearch] = useState("");
+  const [noNameOnly, setNoNameOnly] = useState(false);
+  const [noTeamOnly, setNoTeamOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ name: string; hr: string; team: string }>({
@@ -30,7 +35,6 @@ export default function CollectorsManager({
   });
   const [msg, setMsg] = useState<string | null>(null);
 
-  // teams list for the dropdown (existing teams, plus any already on a row)
   const teamOptions = useMemo(() => {
     const s = new Set<string>(teams);
     items.forEach((c) => c.team && s.add(c.team));
@@ -39,14 +43,16 @@ export default function CollectorsManager({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (c) =>
-        (c.name ?? "").toLowerCase().includes(q) ||
-        (c.hr_code ?? "").toLowerCase().includes(q) ||
-        (c.team ?? "").toLowerCase().includes(q)
-    );
-  }, [items, search]);
+    return items.filter((c) => {
+      if (q) {
+        const hay = `${c.hr_code ?? ""} ${c.name ?? ""} ${c.team ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (noNameOnly && hasName(c)) return false;
+      if (noTeamOnly && c.team) return false;
+      return true;
+    });
+  }, [items, search, noNameOnly, noTeamOnly]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -59,9 +65,7 @@ export default function CollectorsManager({
       .select("id, name, hr_code, team")
       .single();
     if (!error && data) {
-      setItems((p) =>
-        [...p, data as Collector].sort((a, b) => a.name.localeCompare(b.name))
-      );
+      setItems((p) => [...p, data as Collector].sort((a, b) => a.name.localeCompare(b.name)));
       setName("");
     } else if (error) {
       setMsg(error.message);
@@ -71,7 +75,7 @@ export default function CollectorsManager({
 
   function startEdit(c: Collector) {
     setEditingId(c.id);
-    setDraft({ name: c.name ?? "", hr: c.hr_code ?? "", team: c.team ?? "" });
+    setDraft({ name: hasName(c) ? c.name : "", hr: c.hr_code ?? "", team: c.team ?? "" });
     setMsg(null);
   }
 
@@ -114,6 +118,10 @@ export default function CollectorsManager({
   }
 
   const inputCls = "rounded-lg border border-slate-300 px-2 py-1 text-sm bg-white";
+  const chip = (active: boolean) =>
+    `rounded-lg border px-3 py-2 text-sm ${
+      active ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"
+    }`;
 
   return (
     <div className="space-y-6">
@@ -138,8 +146,14 @@ export default function CollectorsManager({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search code / name / team…"
-          className="rounded-lg border border-slate-300 px-3 py-2 flex-1 min-w-[220px]"
+          className="rounded-lg border border-slate-300 px-3 py-2 flex-1 min-w-[200px]"
         />
+        <button type="button" onClick={() => setNoNameOnly((v) => !v)} className={chip(noNameOnly)}>
+          No name
+        </button>
+        <button type="button" onClick={() => setNoTeamOnly((v) => !v)} className={chip(noTeamOnly)}>
+          No team
+        </button>
         <span className="text-sm text-slate-500">{filtered.length} collector(s)</span>
       </div>
 
@@ -187,8 +201,10 @@ export default function CollectorsManager({
                         placeholder="Name"
                         className={`${inputCls} w-56`}
                       />
-                    ) : (
+                    ) : hasName(c) ? (
                       c.name
+                    ) : (
+                      <span className="text-slate-400">— no name —</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -206,7 +222,9 @@ export default function CollectorsManager({
                         ))}
                       </select>
                     ) : (
-                      <span className="text-slate-600">{c.team ?? "—"}</span>
+                      <span className={c.team ? "text-slate-600" : "text-slate-400"}>
+                        {c.team ?? "— no team —"}
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
@@ -219,25 +237,16 @@ export default function CollectorsManager({
                         >
                           Save
                         </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="text-slate-500 hover:text-slate-800"
-                        >
+                        <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-800">
                           Cancel
                         </button>
                       </div>
                     ) : (
                       <div className="flex gap-3 justify-end text-sm">
-                        <button
-                          onClick={() => startEdit(c)}
-                          className="text-slate-600 hover:text-slate-900"
-                        >
+                        <button onClick={() => startEdit(c)} className="text-slate-600 hover:text-slate-900">
                           Edit
                         </button>
-                        <button
-                          onClick={() => remove(c)}
-                          className="text-red-600 hover:text-red-800"
-                        >
+                        <button onClick={() => remove(c)} className="text-red-600 hover:text-red-800">
                           Delete
                         </button>
                       </div>

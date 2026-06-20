@@ -225,7 +225,7 @@ export default function CollectorsPerformance({
                 <tr>
                   <th className="text-left font-medium text-slate-500 px-4 py-3">#</th>
                   <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">
-                    Collector <span className="text-slate-400">(Code - Name - Team)</span>
+                    Collector
                   </th>
                   {moduleFilter ? (
                     <th className="text-right font-semibold text-slate-900 px-4 py-3 whitespace-nowrap">

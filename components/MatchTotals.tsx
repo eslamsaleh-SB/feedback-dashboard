@@ -17,6 +17,7 @@ export type EnrichedPart = {
 };
 
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
+type SortBy = "match" | "part";
 
 const MAX_MATCHES = 250;
 
@@ -44,6 +45,8 @@ export default function MatchTotals({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [moduleFilter, setModuleFilter] = useState<"" | ModuleValue>("");
+  const [sortBy, setSortBy] = useState<SortBy>("match");
 
   function applyFilters(next: { from?: string; to?: string; collector?: string }) {
     const f = next.from ?? from;
@@ -57,29 +60,38 @@ export default function MatchTotals({
     router.push(`/match-totals${qs ? `?${qs}` : ""}`);
   }
 
-  // Group by match, sort matches by highest total errors first.
+  const metric = (p: EnrichedPart) => (moduleFilter ? p.counts[moduleFilter] : p.total);
+
   const matches = useMemo(() => {
     const map = new Map<
       string,
-      { matchid: string; date: string | null; total: number; parts: EnrichedPart[] }
+      { matchid: string; date: string | null; parts: EnrichedPart[] }
     >();
     for (const r of rows) {
       let m = map.get(r.matchid);
       if (!m) {
-        m = { matchid: r.matchid, date: r.date, total: 0, parts: [] };
+        m = { matchid: r.matchid, date: r.date, parts: [] };
         map.set(r.matchid, m);
       }
       m.parts.push(r);
-      m.total += r.total;
       if (r.date && (!m.date || r.date > m.date)) m.date = r.date;
     }
-    let arr = Array.from(map.values());
+    let arr = Array.from(map.values()).map((m) => {
+      const matchSum = m.parts.reduce((s, p) => s + metric(p), 0);
+      const maxPart = m.parts.reduce((mx, p) => Math.max(mx, metric(p)), 0);
+      return { ...m, matchSum, maxPart };
+    });
     const q = search.trim().toLowerCase();
     if (q) arr = arr.filter((m) => m.matchid.toLowerCase().includes(q));
-    arr.sort((a, b) => b.total - a.total); // highest errors first
-    arr.forEach((m) => m.parts.sort((a, b) => a.partid - b.partid));
+    arr.sort((a, b) => (sortBy === "part" ? b.maxPart - a.maxPart : b.matchSum - a.matchSum));
+    arr.forEach((m) =>
+      m.parts.sort((a, b) =>
+        sortBy === "part" ? metric(b) - metric(a) : a.partid - b.partid
+      )
+    );
     return arr;
-  }, [rows, search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, search, moduleFilter, sortBy]);
 
   const shown = matches.slice(0, MAX_MATCHES);
 
@@ -88,19 +100,25 @@ export default function MatchTotals({
     ...collectors.map((c) => ({ value: c.hr_code, label: clabel(c.hr_code, c.name, c.team) })),
   ];
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const moduleLabel = moduleFilter
+    ? MODULES.find((m) => m.value === moduleFilter)?.label
+    : null;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Match Total per Module</h1>
         <p className="text-slate-500">
-          Module totals by Match → Collector → Part. Matches sorted by most errors first.
+          Module totals by Match → Collector → Part.{" "}
+          {sortBy === "part"
+            ? "Sorted by the highest-error part first."
+            : "Sorted by total match errors first."}
         </p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div>
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="lg:col-span-2">
           <label className="block text-xs text-slate-500 mb-1">Collector</label>
           <Combobox
             options={collectorOptions}
@@ -108,6 +126,32 @@ export default function MatchTotals({
             onChange={(v) => applyFilters({ collector: v })}
             placeholder="All collectors"
           />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Module</label>
+          <select
+            value={moduleFilter}
+            onChange={(e) => setModuleFilter(e.target.value as "" | ModuleValue)}
+            className={`${inputCls} w-full`}
+          >
+            <option value="">All modules</option>
+            {MODULES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Sort by</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortBy)}
+            className={`${inputCls} w-full`}
+          >
+            <option value="match">Match total (highest)</option>
+            <option value="part">Top part (highest)</option>
+          </select>
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Search Match ID</label>
@@ -118,25 +162,27 @@ export default function MatchTotals({
             className={`${inputCls} w-full`}
           />
         </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Review date — from</label>
-          <input
-            type="date"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => applyFilters({ from: e.target.value })}
-            className={`${inputCls} w-full`}
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">to</label>
-          <input
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => applyFilters({ to: e.target.value })}
-            className={`${inputCls} w-full`}
-          />
+        <div className="lg:col-span-3 grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Review date — from</label>
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => applyFilters({ from: e.target.value })}
+              className={`${inputCls} w-full`}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">to</label>
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => applyFilters({ to: e.target.value })}
+              className={`${inputCls} w-full`}
+            />
+          </div>
         </div>
       </div>
 
@@ -144,7 +190,7 @@ export default function MatchTotals({
         {matches.length} match(es){" "}
         {matches.length > MAX_MATCHES && (
           <span className="text-amber-600">
-            — showing the top {MAX_MATCHES} by errors. Narrow by collector, date, or Match ID.
+            — showing the top {MAX_MATCHES}. Narrow by collector, date, or Match ID.
           </span>
         )}
         {limited && (
@@ -162,16 +208,23 @@ export default function MatchTotals({
             <thead className="bg-slate-50">
               <tr>
                 <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Match</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">
-                  Collector (Code - Name - Team)
-                </th>
+                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Review date</th>
+                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Collector</th>
                 <th className="text-left font-medium text-slate-500 px-3 py-3">Part</th>
-                {MODULES.map((m) => (
-                  <th key={m.value} className="text-right font-medium text-slate-500 px-3 py-3 whitespace-nowrap">
-                    {m.label}
+                {moduleFilter ? (
+                  <th className="text-right font-semibold text-slate-900 px-4 py-3 whitespace-nowrap">
+                    {moduleLabel}
                   </th>
-                ))}
-                <th className="text-right font-semibold text-slate-600 px-4 py-3">Total</th>
+                ) : (
+                  <>
+                    {MODULES.map((m) => (
+                      <th key={m.value} className="text-right font-medium text-slate-500 px-3 py-3 whitespace-nowrap">
+                        {m.label}
+                      </th>
+                    ))}
+                    <th className="text-right font-semibold text-slate-600 px-4 py-3">Total</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -184,27 +237,34 @@ export default function MatchTotals({
                       className={`${first ? "border-t-2 border-slate-200" : "border-t border-slate-100"} hover:bg-slate-50`}
                     >
                       <td className="px-4 py-2.5 whitespace-nowrap align-top">
-                        {first ? (
+                        {first && (
                           <span className="font-semibold text-slate-800">
                             {m.matchid}{" "}
-                            <span className="text-slate-400 font-normal">
-                              ({m.parts.length})
-                            </span>
+                            <span className="text-slate-400 font-normal">({m.parts.length})</span>
                           </span>
-                        ) : (
-                          ""
                         )}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap align-top text-slate-600">
+                        {first ? m.date ?? "—" : ""}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-slate-700">
                         {clabel(p.hr_code, p.name, p.team)}
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">Part {p.partid}</td>
-                      {MODULES.map((mod) => (
-                        <td key={mod.value} className="px-3 py-2.5 text-right tabular-nums text-slate-600">
-                          {p.counts[mod.value]}
+                      {moduleFilter ? (
+                        <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
+                          {p.counts[moduleFilter]}
                         </td>
-                      ))}
-                      <td className="px-4 py-2.5 text-right font-bold tabular-nums">{p.total}</td>
+                      ) : (
+                        <>
+                          {MODULES.map((mod) => (
+                            <td key={mod.value} className="px-3 py-2.5 text-right tabular-nums text-slate-600">
+                              {p.counts[mod.value]}
+                            </td>
+                          ))}
+                          <td className="px-4 py-2.5 text-right font-bold tabular-nums">{p.total}</td>
+                        </>
+                      )}
                     </tr>
                   );
                 })

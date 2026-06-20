@@ -1,118 +1,129 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Role = "Admin" | "Uploader" | "Viewer";
-type Collector = { id: string; name: string };
 export type Account = {
   id: string;
   email: string | null;
   full_name: string | null;
   role: Role;
-  collector_id: string | null;
+  hr_code: string | null;
 };
 
-export default function AccountsManager({
-  accounts,
-  collectors,
-}: {
-  accounts: Account[];
-  collectors: Collector[];
-}) {
+export default function AccountsManager({ accounts }: { accounts: Account[] }) {
   const supabase = createClient();
   const [rows, setRows] = useState<Account[]>(accounts);
+  const [search, setSearch] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
 
-  function update(id: string, patch: Partial<Account>) {
-    setRows((p) => p.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        (r.hr_code ?? "").toLowerCase().includes(q) ||
+        (r.email ?? "").toLowerCase().includes(q)
+    );
+  }, [rows, search]);
+
+  function setRole(id: string, role: Role) {
+    setRows((p) => p.map((r) => (r.id === id ? { ...r, role } : r)));
   }
 
-  async function save(acc: Account) {
-    setSavingId(acc.id);
+  async function save(a: Account) {
+    setSavingId(a.id);
     setSavedId(null);
+    setMsg(null);
     const { error } = await supabase
       .from("profiles")
-      .update({ role: acc.role, collector_id: acc.collector_id })
-      .eq("id", acc.id);
+      .update({ role: a.role })
+      .eq("id", a.id);
     setSavingId(null);
     if (error) {
-      alert(error.message);
+      setMsg(error.message);
       return;
     }
-    setSavedId(acc.id);
-    setTimeout(() => setSavedId((s) => (s === acc.id ? null : s)), 1500);
+    setSavedId(a.id);
+    setTimeout(() => setSavedId((s) => (s === a.id ? null : s)), 1500);
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Accounts</h1>
         <p className="text-slate-500 text-sm mt-1">
-          Set each person’s role and link Viewers to the collector profile they
-          should see.
+          Set each person’s role. Name is managed on the Collectors page.
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 divide-y">
-        {rows.length === 0 && (
-          <p className="p-4 text-sm text-slate-500">No accounts yet.</p>
-        )}
-        {rows.map((a) => (
-          <div
-            key={a.id}
-            className="p-4 flex flex-col sm:flex-row sm:items-end gap-3"
-          >
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{a.email ?? "(no email)"}</p>
-              {a.full_name && (
-                <p className="text-xs text-slate-500 truncate">{a.full_name}</p>
-              )}
-            </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by code or email…"
+          className="rounded-lg border border-slate-300 px-3 py-2 flex-1 min-w-[240px]"
+        />
+        <span className="text-sm text-slate-500">{filtered.length} account(s)</span>
+      </div>
 
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Role</label>
-              <select
-                value={a.role}
-                onChange={(e) => update(a.id, { role: e.target.value as Role })}
-                className="rounded-lg border border-slate-300 px-2 py-1.5 bg-white text-sm"
-              >
-                <option value="Admin">Admin</option>
-                <option value="Uploader">Uploader</option>
-                <option value="Viewer">Viewer</option>
-              </select>
-            </div>
+      {msg && <p className="text-sm text-red-600">{msg}</p>}
 
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">
-                Collector (for Viewers)
-              </label>
-              <select
-                value={a.collector_id ?? ""}
-                onChange={(e) =>
-                  update(a.id, { collector_id: e.target.value || null })
-                }
-                className="rounded-lg border border-slate-300 px-2 py-1.5 bg-white text-sm"
-              >
-                <option value="">— none —</option>
-                {collectors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={() => save(a)}
-              disabled={savingId === a.id}
-              className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
-            >
-              {savingId === a.id ? "Saving…" : savedId === a.id ? "Saved ✓" : "Save"}
-            </button>
-          </div>
-        ))}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="text-left font-medium text-slate-500 px-4 py-3">Code</th>
+              <th className="text-left font-medium text-slate-500 px-4 py-3">Name</th>
+              <th className="text-left font-medium text-slate-500 px-4 py-3">Email</th>
+              <th className="text-left font-medium text-slate-500 px-4 py-3">Role</th>
+              <th className="text-right font-medium text-slate-500 px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="p-4 text-slate-500">
+                  No accounts.
+                </td>
+              </tr>
+            )}
+            {filtered.map((a) => (
+              <tr key={a.id} className="border-t border-slate-100">
+                <td className="px-4 py-2.5 whitespace-nowrap font-medium text-slate-800">
+                  {a.hr_code ?? "—"}
+                </td>
+                <td className="px-4 py-2.5 text-slate-700">{a.full_name ?? "—"}</td>
+                <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
+                  {a.email ?? "(no email)"}
+                </td>
+                <td className="px-4 py-2.5">
+                  <select
+                    value={a.role}
+                    onChange={(e) => setRole(a.id, e.target.value as Role)}
+                    className="rounded-lg border border-slate-300 px-2 py-1.5 bg-white text-sm"
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Uploader">Uploader</option>
+                    <option value="Viewer">Viewer</option>
+                  </select>
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <button
+                    onClick={() => save(a)}
+                    disabled={savingId === a.id}
+                    className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
+                  >
+                    {savingId === a.id ? "Saving…" : savedId === a.id ? "Saved ✓" : "Save"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
