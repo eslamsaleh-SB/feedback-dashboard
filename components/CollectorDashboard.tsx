@@ -13,7 +13,6 @@ import {
 
 type Section = "matches" | "reports" | "sessions";
 
-// One aggregated match (sum of its parts).
 type MatchRow = {
   matchid: string;
   date: string | null;
@@ -27,6 +26,8 @@ const labelFor = (v: ModuleValue) =>
 
 export default function CollectorDashboard({
   myName,
+  myHr,
+  myTeam,
   isLinked,
   from,
   to,
@@ -36,6 +37,8 @@ export default function CollectorDashboard({
   feedbackSessions,
 }: {
   myName: string | null;
+  myHr: string | null;
+  myTeam: string | null;
   isLinked: boolean;
   from: string;
   to: string;
@@ -58,7 +61,6 @@ export default function CollectorDashboard({
     router.push(`/analytics${qs ? `?${qs}` : ""}`);
   }
 
-  // Group match parts into one row per match.
   const matches: MatchRow[] = useMemo(() => {
     const map = new Map<string, MatchRow>();
     for (const p of parts) {
@@ -93,6 +95,7 @@ export default function CollectorDashboard({
 
   const totalMistakes = Object.values(moduleTotals).reduce((a, b) => a + b, 0);
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const identity = [myHr || "—", myName || myHr || "—", myTeam || "—"].join(" - ");
 
   if (!isLinked) {
     return (
@@ -124,11 +127,10 @@ export default function CollectorDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Header + Review Date filter */}
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">My Dashboard</h1>
-          {myName && <p className="text-slate-500">{myName}</p>}
+          <p className="text-slate-500">{identity}</p>
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <div>
@@ -163,7 +165,6 @@ export default function CollectorDashboard({
         </div>
       </div>
 
-      {/* Three interactive cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {cards.map((c) => (
           <button
@@ -181,7 +182,6 @@ export default function CollectorDashboard({
         ))}
       </div>
 
-      {/* Selected section panel */}
       {section === "reports" && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <h2 className="font-semibold mb-4">Reports</h2>
@@ -273,10 +273,14 @@ export default function CollectorDashboard({
                     className="w-full text-left p-5 flex items-center justify-between gap-4 hover:bg-slate-50"
                   >
                     <div className="min-w-0">
-                      <p className="font-semibold truncate">Match {mt.matchid}</p>
+                      <p className="font-semibold truncate">
+                        Match {mt.matchid}{" "}
+                        <span className="text-slate-400 font-normal">
+                          ({mt.parts} {mt.parts === 1 ? "part" : "parts"})
+                        </span>
+                      </p>
                       <p className="text-sm text-slate-500">
                         {mt.date ?? "—"} · {mt.total} mistake(s)
-                        {mt.parts > 1 ? ` · ${mt.parts} parts` : ""}
                       </p>
                     </div>
                     <span className="text-slate-400 text-sm shrink-0">{open ? "▲" : "▼"}</span>
@@ -306,13 +310,10 @@ export default function CollectorDashboard({
         </div>
       )}
 
-      {/* Bottom: per-module total cards (always visible, respects date filter) */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold">Total mistakes by module</h2>
-          <span className="text-sm text-slate-500">
-            {totalMistakes} total mistake(s)
-          </span>
+          <span className="text-sm text-slate-500">{totalMistakes} total mistake(s)</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {CARD_ORDER.map((v) => (
