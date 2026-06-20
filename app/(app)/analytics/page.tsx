@@ -25,6 +25,16 @@ function emptyCounts(): Record<ModuleValue, number> {
   };
 }
 
+const numCounts = (r: any): Record<ModuleValue, number> => ({
+  players: Number(r.players),
+  event: Number(r.event),
+  formation_tactical: Number(r.formation_tactical),
+  location: Number(r.location),
+  impact: Number(r.impact),
+  extras: Number(r.extras),
+  freeze_frame: Number(r.freeze_frame),
+});
+
 export default async function AnalyticsPage({
   searchParams,
 }: {
@@ -37,7 +47,7 @@ export default async function AnalyticsPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, collector_id, hr_code")
+    .select("role, collector_id, hr_code, team")
     .eq("id", user!.id)
     .single();
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
@@ -45,70 +55,57 @@ export default async function AnalyticsPage({
   const from = isoOk(searchParams.from);
   const to = isoOk(searchParams.to);
 
-  // Collector names (for the admin table + viewer header).
   const { data: collectors } = await supabase
     .from("collectors")
-    .select("id, name, hr_code")
+    .select("id, name, hr_code, team, title")
     .order("name");
-  const nameByHr = new Map<string, string>();
+  const byHr = new Map<
+    string,
+    { name: string; team: string | null; title: string | null }
+  >();
   (collectors ?? []).forEach((c: any) => {
-    if (c.hr_code) nameByHr.set(c.hr_code, c.name);
+    if (c.hr_code)
+      byHr.set(c.hr_code, {
+        name: c.name,
+        team: c.team ?? null,
+        title: c.title ?? null,
+      });
   });
 
   // =================== COLLECTOR (Viewer) ===================
   if (role === "Viewer") {
     const isLinked = !!profile?.collector_id || !!profile?.hr_code;
-    let myName: string | null = null;
-    if (profile?.collector_id) {
+    const meInfo = profile?.hr_code ? byHr.get(profile.hr_code) : undefined;
+    let myName = meInfo?.name ?? null;
+    if (!myName && profile?.collector_id)
       myName =
-        (collectors ?? []).find((c: any) => c.id === profile.collector_id)?.name ?? null;
-    }
+        (collectors ?? []).find((c: any) => c.id === profile.collector_id)?.name ??
+        null;
     if (!myName) myName = profile?.hr_code ?? null;
 
-    // Their own match parts (RLS-scoped inside the function).
     const { data: partRows } = await supabase.rpc("match_part_summary_fast", {
       p_from: from,
       p_to: to,
       p_collector: null,
-      p_limit: 2000,
+      p_limit: 5000,
     });
     const parts: PartSummary[] = (partRows ?? []).map((r: any) => ({
       matchid: r.matchid,
       partid: r.partid,
       hr_code: r.hr_code,
-      collector_name: r.hr_code ? nameByHr.get(r.hr_code) ?? r.hr_code : "—",
+      collector_name: r.hr_code ? byHr.get(r.hr_code)?.name ?? r.hr_code : "—",
       date: r.date,
-      counts: {
-        players: Number(r.players),
-        event: Number(r.event),
-        formation_tactical: Number(r.formation_tactical),
-        location: Number(r.location),
-        impact: Number(r.impact),
-        extras: Number(r.extras),
-        freeze_frame: Number(r.freeze_frame),
-      },
+      counts: numCounts(r),
       total: Number(r.total),
     }));
 
-    // Exact per-module totals (not capped by the part limit).
     const { data: ctRows } = await supabase.rpc("collector_module_totals", {
       p_from: from,
       p_to: to,
     });
     const me = (ctRows ?? [])[0];
-    const moduleTotals: Record<ModuleValue, number> = me
-      ? {
-          players: Number(me.players),
-          event: Number(me.event),
-          formation_tactical: Number(me.formation_tactical),
-          location: Number(me.location),
-          impact: Number(me.impact),
-          extras: Number(me.extras),
-          freeze_frame: Number(me.freeze_frame),
-        }
-      : emptyCounts();
+    const moduleTotals = me ? numCounts(me) : emptyCounts();
 
-    // Reports (RLS-scoped to this collector).
     let rq = supabase
       .from("reports")
       .select("id, title, body, url, report_date")
@@ -116,9 +113,7 @@ export default async function AnalyticsPage({
     if (from) rq = rq.gte("report_date", from);
     if (to) rq = rq.lte("report_date", to);
     const { data: reportRows } = await rq;
-    const reports: Report[] = (reportRows ?? []) as any;
 
-    // Feedback sessions (RLS-scoped to this collector).
     let fq = supabase
       .from("feedback_meetings")
       .select("id, session_date, mode, notes")
@@ -126,18 +121,19 @@ export default async function AnalyticsPage({
     if (from) fq = fq.gte("session_date", from);
     if (to) fq = fq.lte("session_date", to);
     const { data: fsRows } = await fq;
-    const feedbackSessions: FeedbackSession[] = (fsRows ?? []) as any;
 
     return (
       <CollectorDashboard
         myName={myName}
+        myHr={profile?.hr_code ?? null}
+        myTeam={meInfo?.team ?? profile?.team ?? null}
         isLinked={isLinked}
         from={from ?? ""}
         to={to ?? ""}
         parts={parts}
         moduleTotals={moduleTotals}
-        reports={reports}
-        feedbackSessions={feedbackSessions}
+        reports={(reportRows ?? []) as Report[]}
+        feedbackSessions={(fsRows ?? []) as FeedbackSession[]}
       />
     );
   }
@@ -147,20 +143,40 @@ export default async function AnalyticsPage({
     p_from: from,
     p_to: to,
   });
-  const rows: CollectorRow[] = (ctRows ?? []).map((r: any) => ({
-    hr_code: r.hr_code,
-    name: nameByHr.get(r.hr_code) ?? r.hr_code,
-    counts: {
-      players: Number(r.players),
-      event: Number(r.event),
-      formation_tactical: Number(r.formation_tactical),
-      location: Number(r.location),
-      impact: Number(r.impact),
-      extras: Number(r.extras),
-      freeze_frame: Number(r.freeze_frame),
-    },
-    total: Number(r.total),
-  }));
+  const rows: CollectorRow[] = (ctRows ?? []).map((r: any) => {
+    const info = byHr.get(r.hr_code);
+    return {
+      hr_code: r.hr_code,
+      name: info?.name ?? r.hr_code,
+      team: info?.team ?? null,
+      title: info?.title ?? null,
+      counts: numCounts(r),
+      total: Number(r.total),
+    };
+  });
 
-  return <CollectorsPerformance from={from ?? ""} to={to ?? ""} rows={rows} />;
+  const { data: mc } = await supabase.rpc("match_count", {
+    p_from: from,
+    p_to: to,
+  });
+  const matchCount = typeof mc === "number" ? mc : Number(mc ?? 0);
+
+  const teams = Array.from(
+    new Set((collectors ?? []).map((c: any) => c.team).filter(Boolean) as string[])
+  ).sort();
+  const titles = Array.from(
+    new Set((collectors ?? []).map((c: any) => c.title).filter(Boolean) as string[])
+  ).sort();
+
+  return (
+    <CollectorsPerformance
+      from={from ?? ""}
+      to={to ?? ""}
+      rows={rows}
+      teams={teams}
+      titles={titles}
+      matchCount={matchCount}
+      isAdmin={role === "Admin"}
+    />
+  );
 }
