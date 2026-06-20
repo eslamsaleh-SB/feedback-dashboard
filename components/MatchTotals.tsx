@@ -18,7 +18,14 @@ export type EnrichedPart = {
 
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
 
-const MAX_MATCHES = 150;
+const MAX_MATCHES = 250;
+
+function clabel(hr: string | null, name: string | null, team: string | null) {
+  const parts = [hr || "—"];
+  if (name && name !== hr) parts.push(name);
+  if (team) parts.push(team);
+  return parts.join(" - ");
+}
 
 export default function MatchTotals({
   from,
@@ -37,7 +44,6 @@ export default function MatchTotals({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [open, setOpen] = useState<Record<string, boolean>>({});
 
   function applyFilters(next: { from?: string; to?: string; collector?: string }) {
     const f = next.from ?? from;
@@ -51,22 +57,27 @@ export default function MatchTotals({
     router.push(`/match-totals${qs ? `?${qs}` : ""}`);
   }
 
-  // matchid -> { date, parts }
+  // Group by match, sort matches by highest total errors first.
   const matches = useMemo(() => {
-    const map = new Map<string, { matchid: string; date: string | null; parts: EnrichedPart[] }>();
+    const map = new Map<
+      string,
+      { matchid: string; date: string | null; total: number; parts: EnrichedPart[] }
+    >();
     for (const r of rows) {
       let m = map.get(r.matchid);
       if (!m) {
-        m = { matchid: r.matchid, date: r.date, parts: [] };
+        m = { matchid: r.matchid, date: r.date, total: 0, parts: [] };
         map.set(r.matchid, m);
       }
       m.parts.push(r);
+      m.total += r.total;
       if (r.date && (!m.date || r.date > m.date)) m.date = r.date;
     }
     let arr = Array.from(map.values());
     const q = search.trim().toLowerCase();
     if (q) arr = arr.filter((m) => m.matchid.toLowerCase().includes(q));
-    arr.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+    arr.sort((a, b) => b.total - a.total); // highest errors first
+    arr.forEach((m) => m.parts.sort((a, b) => a.partid - b.partid));
     return arr;
   }, [rows, search]);
 
@@ -74,10 +85,7 @@ export default function MatchTotals({
 
   const collectorOptions: ComboOption[] = [
     { value: "all", label: "All collectors" },
-    ...collectors.map((c) => ({
-      value: c.hr_code,
-      label: `${c.hr_code} - ${c.name}${c.team ? " - " + c.team : ""}`,
-    })),
+    ...collectors.map((c) => ({ value: c.hr_code, label: clabel(c.hr_code, c.name, c.team) })),
   ];
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
 
@@ -86,7 +94,7 @@ export default function MatchTotals({
       <div>
         <h1 className="text-2xl font-bold">Match Total per Module</h1>
         <p className="text-slate-500">
-          Module totals broken down by Match → Collector → Part.
+          Module totals by Match → Collector → Part. Matches sorted by most errors first.
         </p>
       </div>
 
@@ -136,13 +144,12 @@ export default function MatchTotals({
         {matches.length} match(es){" "}
         {matches.length > MAX_MATCHES && (
           <span className="text-amber-600">
-            — showing the first {MAX_MATCHES}. Narrow by collector, date, or Match ID.
+            — showing the top {MAX_MATCHES} by errors. Narrow by collector, date, or Match ID.
           </span>
         )}
         {limited && (
           <span className="text-amber-600">
-            {" "}
-            (data capped at 5,000 parts — narrow the date range for a complete view.)
+            {" "}(data capped at 5,000 parts — narrow the date range for a complete view.)
           </span>
         )}
       </div>
@@ -150,79 +157,60 @@ export default function MatchTotals({
       {shown.length === 0 ? (
         <p className="text-slate-500">No matches for this filter.</p>
       ) : (
-        <div className="space-y-3">
-          {shown.map((m) => {
-            const isOpen = open[m.matchid] ?? false;
-            // group this match's parts by collector
-            const byCollector = new Map<string, EnrichedPart[]>();
-            for (const p of m.parts) {
-              const key = p.hr_code ?? "—";
-              if (!byCollector.has(key)) byCollector.set(key, []);
-              byCollector.get(key)!.push(p);
-            }
-            return (
-              <div key={m.matchid} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                <button
-                  onClick={() => setOpen((o) => ({ ...o, [m.matchid]: !isOpen }))}
-                  className="w-full text-left p-5 flex items-center justify-between gap-4 hover:bg-slate-50"
-                >
-                  <p className="font-semibold">
-                    Match {m.matchid}{" "}
-                    <span className="text-slate-400 font-normal">
-                      ({m.parts.length} {m.parts.length === 1 ? "part" : "parts"})
-                    </span>
-                    <span className="text-slate-400 font-normal"> · {m.date ?? "—"}</span>
-                  </p>
-                  <span className="text-slate-400 text-sm shrink-0">{isOpen ? "▲" : "▼"}</span>
-                </button>
-
-                {isOpen && (
-                  <div className="border-t border-slate-100 p-4 space-y-4">
-                    {Array.from(byCollector.entries()).map(([hr, parts]) => {
-                      const c = parts[0];
-                      return (
-                        <div key={hr}>
-                          <p className="text-sm font-medium text-slate-700 mb-2">
-                            {c.hr_code ?? "—"} - {c.name} - {c.team ?? "—"}
-                          </p>
-                          <div className="overflow-x-auto rounded-xl border border-slate-200">
-                            <table className="min-w-full text-sm">
-                              <thead className="bg-slate-50">
-                                <tr>
-                                  <th className="text-left font-medium text-slate-500 px-3 py-2">Part</th>
-                                  {MODULES.map((mod) => (
-                                    <th key={mod.value} className="text-right font-medium text-slate-500 px-3 py-2 whitespace-nowrap">
-                                      {mod.label}
-                                    </th>
-                                  ))}
-                                  <th className="text-right font-semibold text-slate-600 px-3 py-2">Total</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {parts
-                                  .sort((a, b) => a.partid - b.partid)
-                                  .map((p) => (
-                                    <tr key={p.partid} className="border-t border-slate-100">
-                                      <td className="px-3 py-2 whitespace-nowrap">Part {p.partid}</td>
-                                      {MODULES.map((mod) => (
-                                        <td key={mod.value} className="px-3 py-2 text-right tabular-nums text-slate-600">
-                                          {p.counts[mod.value]}
-                                        </td>
-                                      ))}
-                                      <td className="px-3 py-2 text-right font-bold tabular-nums">{p.total}</td>
-                                    </tr>
-                                  ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Match</th>
+                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">
+                  Collector (Code - Name - Team)
+                </th>
+                <th className="text-left font-medium text-slate-500 px-3 py-3">Part</th>
+                {MODULES.map((m) => (
+                  <th key={m.value} className="text-right font-medium text-slate-500 px-3 py-3 whitespace-nowrap">
+                    {m.label}
+                  </th>
+                ))}
+                <th className="text-right font-semibold text-slate-600 px-4 py-3">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((m) =>
+                m.parts.map((p, idx) => {
+                  const first = idx === 0;
+                  return (
+                    <tr
+                      key={`${m.matchid}-${p.partid}`}
+                      className={`${first ? "border-t-2 border-slate-200" : "border-t border-slate-100"} hover:bg-slate-50`}
+                    >
+                      <td className="px-4 py-2.5 whitespace-nowrap align-top">
+                        {first ? (
+                          <span className="font-semibold text-slate-800">
+                            {m.matchid}{" "}
+                            <span className="text-slate-400 font-normal">
+                              ({m.parts.length})
+                            </span>
+                          </span>
+                        ) : (
+                          ""
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-slate-700">
+                        {clabel(p.hr_code, p.name, p.team)}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">Part {p.partid}</td>
+                      {MODULES.map((mod) => (
+                        <td key={mod.value} className="px-3 py-2.5 text-right tabular-nums text-slate-600">
+                          {p.counts[mod.value]}
+                        </td>
+                      ))}
+                      <td className="px-4 py-2.5 text-right font-bold tabular-nums">{p.total}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

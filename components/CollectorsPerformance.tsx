@@ -4,9 +4,18 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MODULES, type ModuleValue, type CollectorRow } from "@/lib/modules";
 import Combobox, { type ComboOption } from "@/components/Combobox";
-import { createClient } from "@/lib/supabase/client";
 
 const NO_TITLE = "__none__";
+const NO_TEAM = "__noteam__";
+
+// "Code - Name - Team" without repeating the code when the name is just the code.
+function clabel(hr: string | null, name: string | null, team: string | null) {
+  const code = hr || "—";
+  const parts = [code];
+  if (name && name !== hr) parts.push(name);
+  if (team) parts.push(team);
+  return parts.join(" - ");
+}
 
 export default function CollectorsPerformance({
   from,
@@ -15,7 +24,6 @@ export default function CollectorsPerformance({
   teams,
   titles,
   matchCount,
-  isAdmin,
 }: {
   from: string;
   to: string;
@@ -23,18 +31,15 @@ export default function CollectorsPerformance({
   teams: string[];
   titles: string[];
   matchCount: number;
-  isAdmin: boolean;
+  isAdmin?: boolean; // accepted for compatibility; this view is read-only
 }) {
   const router = useRouter();
-  const supabase = createClient();
 
   const [collectorFilter, setCollectorFilter] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
   const [titleFilter, setTitleFilter] = useState("");
   const [moduleFilter, setModuleFilter] = useState<"" | ModuleValue>("");
   const [topN, setTopN] = useState("");
-  const [savingHr, setSavingHr] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
 
   function applyDates(next: { from?: string; to?: string }) {
     const params = new URLSearchParams();
@@ -46,14 +51,17 @@ export default function CollectorsPerformance({
     router.push(`/analytics${qs ? `?${qs}` : ""}`);
   }
 
-  // Value used for ranking + the "total" column (module-specific when filtered).
   const metric = (r: CollectorRow) =>
     moduleFilter ? r.counts[moduleFilter] : r.total;
 
   const filtered = useMemo(() => {
     let arr = rows.filter((r) => {
       if (collectorFilter && r.hr_code !== collectorFilter) return false;
-      if (teamFilter && (r.team ?? "") !== teamFilter) return false;
+      if (teamFilter) {
+        if (teamFilter === NO_TEAM) {
+          if (r.team) return false;
+        } else if ((r.team ?? "") !== teamFilter) return false;
+      }
       if (titleFilter) {
         if (titleFilter === NO_TITLE) {
           if (r.title) return false;
@@ -73,13 +81,11 @@ export default function CollectorsPerformance({
     { value: "", label: "All collectors" },
     ...[...rows]
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((r) => ({
-        value: r.hr_code,
-        label: `${r.hr_code} - ${r.name}${r.team ? " - " + r.team : ""}`,
-      })),
+      .map((r) => ({ value: r.hr_code, label: clabel(r.hr_code, r.name, r.team) })),
   ];
   const teamOptions: ComboOption[] = [
     { value: "", label: "All teams" },
+    { value: NO_TEAM, label: "(No team)" },
     ...teams.map((t) => ({ value: t, label: t })),
   ];
   const titleOptions: ComboOption[] = [
@@ -91,29 +97,14 @@ export default function CollectorsPerformance({
     { value: "", label: "All modules" },
     ...MODULES.map((m) => ({ value: m.value, label: m.label })),
   ];
-  const teamSelectOptions = ["", ...teams];
 
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
   const activeModuleLabel = moduleFilter
     ? MODULES.find((m) => m.value === moduleFilter)?.label
     : null;
 
-  async function changeTeam(hr: string, team: string) {
-    setMsg(null);
-    setSavingHr(hr);
-    try {
-      const { error } = await supabase.rpc("admin_set_collector_team", {
-        p_hr: hr,
-        p_team: team,
-      });
-      if (error) throw error;
-      router.refresh();
-    } catch (e: any) {
-      setMsg(`Could not change team: ${e.message || e}`);
-    } finally {
-      setSavingHr(null);
-    }
-  }
+  const anyFilter =
+    from || to || collectorFilter || teamFilter || titleFilter || moduleFilter || topN;
 
   function clearAll() {
     setCollectorFilter("");
@@ -123,9 +114,6 @@ export default function CollectorsPerformance({
     setTopN("");
     router.push("/analytics");
   }
-
-  const anyFilter =
-    from || to || collectorFilter || teamFilter || titleFilter || moduleFilter || topN;
 
   return (
     <div className="space-y-6">
@@ -220,15 +208,11 @@ export default function CollectorsPerformance({
         />
       </div>
 
-      {msg && <p className="text-sm text-red-600">{msg}</p>}
-
-      {/* Table */}
+      {/* Table (read-only) */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 text-sm text-slate-500">
           Sorted by{" "}
-          <span className="font-medium text-slate-700">
-            {activeModuleLabel ?? "Total"}
-          </span>{" "}
+          <span className="font-medium text-slate-700">{activeModuleLabel ?? "Total"}</span>{" "}
           (highest first).{" "}
           {!moduleFilter && "Click a module header to show only that module."}
         </div>
@@ -271,31 +255,11 @@ export default function CollectorsPerformance({
                   <tr key={c.hr_code} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-4 py-2.5 text-slate-400 tabular-nums">{i + 1}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="font-medium text-slate-800">{c.hr_code}</span>
-                      <span className="text-slate-500"> - {c.name} - </span>
-                      {isAdmin ? (
-                        <select
-                          value={c.team ?? ""}
-                          disabled={savingHr === c.hr_code}
-                          onChange={(e) => changeTeam(c.hr_code, e.target.value)}
-                          className="rounded border border-slate-300 px-1.5 py-0.5 text-sm bg-white"
-                          title="Change team / squad"
-                        >
-                          <option value="">(no team)</option>
-                          {teamSelectOptions
-                            .filter((t) => t !== "")
-                            .map((t) => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          {c.team && !teams.includes(c.team) && (
-                            <option value={c.team}>{c.team}</option>
-                          )}
-                        </select>
-                      ) : (
-                        <span className="text-slate-700">{c.team ?? "—"}</span>
+                      <span className="font-medium text-slate-800">{c.hr_code ?? "—"}</span>
+                      {c.name && c.name !== c.hr_code && (
+                        <span className="text-slate-500"> - {c.name}</span>
                       )}
+                      {c.team && <span className="text-slate-500"> - {c.team}</span>}
                     </td>
                     {moduleFilter ? (
                       <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
