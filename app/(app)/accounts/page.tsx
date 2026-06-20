@@ -16,23 +16,20 @@ export default async function AccountsPage() {
     .select("role")
     .eq("id", user.id)
     .single();
-  if (profile?.role !== "Admin") redirect("/dashboard");
+  if (profile?.role !== "Admin") redirect("/analytics");
 
-  const [{ data: profiles }, { data: collectors }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, email, full_name, role, collector_id")
-      .order("email"),
-    supabase.from("collectors").select("id, name").order("name"),
-  ]);
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, role, hr_code")
+    .order("email");
 
   const accounts: Account[] = (profiles ?? []).map((p: any) => ({
     id: p.id,
     email: p.email,
     full_name: p.full_name,
     role: p.role,
-    collector_id: p.collector_id,
+    hr_code: p.hr_code ?? null,
   }));
 
-  return <AccountsManager accounts={accounts} collectors={collectors ?? []} />;
+  return <AccountsManager accounts={accounts} />;
 }
