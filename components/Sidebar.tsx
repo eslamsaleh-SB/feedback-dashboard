@@ -7,25 +7,28 @@ import { createClient } from "@/lib/supabase/client";
 type Role = "Admin" | "Uploader" | "Viewer";
 type Item = { href: string; label: string };
 
+// Uploaders are shown as "Reviewers" in the UI (the DB role value stays Uploader).
+const roleLabel = (role: Role) => (role === "Uploader" ? "Reviewer" : role);
+
 export default function Sidebar({ email, role }: { email: string; role: Role }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
   const isViewer = role === "Viewer";
-  const canUpload = role === "Admin" || role === "Uploader";
 
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/login");
   }
 
-  // Collectors get a single dashboard; Admins/Uploaders get the analytics +
-  // tools. The Dashboard page is collector-only and is not shown to Admins.
+  // Collectors get a single dashboard; Admins/Reviewers get analytics + tools.
   const items: Item[] = isViewer
     ? [{ href: "/analytics", label: "My Dashboard" }]
     : [
         { href: "/analytics", label: "Collectors Performance" },
         { href: "/match-totals", label: "Match Total per Module" },
+        { href: "/feedback-reservation", label: "Feedback Reservation" },
+        { href: "/feedback-progress", label: "Feedback Progress" },
         { href: "/upload", label: "Upload" },
         { href: "/module-upload", label: "Module Data" },
         ...(role === "Admin"
@@ -68,7 +71,7 @@ export default function Sidebar({ email, role }: { email: string; role: Role }) 
         </div>
         <div className="flex items-center justify-between gap-2">
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">
-            {role}
+            {roleLabel(role)}
           </span>
           <button
             onClick={signOut}

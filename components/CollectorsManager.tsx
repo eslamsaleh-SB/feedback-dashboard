@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import Combobox, { type ComboOption } from "@/components/Combobox";
 
 export type Collector = {
   id: string;
@@ -9,6 +10,8 @@ export type Collector = {
   hr_code: string | null;
   team: string | null;
 };
+
+const NO_TEAM = "__noteam__";
 
 // Real name = a name that isn't just the HR code.
 const hasName = (c: Collector) => !!c.name && c.name !== c.hr_code;
@@ -24,8 +27,8 @@ export default function CollectorsManager({
   const [items, setItems] = useState<Collector[]>(initial);
   const [name, setName] = useState("");
   const [search, setSearch] = useState("");
-  const [noNameOnly, setNoNameOnly] = useState(false);
-  const [noTeamOnly, setNoTeamOnly] = useState(false);
+  const [teamFilter, setTeamFilter] = useState("");
+  const [codeFilter, setCodeFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ name: string; hr: string; team: string }>({
@@ -41,6 +44,29 @@ export default function CollectorsManager({
     return Array.from(s).sort();
   }, [teams, items]);
 
+  const teamComboOptions: ComboOption[] = useMemo(
+    () => [
+      { value: "", label: "All teams" },
+      { value: NO_TEAM, label: "(No team)" },
+      ...teamOptions.map((t) => ({ value: t, label: t })),
+    ],
+    [teamOptions]
+  );
+
+  const codeComboOptions: ComboOption[] = useMemo(
+    () => [
+      { value: "", label: "All codes" },
+      ...[...items]
+        .filter((c) => c.hr_code)
+        .sort((a, b) => (a.hr_code ?? "").localeCompare(b.hr_code ?? ""))
+        .map((c) => ({
+          value: c.hr_code as string,
+          label: hasName(c) ? `${c.hr_code} - ${c.name}` : (c.hr_code as string),
+        })),
+    ],
+    [items]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((c) => {
@@ -48,11 +74,15 @@ export default function CollectorsManager({
         const hay = `${c.hr_code ?? ""} ${c.name ?? ""} ${c.team ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
-      if (noNameOnly && hasName(c)) return false;
-      if (noTeamOnly && c.team) return false;
+      if (codeFilter && c.hr_code !== codeFilter) return false;
+      if (teamFilter) {
+        if (teamFilter === NO_TEAM) {
+          if (c.team) return false;
+        } else if ((c.team ?? "") !== teamFilter) return false;
+      }
       return true;
     });
-  }, [items, search, noNameOnly, noTeamOnly]);
+  }, [items, search, codeFilter, teamFilter]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -118,16 +148,12 @@ export default function CollectorsManager({
   }
 
   const inputCls = "rounded-lg border border-slate-300 px-2 py-1 text-sm bg-white";
-  const chip = (active: boolean) =>
-    `rounded-lg border px-3 py-2 text-sm ${
-      active ? "bg-slate-900 text-white border-slate-900" : "border-slate-300 text-slate-600 hover:bg-slate-50"
-    }`;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Collectors</h1>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <form onSubmit={add} className="flex gap-2">
           <input
             value={name}
@@ -142,19 +168,48 @@ export default function CollectorsManager({
             Add
           </button>
         </form>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search code / name / team…"
-          className="rounded-lg border border-slate-300 px-3 py-2 flex-1 min-w-[200px]"
-        />
-        <button type="button" onClick={() => setNoNameOnly((v) => !v)} className={chip(noNameOnly)}>
-          No name
-        </button>
-        <button type="button" onClick={() => setNoTeamOnly((v) => !v)} className={chip(noTeamOnly)}>
-          No team
-        </button>
-        <span className="text-sm text-slate-500">{filtered.length} collector(s)</span>
+
+        <div className="w-52">
+          <label className="block text-xs text-slate-500 mb-1">Filter by team</label>
+          <Combobox
+            options={teamComboOptions}
+            value={teamFilter}
+            onChange={setTeamFilter}
+            placeholder="All teams"
+          />
+        </div>
+        <div className="w-60">
+          <label className="block text-xs text-slate-500 mb-1">Filter by code</label>
+          <Combobox
+            options={codeComboOptions}
+            value={codeFilter}
+            onChange={setCodeFilter}
+            placeholder="All codes"
+          />
+        </div>
+        <div className="flex-1 min-w-[180px]">
+          <label className="block text-xs text-slate-500 mb-1">Search</label>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Code / name / team..."
+            className="rounded-lg border border-slate-300 px-3 py-2 w-full"
+          />
+        </div>
+        {(teamFilter || codeFilter || search) && (
+          <button
+            type="button"
+            onClick={() => {
+              setTeamFilter("");
+              setCodeFilter("");
+              setSearch("");
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            Clear
+          </button>
+        )}
+        <span className="text-sm text-slate-500 pb-2">{filtered.length} collector(s)</span>
       </div>
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
@@ -190,7 +245,7 @@ export default function CollectorsManager({
                         className={`${inputCls} w-28`}
                       />
                     ) : (
-                      <span className="font-medium text-slate-800">{c.hr_code ?? "—"}</span>
+                      <span className="font-medium text-slate-800">{c.hr_code ?? "-"}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -204,7 +259,7 @@ export default function CollectorsManager({
                     ) : hasName(c) ? (
                       c.name
                     ) : (
-                      <span className="text-slate-400">— no name —</span>
+                      <span className="text-slate-400">- no name -</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -223,7 +278,7 @@ export default function CollectorsManager({
                       </select>
                     ) : (
                       <span className={c.team ? "text-slate-600" : "text-slate-400"}>
-                        {c.team ?? "— no team —"}
+                        {c.team ?? "- no team -"}
                       </span>
                     )}
                   </td>
@@ -260,7 +315,7 @@ export default function CollectorsManager({
       </div>
 
       <p className="text-xs text-slate-400">
-        Changing a collector's <span className="font-medium">Code</span> updates it
+        Changing a collector&rsquo;s <span className="font-medium">Code</span> updates it
         everywhere (profile, mistakes, reports, feedback) so their data stays linked.
       </p>
     </div>

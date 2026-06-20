@@ -12,6 +12,13 @@ export type Account = {
   hr_code: string | null;
 };
 
+// Uploaders are shown as "Reviewers" in the UI (the DB role value stays Uploader).
+const ROLE_OPTIONS: { value: Role; label: string }[] = [
+  { value: "Admin", label: "Admin" },
+  { value: "Uploader", label: "Reviewer" },
+  { value: "Viewer", label: "Viewer" },
+];
+
 export default function AccountsManager({ accounts }: { accounts: Account[] }) {
   const supabase = createClient();
   const [rows, setRows] = useState<Account[]>(accounts);
@@ -56,7 +63,7 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
       <div>
         <h1 className="text-2xl font-bold">Accounts</h1>
         <p className="text-slate-500 text-sm mt-1">
-          Set each person’s role. Name is managed on the Collectors page.
+          Set each person&rsquo;s role. Name is managed on the Collectors page.
         </p>
       </div>
 
@@ -64,7 +71,7 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by code or email…"
+          placeholder="Search by code or email..."
           className="rounded-lg border border-slate-300 px-3 py-2 flex-1 min-w-[240px]"
         />
         <span className="text-sm text-slate-500">{filtered.length} account(s)</span>
@@ -94,9 +101,9 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
             {filtered.map((a) => (
               <tr key={a.id} className="border-t border-slate-100">
                 <td className="px-4 py-2.5 whitespace-nowrap font-medium text-slate-800">
-                  {a.hr_code ?? "—"}
+                  {a.hr_code ?? "-"}
                 </td>
-                <td className="px-4 py-2.5 text-slate-700">{a.full_name ?? "—"}</td>
+                <td className="px-4 py-2.5 text-slate-700">{a.full_name ?? "-"}</td>
                 <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
                   {a.email ?? "(no email)"}
                 </td>
@@ -106,9 +113,11 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
                     onChange={(e) => setRole(a.id, e.target.value as Role)}
                     className="rounded-lg border border-slate-300 px-2 py-1.5 bg-white text-sm"
                   >
-                    <option value="Admin">Admin</option>
-                    <option value="Uploader">Uploader</option>
-                    <option value="Viewer">Viewer</option>
+                    {ROLE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
                   </select>
                 </td>
                 <td className="px-4 py-2.5 text-right">
@@ -117,7 +126,7 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
                     disabled={savingId === a.id}
                     className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
                   >
-                    {savingId === a.id ? "Saving…" : savedId === a.id ? "Saved ✓" : "Save"}
+                    {savingId === a.id ? "Saving..." : savedId === a.id ? "Saved" : "Save"}
                   </button>
                 </td>
               </tr>
