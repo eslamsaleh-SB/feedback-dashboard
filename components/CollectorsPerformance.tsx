@@ -8,14 +8,16 @@ import Combobox, { type ComboOption } from "@/components/Combobox";
 const NO_TITLE = "__none__";
 const NO_TEAM = "__noteam__";
 
-// "Code - Name - Team" without repeating the code when the name is just the code.
 function clabel(hr: string | null, name: string | null, team: string | null) {
-  const code = hr || "—";
-  const parts = [code];
+  const parts = [hr || "—"];
   if (name && name !== hr) parts.push(name);
   if (team) parts.push(team);
   return parts.join(" - ");
 }
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const lastDayOfMonth = (y: number, m1to12: number) => new Date(y, m1to12, 0).getDate();
 
 export default function CollectorsPerformance({
   from,
@@ -31,7 +33,7 @@ export default function CollectorsPerformance({
   teams: string[];
   titles: string[];
   matchCount: number;
-  isAdmin?: boolean; // accepted for compatibility; this view is read-only
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
 
@@ -41,18 +43,49 @@ export default function CollectorsPerformance({
   const [moduleFilter, setModuleFilter] = useState<"" | ModuleValue>("");
   const [topN, setTopN] = useState("");
 
-  function applyDates(next: { from?: string; to?: string }) {
+  function pushDates(f: string, t: string) {
     const params = new URLSearchParams();
-    const f = next.from ?? from;
-    const t = next.to ?? to;
     if (f) params.set("from", f);
     if (t) params.set("to", t);
     const qs = params.toString();
     router.push(`/analytics${qs ? `?${qs}` : ""}`);
   }
+  const applyDates = (next: { from?: string; to?: string }) =>
+    pushDates(next.from ?? from, next.to ?? to);
 
-  const metric = (r: CollectorRow) =>
-    moduleFilter ? r.counts[moduleFilter] : r.total;
+  // Month filter <-> from/to (whole calendar month)
+  const monthValue = useMemo(() => {
+    if (!from || !to) return "";
+    const [y, m, d] = from.split("-").map(Number);
+    if (d !== 1) return "";
+    if (to === `${from.slice(0, 7)}-${pad(lastDayOfMonth(y, m))}`) return from.slice(0, 7);
+    return "";
+  }, [from, to]);
+  function onMonth(val: string) {
+    if (!val) return pushDates("", "");
+    const [y, m] = val.split("-").map(Number);
+    pushDates(`${val}-01`, `${val}-${pad(lastDayOfMonth(y, m))}`);
+  }
+
+  // Week filter (Sunday → Saturday) <-> from/to
+  const weekValue = useMemo(() => {
+    if (!from || !to) return "";
+    const f = new Date(from + "T00:00:00");
+    const t = new Date(to + "T00:00:00");
+    const diff = Math.round((t.getTime() - f.getTime()) / 86400000);
+    return diff === 6 && f.getDay() === 0 ? from : "";
+  }, [from, to]);
+  function onWeek(val: string) {
+    if (!val) return pushDates("", "");
+    const d = new Date(val + "T00:00:00");
+    const sun = new Date(d);
+    sun.setDate(d.getDate() - d.getDay()); // 0 = Sunday
+    const sat = new Date(sun);
+    sat.setDate(sun.getDate() + 6);
+    pushDates(iso(sun), iso(sat));
+  }
+
+  const metric = (r: CollectorRow) => (moduleFilter ? r.counts[moduleFilter] : r.total);
 
   const filtered = useMemo(() => {
     let arr = rows.filter((r) => {
@@ -98,11 +131,10 @@ export default function CollectorsPerformance({
     ...MODULES.map((m) => ({ value: m.value, label: m.label })),
   ];
 
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
   const activeModuleLabel = moduleFilter
     ? MODULES.find((m) => m.value === moduleFilter)?.label
     : null;
-
   const anyFilter =
     from || to || collectorFilter || teamFilter || titleFilter || moduleFilter || topN;
 
@@ -125,79 +157,6 @@ export default function CollectorsPerformance({
         </p>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Field label="Collector">
-          <Combobox
-            options={collectorOptions}
-            value={collectorFilter}
-            onChange={setCollectorFilter}
-            placeholder="All collectors"
-          />
-        </Field>
-        <Field label="Team">
-          <Combobox
-            options={teamOptions}
-            value={teamFilter}
-            onChange={setTeamFilter}
-            placeholder="All teams"
-          />
-        </Field>
-        <Field label="Title">
-          <Combobox
-            options={titleOptions}
-            value={titleFilter}
-            onChange={setTitleFilter}
-            placeholder="All titles"
-          />
-        </Field>
-        <Field label="Module">
-          <Combobox
-            options={moduleOptions}
-            value={moduleFilter}
-            onChange={(v) => setModuleFilter(v as "" | ModuleValue)}
-            placeholder="All modules"
-          />
-        </Field>
-        <Field label="Top N">
-          <input
-            type="number"
-            min={1}
-            value={topN}
-            onChange={(e) => setTopN(e.target.value)}
-            placeholder="All"
-            className={`${inputCls} w-full`}
-          />
-        </Field>
-        <Field label="Review date">
-          <div className="flex gap-2">
-            <input
-              type="date"
-              value={from}
-              max={to || undefined}
-              onChange={(e) => applyDates({ from: e.target.value })}
-              className={`${inputCls} w-full`}
-            />
-            <input
-              type="date"
-              value={to}
-              min={from || undefined}
-              onChange={(e) => applyDates({ to: e.target.value })}
-              className={`${inputCls} w-full`}
-            />
-          </div>
-        </Field>
-      </div>
-      {anyFilter && (
-        <button
-          type="button"
-          onClick={clearAll}
-          className="text-sm text-slate-600 hover:text-slate-900 underline"
-        >
-          Clear all filters
-        </button>
-      )}
-
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Match Count" value={matchCount} hint="distinct matches in range" />
@@ -208,7 +167,7 @@ export default function CollectorsPerformance({
         />
       </div>
 
-      {/* Table (read-only) */}
+      {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 text-sm text-slate-500">
           Sorted by{" "}
@@ -243,9 +202,7 @@ export default function CollectorsPerformance({
                           {m.label}
                         </th>
                       ))}
-                      <th className="text-right font-semibold text-slate-600 px-4 py-3">
-                        Total ↓
-                      </th>
+                      <th className="text-right font-semibold text-slate-600 px-4 py-3">Total ↓</th>
                     </>
                   )}
                 </tr>
@@ -268,16 +225,11 @@ export default function CollectorsPerformance({
                     ) : (
                       <>
                         {MODULES.map((m) => (
-                          <td
-                            key={m.value}
-                            className="px-3 py-2.5 text-right tabular-nums text-slate-600"
-                          >
+                          <td key={m.value} className="px-3 py-2.5 text-right tabular-nums text-slate-600">
                             {c.counts[m.value]}
                           </td>
                         ))}
-                        <td className="px-4 py-2.5 text-right font-bold tabular-nums">
-                          {c.total}
-                        </td>
+                        <td className="px-4 py-2.5 text-right font-bold tabular-nums">{c.total}</td>
                       </>
                     )}
                   </tr>
@@ -287,28 +239,68 @@ export default function CollectorsPerformance({
           </div>
         )}
       </div>
+
+      {/* Filters (moved to the bottom) */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
+        {/* Date section (kept inside the card) */}
+        <div>
+          <p className="text-xs font-medium text-slate-500 mb-2">Review date</p>
+          <div className="flex flex-wrap gap-3">
+            <div className="w-44">
+              <label className="block text-xs text-slate-500 mb-1">Month</label>
+              <input type="month" value={monthValue} onChange={(e) => onMonth(e.target.value)} className={inputCls} />
+            </div>
+            <div className="w-44">
+              <label className="block text-xs text-slate-500 mb-1">Week (Sun–Sat)</label>
+              <input type="date" value={weekValue} onChange={(e) => onWeek(e.target.value)} className={inputCls} />
+            </div>
+            <div className="w-40">
+              <label className="block text-xs text-slate-500 mb-1">From</label>
+              <input type="date" value={from} max={to || undefined} onChange={(e) => applyDates({ from: e.target.value })} className={inputCls} />
+            </div>
+            <div className="w-40">
+              <label className="block text-xs text-slate-500 mb-1">To</label>
+              <input type="date" value={to} min={from || undefined} onChange={(e) => applyDates({ to: e.target.value })} className={inputCls} />
+            </div>
+          </div>
+        </div>
+
+        {/* Other filters */}
+        <div className="flex flex-wrap gap-3">
+          <div className="w-64">
+            <label className="block text-xs text-slate-500 mb-1">Collector</label>
+            <Combobox options={collectorOptions} value={collectorFilter} onChange={setCollectorFilter} placeholder="All collectors" />
+          </div>
+          <div className="w-44">
+            <label className="block text-xs text-slate-500 mb-1">Team</label>
+            <Combobox options={teamOptions} value={teamFilter} onChange={setTeamFilter} placeholder="All teams" />
+          </div>
+          <div className="w-44">
+            <label className="block text-xs text-slate-500 mb-1">Title</label>
+            <Combobox options={titleOptions} value={titleFilter} onChange={setTitleFilter} placeholder="All titles" />
+          </div>
+          <div className="w-44">
+            <label className="block text-xs text-slate-500 mb-1">Module</label>
+            <Combobox options={moduleOptions} value={moduleFilter} onChange={(v) => setModuleFilter(v as "" | ModuleValue)} placeholder="All modules" />
+          </div>
+          <div className="w-28">
+            <label className="block text-xs text-slate-500 mb-1">Top N</label>
+            <input type="number" min={1} value={topN} onChange={(e) => setTopN(e.target.value)} placeholder="All" className={inputCls} />
+          </div>
+          {anyFilter && (
+            <div className="flex items-end">
+              <button type="button" onClick={clearAll} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs text-slate-500 mb-1">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-}) {
+function StatCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5">
       <p className="text-sm text-slate-500">{label}</p>
