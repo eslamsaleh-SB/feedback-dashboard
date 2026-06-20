@@ -32,6 +32,7 @@ export default function MatchTotals({
   from,
   to,
   collector,
+  matchId,
   rows,
   collectors,
   limited,
@@ -39,31 +40,38 @@ export default function MatchTotals({
   from: string;
   to: string;
   collector: string;
+  matchId: string;
   rows: EnrichedPart[];
   collectors: CollectorOpt[];
   limited: boolean;
 }) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const [matchInput, setMatchInput] = useState(matchId);
   const [moduleFilter, setModuleFilter] = useState<"" | ModuleValue>("");
   const [errOp, setErrOp] = useState<ErrOp>("gte");
   const [errVal, setErrVal] = useState("");
 
-  function applyFilters(next: { from?: string; to?: string; collector?: string }) {
+  function applyFilters(next: {
+    from?: string;
+    to?: string;
+    collector?: string;
+    match?: string;
+  }) {
     const f = next.from ?? from;
     const t = next.to ?? to;
     const c = next.collector ?? collector;
+    const m = (next.match ?? matchId).trim();
     const params = new URLSearchParams();
     if (f) params.set("from", f);
     if (t) params.set("to", t);
     if (c && c !== "all") params.set("collector", c);
+    if (m) params.set("match", m);
     const qs = params.toString();
     router.push(`/match-totals${qs ? `?${qs}` : ""}`);
   }
 
   const metric = (p: EnrichedPart) => (moduleFilter ? p.counts[moduleFilter] : p.total);
 
-  // Error threshold test (applies to the metric: total, or selected module).
   const errN = parseInt(errVal, 10);
   const errActive = Number.isFinite(errN);
   const passErr = (v: number) => {
@@ -87,7 +95,6 @@ export default function MatchTotals({
       m.parts.push(r);
       if (r.date && (!m.date || r.date > m.date)) m.date = r.date;
     }
-    const q = search.trim().toLowerCase();
     let arr = Array.from(map.values()).map((m) => {
       const parts = m.parts
         .filter((p) => passErr(metric(p)))
@@ -96,11 +103,10 @@ export default function MatchTotals({
       return { ...m, parts, total };
     });
     arr = arr.filter((m) => m.parts.length > 0);
-    if (q) arr = arr.filter((m) => m.matchid.toLowerCase().includes(q));
     arr.sort((a, b) => b.total - a.total);
     return arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, search, moduleFilter, errOp, errVal]);
+  }, [rows, moduleFilter, errOp, errVal]);
 
   const shown = matches.slice(0, MAX_MATCHES);
 
@@ -119,7 +125,7 @@ export default function MatchTotals({
         <h1 className="text-2xl font-bold">Match Total per Module</h1>
         <p className="text-slate-500">
           Module totals by Match → Collector → Part. Every collector who worked on a
-          match is listed.
+          match is listed. Showing most recent matches — search a Match ID to find any match.
         </p>
       </div>
 
@@ -173,14 +179,26 @@ export default function MatchTotals({
             />
           </div>
         </div>
-        <div className="w-40">
+        <div className="w-56">
           <label className="block text-xs text-slate-500 mb-1">Search Match ID</label>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="e.g. 1457319"
-            className={`${inputCls} w-full`}
-          />
+          <div className="flex gap-2">
+            <input
+              value={matchInput}
+              onChange={(e) => setMatchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyFilters({ match: matchInput });
+              }}
+              placeholder="e.g. 1457319"
+              className={`${inputCls} w-full`}
+            />
+            <button
+              type="button"
+              onClick={() => applyFilters({ match: matchInput })}
+              className="rounded-lg bg-slate-900 text-white px-3 text-sm font-medium"
+            >
+              Find
+            </button>
+          </div>
         </div>
         <div className="w-40">
           <label className="block text-xs text-slate-500 mb-1">Review date — from</label>
@@ -213,7 +231,7 @@ export default function MatchTotals({
         )}
         {limited && (
           <span className="text-amber-600">
-            {" "}(data capped at 8,000 rows — narrow the date range for a complete view.)
+            {" "}(showing the most recent 8,000 rows — search a Match ID or narrow dates for older matches.)
           </span>
         )}
       </div>
