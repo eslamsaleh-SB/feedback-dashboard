@@ -47,7 +47,7 @@ export type PartSummary = {
   total: number;
 };
 
-// One row of the collector ranking (now carries team + title).
+// One row of the collector ranking (now carries team + title + match count).
 export type CollectorRow = {
   hr_code: string;
   name: string;
@@ -55,6 +55,7 @@ export type CollectorRow = {
   title: string | null;
   counts: Record<ModuleValue, number>;
   total: number;
+  matches?: number; // distinct matches this collector worked on (in range)
 };
 
 // A report sent to a collector.
