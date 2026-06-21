@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Video Feedback Dashboard",
-  description: "Performance feedback sessions",
+  title: "Collector Performance Dashboard",
+  description: "Collector performance feedback dashboard",
 };
 
 export default function RootLayout({
