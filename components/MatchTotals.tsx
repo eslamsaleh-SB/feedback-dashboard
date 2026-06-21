@@ -21,9 +21,11 @@ type ErrOp = "gte" | "eq" | "lte";
 
 const MAX_MATCHES = 250;
 
+const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
+
 function clabel(hr: string | null, name: string | null, team: string | null) {
   const parts = [hr || "—"];
-  if (name && name !== hr) parts.push(name);
+  if (name && name !== hr) parts.push(first3(name));
   if (team) parts.push(team);
   return parts.join(" - ");
 }

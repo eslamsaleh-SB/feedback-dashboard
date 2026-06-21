@@ -34,9 +34,11 @@ const statusStyle: Record<string, string> = {
   "": "bg-slate-100 text-slate-500",
 };
 
+const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
+
 function clabel(hr: string, name: string | null, team: string | null) {
   const parts = [hr];
-  if (name && name !== hr) parts.push(name);
+  if (name && name !== hr) parts.push(first3(name));
   if (team) parts.push(team);
   return parts.join(" - ");
 }
@@ -209,7 +211,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                         <td className="px-4 py-2.5 whitespace-nowrap">
                           <span className="font-medium text-slate-800">{a.hr_code}</span>
                           {a.name && a.name !== a.hr_code && (
-                            <span className="text-slate-500"> - {a.name}</span>
+                            <span className="text-slate-500"> - {first3(a.name)}</span>
                           )}
                           {a.team && <span className="text-slate-400"> - {a.team}</span>}
                         </td>

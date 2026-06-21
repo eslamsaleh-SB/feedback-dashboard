@@ -8,9 +8,11 @@ import Combobox, { type ComboOption } from "@/components/Combobox";
 const NO_TITLE = "__none__";
 const NO_TEAM = "__noteam__";
 
+const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
+
 function clabel(hr: string | null, name: string | null, team: string | null) {
   const parts = [hr || "—"];
-  if (name && name !== hr) parts.push(name);
+  if (name && name !== hr) parts.push(first3(name));
   if (team) parts.push(team);
   return parts.join(" - ");
 }
@@ -270,7 +272,7 @@ export default function CollectorsPerformance({
                     <td className="px-4 py-2.5 text-slate-400 tabular-nums">{i + 1}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       <span className="font-medium text-slate-800">{c.hr_code ?? "—"}</span>
-                      {c.name && c.name !== c.hr_code && <span className="text-slate-500"> - {c.name}</span>}
+                      {c.name && c.name !== c.hr_code && <span className="text-slate-500"> - {first3(c.name)}</span>}
                       {c.team && <span className="text-slate-500"> - {c.team}</span>}
                     </td>
                     {moduleFilter ? (

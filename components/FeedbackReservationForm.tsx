@@ -12,9 +12,11 @@ type Shift = "Morning" | "Night" | "Overnight";
 const LOCATIONS = ["Mahmoud El-Badry", "Hassan Ma'moun", "Maadi"] as const;
 const SHIFTS: Shift[] = ["Morning", "Night", "Overnight"];
 
+const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
+
 function clabel(hr: string, name: string | null, team: string | null) {
   const parts = [hr];
-  if (name && name !== hr) parts.push(name);
+  if (name && name !== hr) parts.push(first3(name));
   if (team) parts.push(team);
   return parts.join(" - ");
 }
