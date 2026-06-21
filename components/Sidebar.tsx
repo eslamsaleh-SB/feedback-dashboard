@@ -41,8 +41,12 @@ export default function Sidebar({ email, role }: { email: string; role: Role }) 
 
   return (
     <aside className="w-60 shrink-0 border-r border-slate-200 bg-white min-h-screen sticky top-0 flex flex-col">
-      <div className="px-5 h-14 flex items-center font-bold text-lg border-b border-slate-100">
-        🎬 Feedback
+      {/* Hudl logo + dashboard title */}
+      <div className="px-4 py-4 border-b border-slate-100 flex flex-col items-center text-center gap-2">
+        <img src="/Logo/logo.png" alt="Hudl" className="h-8 w-auto max-w-full" />
+        <span className="text-sm font-semibold text-slate-700 leading-tight">
+          Collector Performance Dashboard
+        </span>
       </div>
 
       <nav className="flex-1 p-3 space-y-1">

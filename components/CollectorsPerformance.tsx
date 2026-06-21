@@ -108,6 +108,17 @@ export default function CollectorsPerformance({
 
   const totalMistakes = filtered.reduce((s, r) => s + metric(r), 0);
 
+  // Match Count reflects the selected collector when one is chosen.
+  const selectedCollector = collectorFilter
+    ? rows.find((r) => r.hr_code === collectorFilter)
+    : null;
+  const displayMatchCount = selectedCollector
+    ? selectedCollector.matches ?? 0
+    : matchCount;
+  const matchHint = selectedCollector
+    ? "matches for this collector"
+    : "distinct matches in range";
+
   const collectorOptions: ComboOption[] = [
     { value: "", label: "All collectors" },
     ...[...rows]
@@ -211,7 +222,7 @@ export default function CollectorsPerformance({
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Match Count" value={matchCount} hint="distinct matches in range" />
+        <StatCard label="Match Count" value={displayMatchCount} hint={matchHint} />
         <StatCard label="Filtered Collectors" value={filtered.length} />
         <StatCard label={activeModuleLabel ? `Total ${activeModuleLabel}` : "Total mistakes"} value={totalMistakes} />
       </div>
