@@ -29,7 +29,7 @@ export default function Sidebar({ email, role }: { email: string; role: Role }) 
         { href: "/match-totals", label: "Match Total per Module" },
         { href: "/feedback-reservation", label: "Feedback Reservation" },
         { href: "/feedback-progress", label: "Feedback Progress" },
-        { href: "/upload", label: "Upload" },
+        { href: "/upload", label: "Report" },
         { href: "/module-upload", label: "Module Data" },
         ...(role === "Admin"
           ? [

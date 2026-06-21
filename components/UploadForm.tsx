@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Combobox, { type ComboOption } from "@/components/Combobox";
 
-type Collector = { id: string; name: string };
+type Collector = { id: string; name: string; hr_code: string | null };
 export type ExistingSession = {
   id: string;
   match_name: string;
@@ -47,9 +47,14 @@ export default function UploadForm({
     [existingSessions, collectorId]
   );
 
+  // Show the collector CODE (with name as a hint when available).
   const collectorOptions: ComboOption[] = collectors.map((c) => ({
     value: c.id,
-    label: c.name,
+    label: c.hr_code
+      ? c.name && c.name !== c.hr_code
+        ? `${c.hr_code} - ${c.name}`
+        : c.hr_code
+      : c.name,
   }));
   const sessionOptions: ComboOption[] = sessionsForCollector.map((s) => ({
     value: s.id,
@@ -106,7 +111,7 @@ export default function UploadForm({
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold mb-2">Add match videos from Google Drive</h1>
+      <h1 className="text-2xl font-bold mb-2">Report</h1>
       <p className="text-sm text-slate-500 mb-6">
         Upload the videos to a Google Drive folder, set the folder’s sharing to
         <span className="font-medium"> “Anyone with the link”</span>, then paste the
@@ -133,7 +138,7 @@ export default function UploadForm({
         onSubmit={handleSubmit}
         className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5"
       >
-        {/* Collector — always shown, searchable */}
+        {/* Collector — always shown, searchable (by code) */}
         <div>
           <label className="block text-sm font-medium mb-1">Collector</label>
           <Combobox
@@ -143,8 +148,8 @@ export default function UploadForm({
               setCollectorId(v);
               setSessionId("");
             }}
-            placeholder="Select a collector…"
-            searchPlaceholder="Search collectors…"
+            placeholder="Select a collector (code)…"
+            searchPlaceholder="Search by code or name…"
           />
         </div>
 
