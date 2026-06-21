@@ -22,7 +22,7 @@ export default async function UploadPage() {
   }
 
   const [{ data: collectors }, { data: sessions }] = await Promise.all([
-    supabase.from("collectors").select("id, name").order("name"),
+    supabase.from("collectors").select("id, name, hr_code").order("hr_code"),
     supabase
       .from("match_sessions")
       .select("id, match_name, review_date, collector_id")
@@ -36,5 +36,5 @@ export default async function UploadPage() {
     collector_id: s.collector_id,
   }));
 
-  return <UploadForm collectors={collectors ?? []} existingSessions={existing} />;
+  return <UploadForm collectors={(collectors ?? []) as any} existingSessions={existing} />;
 }
