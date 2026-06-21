@@ -152,6 +152,7 @@ export default async function AnalyticsPage({
       title: info?.title ?? null,
       counts: numCounts(r),
       total: Number(r.total),
+      matches: Number(r.matches ?? 0),
     };
   });
 
