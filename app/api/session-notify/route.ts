@@ -1,35 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
 export const dynamic = "force-dynamic";
 
-// ---------------------------------------------------------------------------
-// Email notification when a new match session report is uploaded.
-// Env vars required (Vercel + .env.local):
-//   RESEND_API_KEY, EMAIL_FROM, SUPABASE_SERVICE_ROLE_KEY
-// ---------------------------------------------------------------------------
-
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM ?? "Feedback Dashboard <no-reply@feedbackdashboard.com>";
-  if (!apiKey) {
-    console.warn("[session-notify] RESEND_API_KEY not set — email skipped");
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  const from = process.env.EMAIL_FROM ?? `Hudl Feedback <${user}>`;
+
+  if (!user || !pass) {
+    console.warn("[session-notify] GMAIL_USER or GMAIL_APP_PASSWORD not set — email skipped");
     return false;
   }
+
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to, subject, html }),
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user, pass },
     });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      console.error(`[session-notify] Resend ${res.status} sending to ${to}: ${detail}`);
-      return false;
-    }
+    await transporter.sendMail({ from, to, subject, html });
+    console.log(`[session-notify] Email sent to ${to}`);
     return true;
   } catch (e: any) {
-    console.error(`[session-notify] Resend request failed for ${to}: ${e?.message ?? e}`);
+    console.error(`[session-notify] Gmail send failed for ${to}: ${e?.message ?? e}`);
     return false;
   }
 }
@@ -56,7 +50,6 @@ export async function POST(req: NextRequest) {
     { auth: { persistSession: false } }
   );
 
-  // Get hr_code from collector record
   const { data: collector } = await admin
     .from("collectors")
     .select("hr_code")
@@ -65,7 +58,6 @@ export async function POST(req: NextRequest) {
 
   if (!collector?.hr_code) return NextResponse.json({ ok: true, sent: 0 });
 
-  // Get profile id from hr_code
   const { data: profile } = await admin
     .from("profiles")
     .select("id")
@@ -74,7 +66,6 @@ export async function POST(req: NextRequest) {
 
   if (!profile?.id) return NextResponse.json({ ok: true, sent: 0 });
 
-  // Get email from auth.users
   const { data: { user: targetUser } } = await admin.auth.admin.getUserById(profile.id);
   const email = targetUser?.email;
   if (!email) return NextResponse.json({ ok: true, sent: 0 });

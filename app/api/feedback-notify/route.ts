@@ -1,39 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
 export const dynamic = "force-dynamic";
 
-// ---------------------------------------------------------------------------
-// Email notification for feedback sessions.
-//
-// Environment variables needed (add to .env.local + Vercel settings):
-//   RESEND_API_KEY   — get a free key at https://resend.com
-//   EMAIL_FROM       — e.g. "Feedback Dashboard <no-reply@yourdomain.com>"
-//   SUPABASE_SERVICE_ROLE_KEY — to look up collector emails from auth.users
-// ---------------------------------------------------------------------------
-
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM ?? "Feedback Dashboard <no-reply@feedbackdashboard.com>";
-  if (!apiKey) {
-    console.warn("[feedback-notify] RESEND_API_KEY not set — email skipped");
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  const from = process.env.EMAIL_FROM ?? `Hudl Feedback <${user}>`;
+
+  if (!user || !pass) {
+    console.warn("[feedback-notify] GMAIL_USER or GMAIL_APP_PASSWORD not set — email skipped");
     return false;
   }
+
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to, subject, html }),
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user, pass },
     });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      console.error(`[feedback-notify] Resend ${res.status} sending to ${to}: ${detail}`);
-      return false;
-    }
+    await transporter.sendMail({ from, to, subject, html });
+    console.log(`[feedback-notify] Email sent to ${to}`);
     return true;
   } catch (e: any) {
-    console.error(`[feedback-notify] Resend request failed for ${to}: ${e?.message ?? e}`);
+    console.error(`[feedback-notify] Gmail send failed for ${to}: ${e?.message ?? e}`);
     return false;
   }
 }
@@ -64,7 +54,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, sent: 0 });
   }
 
-  // Use service role to read auth.users emails
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
     console.warn("[feedback-notify] SUPABASE_SERVICE_ROLE_KEY not set — email skipped");
@@ -77,16 +66,12 @@ export async function POST(req: NextRequest) {
     { auth: { persistSession: false } }
   );
 
-  // Look up email addresses for each HR code via profiles → auth.users
   const { data: profileRows } = await admin
     .from("profiles")
     .select("hr_code, id")
     .in("hr_code", hr_codes);
 
   const userIds = (profileRows ?? []).map((p: any) => p.id as string);
-  const hrByUid = Object.fromEntries(
-    (profileRows ?? []).map((p: any) => [p.id as string, p.hr_code as string])
-  );
 
   const emailPromises = userIds.map(async (uid) => {
     const { data: { user: u } } = await admin.auth.admin.getUserById(uid);
@@ -118,6 +103,5 @@ export async function POST(req: NextRequest) {
   });
 
   await Promise.allSettled(emailPromises);
-
   return NextResponse.json({ ok: true, sent: userIds.length });
 }
