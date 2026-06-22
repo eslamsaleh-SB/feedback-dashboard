@@ -16,7 +16,7 @@ export default async function AccountsPage() {
     .select("role")
     .eq("id", user.id)
     .single();
-  if (profile?.role !== "Admin") redirect("/analytics");
+  if (profile?.role !== "Admin") redirect("/dashboard");
 
   const { data: profiles } = await supabase
     .from("profiles")
@@ -28,7 +28,7 @@ export default async function AccountsPage() {
     email: p.email,
     full_name: p.full_name,
     role: p.role,
-    hr_code: p.hr_code ?? null,
+    hr_code: p.hr_code,
   }));
 
   return <AccountsManager accounts={accounts} />;
