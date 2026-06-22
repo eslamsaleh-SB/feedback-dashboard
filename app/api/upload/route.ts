@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
 export const runtime = "nodejs";
 
 const DRIVE_API_KEY = process.env.GOOGLE_DRIVE_API_KEY!;
 
-// Pull the folder id out of any common Google Drive folder URL,
-// or accept a bare id.
 function extractFolderId(input: string): string | null {
   const url = input.trim();
   const folders = url.match(/folders\/([a-zA-Z0-9_-]+)/);
@@ -17,7 +17,6 @@ function extractFolderId(input: string): string | null {
   return null;
 }
 
-// List all video files inside a public Drive folder using an API key.
 async function listDriveVideos(folderId: string) {
   const q = encodeURIComponent(
     `'${folderId}' in parents and mimeType contains 'video' and trashed = false`
@@ -40,8 +39,92 @@ async function listDriveVideos(folderId: string) {
   return (json.files || []) as { id: string; name: string; mimeType: string }[];
 }
 
+// Notify the collector inline (server-side, awaited) — NOT via an internal
+// fetch, because the app middleware 307-redirects any /api/* request with no
+// auth cookies (which a server-to-server call has none), so the old fetch to
+// /api/session-notify never ran and report emails were silently dropped.
+async function notifyCollectorReport(opts: {
+  collectorId: string;
+  matchName: string;
+  reviewDate: string | null;
+  notes: string | null;
+}) {
+  const { collectorId, matchName, reviewDate, notes } = opts;
+
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPass = process.env.GMAIL_APP_PASSWORD;
+  if (!serviceKey) {
+    console.warn("[upload-notify] SUPABASE_SERVICE_ROLE_KEY not set — email skipped");
+    return;
+  }
+  if (!gmailUser || !gmailPass) {
+    console.warn("[upload-notify] GMAIL_USER or GMAIL_APP_PASSWORD not set — email skipped");
+    return;
+  }
+
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceKey,
+    { auth: { persistSession: false } }
+  );
+
+  const { data: collector } = await admin
+    .from("collectors")
+    .select("hr_code")
+    .eq("id", collectorId)
+    .single();
+  if (!collector?.hr_code) {
+    console.warn(`[upload-notify] no hr_code for collector ${collectorId} — email skipped`);
+    return;
+  }
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("hr_code", collector.hr_code)
+    .single();
+  if (!profile?.id) {
+    console.warn(`[upload-notify] no profile for hr_code ${collector.hr_code} — email skipped`);
+    return;
+  }
+
+  const {
+    data: { user: targetUser },
+  } = await admin.auth.admin.getUserById(profile.id);
+  const email = targetUser?.email;
+  if (!email) {
+    console.warn(`[upload-notify] no email for profile ${profile.id} — email skipped`);
+    return;
+  }
+
+  const dateStr = reviewDate ? ` for ${reviewDate}` : "";
+  const bodySection = notes
+    ? `<p style="color:#374151;">${notes.replace(/\n/g, "<br>")}</p>`
+    : "";
+  const html = `
+    <p>Hello,</p>
+    <p>A new match session report has been uploaded for you${dateStr}:</p>
+    <h3 style="margin:12px 0 4px;">${matchName}</h3>
+    ${bodySection}
+    <p>Please log in to the Collector Performance Dashboard to view your report, acknowledge it, and add any notes.</p>
+  `;
+
+  const from = process.env.EMAIL_FROM ?? `Hudl Feedback <${gmailUser}>`;
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user: gmailUser, pass: gmailPass },
+  });
+  await transporter.sendMail({
+    from,
+    to: email,
+    subject: `New Report: ${matchName}`,
+    html,
+  });
+  console.log(`[upload-notify] Email sent to ${email}`);
+}
+
 export async function POST(req: NextRequest) {
-  // ---- Auth + role ----
   const supabase = createClient();
   const {
     data: { user },
@@ -59,7 +142,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not allowed to upload" }, { status: 403 });
   }
 
-  // ---- Read JSON body ----
   const body = await req.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
@@ -75,8 +157,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ---- Resolve / create the match session ----
   let matchSessionId: string;
+  // Only set for a brand-new session — used to email the collector at the end.
+  let notify: {
+    collectorId: string;
+    matchName: string;
+    reviewDate: string | null;
+    notes: string | null;
+  } | null = null;
 
   if (mode === "existing") {
     matchSessionId = String(body.match_session_id || "");
@@ -132,22 +220,9 @@ export async function POST(req: NextRequest) {
       );
     }
     matchSessionId = created.id;
-
-    // Fire-and-forget email notification to the collector
-    const _origin = new URL(req.url).origin;
-    fetch(`${_origin}/api/session-notify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        collector_id: collectorId,
-        match_name: matchName,
-        review_date: reviewDate,
-        overall_notes: notes || null,
-      }),
-    }).catch(() => {});
+    notify = { collectorId, matchName, reviewDate, notes: notes || null };
   }
 
-  // ---- Fetch the videos from Google Drive ----
   let files: { id: string; name: string }[];
   try {
     files = await listDriveVideos(folderId);
@@ -165,7 +240,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ---- Save the file references ----
   const rows = files.map((f) => ({
     match_session_id: matchSessionId,
     drive_file_id: f.id,
@@ -177,6 +251,15 @@ export async function POST(req: NextRequest) {
     .insert(rows);
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 400 });
+  }
+
+  // Email the collector (new sessions only). Never let this fail the upload.
+  if (notify) {
+    try {
+      await notifyCollectorReport(notify);
+    } catch (e: any) {
+      console.error(`[upload-notify] Gmail send failed: ${e?.message ?? e}`);
+    }
   }
 
   return NextResponse.json({
