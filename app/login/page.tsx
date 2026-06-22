@@ -1,40 +1,71 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+
+type Mode = "signin" | "signup" | "forgot";
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [hrCode, setHrCode] = useState("");
+  const [team, setTeam] = useState("");
+  const [teams, setTeams] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(
-    null
-  );
+  const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (mode !== "signup") return;
+    supabase
+      .from("collectors")
+      .select("team")
+      .not("team", "is", null)
+      .then(({ data }) => {
+        const unique = Array.from(
+          new Set((data ?? []).map((r: any) => r.team as string).filter(Boolean))
+        ).sort();
+        setTeams(unique);
+      });
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setMessage(null);
+    setEmail("");
+    setPassword("");
+    setFullName("");
+    setHrCode("");
+    setTeam("");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
 
-    if (mode === "signin") {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+    if (mode === "forgot") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
       });
-      if (error) setMessage({ type: "err", text: error.message });
-      else router.replace("/dashboard");
       setLoading(false);
+      if (error) return setMessage({ type: "err", text: error.message });
+      return setMessage({ type: "ok", text: "Password reset link sent -- check your email." });
+    }
+
+    if (mode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      setLoading(false);
+      if (error) return setMessage({ type: "err", text: error.message });
+      router.replace("/dashboard");
       return;
     }
 
-    // ---- Sign up ----
     const code = hrCode.trim();
     if (!code) {
       setLoading(false);
@@ -42,55 +73,43 @@ export default function LoginPage() {
     }
     if (/\s/.test(code)) {
       setLoading(false);
-      return setMessage({
-        type: "err",
-        text: "HR code cannot contain spaces.",
-      });
+      return setMessage({ type: "err", text: "HR code cannot contain spaces." });
     }
 
-    // Reject a code that's already linked to an account (friendly pre-check;
-    // the database also enforces this).
-    const { data: available, error: checkErr } = await supabase.rpc(
-      "hr_code_available",
-      { p_code: code }
-    );
+    const { data: available, error: checkErr } = await supabase.rpc("hr_code_available", { p_code: code });
     if (checkErr) {
       setLoading(false);
       return setMessage({ type: "err", text: checkErr.message });
     }
     if (available === false) {
       setLoading(false);
-      return setMessage({
-        type: "err",
-        text: `HR code "${code}" is already registered to another account.`,
-      });
+      return setMessage({ type: "err", text: `HR code "${code}" is already registered.` });
     }
 
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName, hr_code: code } },
+      options: {
+        data: {
+          full_name: fullName,
+          hr_code: code,
+          team: team === "__none__" ? null : team || null,
+        },
+      },
     });
-    if (error) {
-      // Trigger raises unique_violation if the code was taken in a race.
-      const taken = /already registered|duplicate|unique/i.test(error.message);
-      setMessage({
-        type: "err",
-        text: taken
-          ? `HR code "${code}" is already registered to another account.`
-          : error.message,
-      });
-      setLoading(false);
-      return;
-    }
-
-    setMessage({
-      type: "ok",
-      text: "Account created and linked to your HR code. You can sign in now.",
-    });
-    setMode("signin");
     setLoading(false);
+    if (error) {
+      const taken = /already registered|duplicate|unique/i.test(error.message);
+      return setMessage({
+        type: "err",
+        text: taken ? `HR code "${code}" is already registered.` : error.message,
+      });
+    }
+    setMessage({ type: "ok", text: "Account created. You can sign in now." });
+    switchMode("signin");
   }
+
+  const title = mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Reset password";
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
@@ -98,9 +117,7 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-8 space-y-4"
       >
-        <h1 className="text-2xl font-bold text-center">
-          {mode === "signin" ? "Sign in" : "Create account"}
-        </h1>
+        <h1 className="text-2xl font-bold text-center">{title}</h1>
 
         {mode === "signup" && (
           <>
@@ -116,14 +133,25 @@ export default function LoginPage() {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2"
                 placeholder="HR code (e.g. A-2074)"
                 value={hrCode}
-                // Trim spaces as the user types so the code is always clean.
                 onChange={(e) => setHrCode(e.target.value.replace(/\s/g, ""))}
                 autoCapitalize="characters"
                 required
               />
-              <p className="text-xs text-slate-400 mt-1">
-                Links your account to your data. No spaces.
-              </p>
+              <p className="text-xs text-slate-400 mt-1">Links your account to your data. No spaces.</p>
+            </div>
+            <div>
+              <label className="block text-sm text-slate-600 mb-1">Team</label>
+              <select
+                value={team}
+                onChange={(e) => setTeam(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white"
+              >
+                <option value="">-- select your team --</option>
+                {teams.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+                <option value="__none__">Team Not Listed</option>
+              </select>
             </div>
           </>
         )}
@@ -136,45 +164,47 @@ export default function LoginPage() {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <input
-          type="password"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+
+        {mode !== "forgot" && (
+          <input
+            type="password"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        )}
 
         <button
           type="submit"
           disabled={loading}
           className="w-full rounded-lg bg-slate-900 text-white py-2 font-medium disabled:opacity-50"
         >
-          {loading ? "Please wait…" : mode === "signin" ? "Sign in" : "Sign up"}
+          {loading ? "Please wait..." : mode === "signin" ? "Sign in" : mode === "signup" ? "Sign up" : "Send reset link"}
         </button>
 
         {message && (
-          <p
-            className={`text-sm text-center ${
-              message.type === "ok" ? "text-emerald-600" : "text-red-600"
-            }`}
-          >
+          <p className={`text-sm text-center ${message.type === "ok" ? "text-emerald-600" : "text-red-600"}`}>
             {message.text}
           </p>
         )}
 
-        <button
-          type="button"
-          onClick={() => {
-            setMode(mode === "signin" ? "signup" : "signin");
-            setMessage(null);
-          }}
-          className="w-full text-sm text-slate-500 hover:text-slate-800"
-        >
-          {mode === "signin"
-            ? "Need an account? Sign up"
-            : "Already have an account? Sign in"}
-        </button>
+        {mode === "signin" && (
+          <button type="button" onClick={() => switchMode("forgot")} className="w-full text-sm text-slate-500 hover:text-slate-800">
+            Forgot password?
+          </button>
+        )}
+
+        {mode !== "forgot" ? (
+          <button type="button" onClick={() => switchMode(mode === "signin" ? "signup" : "signin")} className="w-full text-sm text-slate-500 hover:text-slate-800">
+            {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
+          </button>
+        ) : (
+          <button type="button" onClick={() => switchMode("signin")} className="w-full text-sm text-slate-500 hover:text-slate-800">
+            Back to sign in
+          </button>
+        )}
       </form>
     </main>
   );
