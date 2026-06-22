@@ -32,7 +32,9 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublic = pathname.startsWith("/login");
+  const isPublic =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/reset-password");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -40,16 +42,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublic) {
+  // Logged-in users may still need /reset-password to complete their password change
+  if (user && isPublic && !pathname.startsWith("/reset-password")) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  return response;
-}
-
-// Run on everything except static assets
-export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
-};
+  return r
