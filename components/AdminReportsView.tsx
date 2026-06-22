@@ -128,16 +128,19 @@ export default function AdminReportsView({ sessions: initialSessions }: { sessio
                     {/* Videos */}
                     {s.videos.length > 0 && (
                       <div>
-                        <p className="text-sm font-medium text-slate-700 mb-2">Videos ({s.videos.length})</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <p className="text-sm font-medium text-slate-700 mb-3">Videos ({s.videos.length})</p>
+                        <div className="space-y-4">
                           {s.videos.map((v) => (
-                            <a key={v.id}
-                              href={`https://drive.google.com/file/d/${v.drive_file_id}/view`}
-                              target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 transition group">
-                              <span className="text-slate-400">▶</span>
-                              <span className="flex-1 truncate text-blue-600 group-hover:underline">{v.file_name}</span>
-                            </a>
+                            <div key={v.id} className="rounded-xl overflow-hidden border border-slate-200 bg-black">
+                              <p className="text-xs text-slate-400 px-3 py-1.5 bg-slate-900 truncate">{v.file_name}</p>
+                              <iframe
+                                src={`https://drive.google.com/file/d/${v.drive_file_id}/preview`}
+                                className="w-full"
+                                style={{ height: "360px" }}
+                                allow="autoplay; fullscreen"
+                                allowFullScreen
+                              />
+                            </div>
                           ))}
                         </div>
                       </div>
