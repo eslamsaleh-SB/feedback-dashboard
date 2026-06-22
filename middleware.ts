@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options?: object }[]) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
@@ -49,9 +49,7 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-// Run on everything except static assets and the video stream API
-// (the <video> tag can't send auth cookies on some browsers for range reqs,
-//  but here cookies ARE sent same-origin, so we still guard it in the route).
+// Run on everything except static assets
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };
