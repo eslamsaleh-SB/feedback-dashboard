@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { type AppRole } from "@/components/Sidebar";
 
 export default async function AppLayout({
   children,
@@ -20,7 +20,7 @@ export default async function AppLayout({
     .eq("id", user.id)
     .single();
 
-  const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
+  const role = (profile?.role ?? "Viewer") as AppRole;
 
   return (
     <div className="min-h-screen flex bg-slate-50">
