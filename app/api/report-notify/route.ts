@@ -13,25 +13,29 @@ export const dynamic = "force-dynamic";
 //   SUPABASE_SERVICE_ROLE_KEY — to look up collector emails from auth.users
 // ---------------------------------------------------------------------------
 
-async function sendEmail(to: string, subject: string, html: string) {
+async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from =
-    process.env.EMAIL_FROM ??
-    "Feedback Dashboard <no-reply@feedbackdashboard.com>";
-
+  const from = process.env.EMAIL_FROM ?? "Feedback Dashboard <no-reply@feedbackdashboard.com>";
   if (!apiKey) {
     console.warn("[report-notify] RESEND_API_KEY not set — email skipped");
-    return;
+    return false;
   }
-
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ from, to, subject, html }),
-  });
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to, subject, html }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      console.error(`[report-notify] Resend ${res.status} sending to ${to}: ${detail}`);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.error(`[report-notify] Resend request failed for ${to}: ${e?.message ?? e}`);
+    return false;
+  }
 }
 
 export async function POST(req: NextRequest) {
