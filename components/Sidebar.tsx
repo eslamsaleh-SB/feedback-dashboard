@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export type AppRole =
@@ -11,8 +12,6 @@ export type AppRole =
   | "TeamLeader"
   | "Supervisor"
   | "QualityLeader";
-
-type Item = { href: string; label: string };
 
 const roleLabel = (role: AppRole): string => {
   const map: Record<AppRole, string> = {
@@ -26,52 +25,87 @@ const roleLabel = (role: AppRole): string => {
   return map[role] ?? role;
 };
 
-function navItems(role: AppRole): Item[] {
+type NavItem = { href: string; label: string };
+type NavGroup = { key: string; label: string; items: NavItem[] };
+type NavEntry = { type: "link"; href: string; label: string } | { type: "group"; key: string; label: string; items: NavItem[] };
+
+function buildNav(role: AppRole): NavEntry[] {
   if (role === "Viewer") {
     return [
-      { href: "/analytics", label: "My Dashboard" },
-      { href: "/reports-sessions", label: "Reports & Sessions" },
-      { href: "/quality-score", label: "Quality Score" },
+      { type: "link", href: "/analytics", label: "Home" },
+      { type: "link", href: "/my-reports", label: "My Reports" },
+      { type: "link", href: "/my-sessions", label: "My Sessions" },
+      { type: "link", href: "/my-matches", label: "My Match Details" },
+      { type: "link", href: "/quality-score", label: "Quality Score" },
     ];
   }
 
-  const base: Item[] = [
-    { href: "/analytics", label: "Collectors Performance" },
-    { href: "/match-totals", label: "Match Total per Module" },
+  const entries: NavEntry[] = [
+    { type: "link", href: "/dashboard", label: "Home" },
+    {
+      type: "group",
+      key: "performance",
+      label: "Performance",
+      items: [
+        { href: "/analytics", label: "Collectors Performance" },
+        { href: "/match-totals", label: "Match Total Per Module" },
+        { href: "/quality-score", label: "Quality Score" },
+      ],
+    },
   ];
 
-  const canSeeFeedback =
-    role === "Admin" || role === "Uploader" || role === "Supervisor";
-  if (canSeeFeedback) {
-    base.push(
-      { href: "/feedback-reservation", label: "Feedback Reservation" },
-      { href: "/feedback-progress", label: "Feedback Progress" }
-    );
-  }
-
+  // Upload Data group
+  const uploadItems: NavItem[] = [];
   if (role === "Admin" || role === "Uploader") {
-    base.push(
-      { href: "/upload", label: "Report" },
-      { href: "/module-upload", label: "Module Data" }
-    );
+    uploadItems.push({ href: "/module-upload", label: "Module Data" });
   }
-
   if (role === "Admin" || role === "QualityLeader") {
-    base.push({ href: "/quality-upload", label: "Quality Score Upload" });
+    uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   }
-
-  base.push({ href: "/quality-score", label: "Quality Score" });
-
+  if (role === "Admin" || role === "Uploader") {
+    uploadItems.push({ href: "/upload", label: "Reports" });
+  }
   if (role === "Admin") {
-    base.push(
-      { href: "/admin-reports", label: "Admin Reports & Sessions" },
-      { href: "/report-monitoring", label: "Unacknowledged Reports" },
-      { href: "/collectors", label: "Collectors" },
-      { href: "/accounts", label: "Accounts" }
-    );
+    uploadItems.push({ href: "/send-report", label: "Send Report" });
+  }
+  if (uploadItems.length > 0) {
+    entries.push({ type: "group", key: "upload", label: "Upload Data", items: uploadItems });
   }
 
-  return base;
+  // Feedback group
+  if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
+    entries.push({
+      type: "group",
+      key: "feedback",
+      label: "Feedback",
+      items: [
+        { href: "/feedback-progress", label: "Feedback Progress" },
+        { href: "/feedback-reservation", label: "Feedback Reservations" },
+      ],
+    });
+  }
+
+  // Administration group (Admin only)
+  if (role === "Admin") {
+    entries.push({
+      type: "group",
+      key: "admin",
+      label: "Administration",
+      items: [
+        { href: "/admin-reports", label: "Admin Reports" },
+        { href: "/admin-sessions", label: "Admin Sessions" },
+        { href: "/report-monitoring", label: "Unacknowledged" },
+        { href: "/collectors", label: "Collectors" },
+        { href: "/accounts", label: "Accounts" },
+      ],
+    });
+  }
+
+  return entries;
+}
+
+function groupContainsPath(items: NavItem[], pathname: string): boolean {
+  return items.some((it) => pathname === it.href || pathname?.startsWith(it.href + "/"));
 }
 
 export default function Sidebar({
@@ -84,13 +118,30 @@ export default function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const navEntries = buildNav(role);
+
+  // Initialize open groups: open if the current path lives in that group
+  const initialOpen = new Set<string>();
+  for (const entry of navEntries) {
+    if (entry.type === "group" && groupContainsPath(entry.items, pathname ?? "")) {
+      initialOpen.add(entry.key);
+    }
+  }
+  const [openGroups, setOpenGroups] = useState<Set<string>>(initialOpen);
+
+  function toggleGroup(key: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/login");
   }
-
-  const items = navItems(role);
 
   return (
     <aside className="w-60 shrink-0 border-r border-slate-200 bg-white h-screen sticky top-0 flex flex-col overflow-y-auto">
@@ -102,21 +153,57 @@ export default function Sidebar({
       </div>
 
       <nav className="flex-1 p-3 space-y-1">
-        {items.map((it) => {
-          const active =
-            pathname === it.href || pathname?.startsWith(it.href + "/");
+        {navEntries.map((entry) => {
+          if (entry.type === "link") {
+            const active = pathname === entry.href || pathname?.startsWith(entry.href + "/");
+            return (
+              <Link
+                key={entry.href}
+                href={entry.href}
+                className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {entry.label}
+              </Link>
+            );
+          }
+
+          // Group
+          const isOpen = openGroups.has(entry.key);
+          const groupActive = groupContainsPath(entry.items, pathname ?? "");
+
           return (
-            <Link
-              key={it.href}
-              href={it.href}
-              className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
-                active
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {it.label}
-            </Link>
+            <div key={entry.key}>
+              <button
+                type="button"
+                onClick={() => toggleGroup(entry.key)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs uppercase font-semibold tracking-wider transition ${
+                  groupActive && !isOpen ? "text-slate-900 bg-slate-100" : "text-slate-400 hover:bg-slate-50"
+                }`}
+              >
+                <span>{entry.label}</span>
+                <span className="text-slate-400 ml-1">{isOpen ? "▼" : "▶"}</span>
+              </button>
+              {isOpen && (
+                <div className="mt-1 space-y-0.5 pl-3">
+                  {entry.items.map((item) => {
+                    const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
+                          active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>

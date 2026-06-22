@@ -3,20 +3,22 @@
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type Role = "Admin" | "Uploader" | "Viewer";
+type AppRole = "Admin"|"Uploader"|"Viewer"|"TeamLeader"|"Supervisor"|"QualityLeader";
 export type Account = {
   id: string;
   email: string | null;
   full_name: string | null;
-  role: Role;
+  role: AppRole;
   hr_code: string | null;
 };
 
-// Uploaders are shown as "Reviewers" in the UI (the DB role value stays Uploader).
-const ROLE_OPTIONS: { value: Role; label: string }[] = [
+const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
   { value: "Admin", label: "Admin" },
   { value: "Uploader", label: "Reviewer" },
-  { value: "Viewer", label: "Viewer" },
+  { value: "Viewer", label: "Collector" },
+  { value: "TeamLeader", label: "Team Leader" },
+  { value: "Supervisor", label: "Supervisor" },
+  { value: "QualityLeader", label: "Quality Leader" },
 ];
 
 export default function AccountsManager({ accounts }: { accounts: Account[] }) {
@@ -37,7 +39,7 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
     );
   }, [rows, search]);
 
-  function setRole(id: string, role: Role) {
+  function setRole(id: string, role: AppRole) {
     setRows((p) => p.map((r) => (r.id === id ? { ...r, role } : r)));
   }
 
@@ -110,7 +112,7 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
                 <td className="px-4 py-2.5">
                   <select
                     value={a.role}
-                    onChange={(e) => setRole(a.id, e.target.value as Role)}
+                    onChange={(e) => setRole(a.id, e.target.value as AppRole)}
                     className="rounded-lg border border-slate-300 px-2 py-1.5 bg-white text-sm"
                   >
                     {ROLE_OPTIONS.map((o) => (
