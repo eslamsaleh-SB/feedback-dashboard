@@ -132,6 +132,18 @@ export async function POST(req: NextRequest) {
       );
     }
     matchSessionId = created.id;
+
+    // Fire-and-forget email notification to the collector
+    fetch("/api/session-notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        collector_id: collectorId,
+        match_name: matchName,
+        review_date: reviewDate,
+        overall_notes: notes || null,
+      }),
+    }).catch(() => {});
   }
 
   // ---- Fetch the videos from Google Drive ----
