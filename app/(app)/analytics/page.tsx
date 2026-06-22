@@ -99,19 +99,33 @@ export default async function AnalyticsPage({
       total: Number(r.total),
     }));
 
-    const { data: ctRows } = await supabase.rpc("collector_module_totals", {
-      p_from: from,
-      p_to: to,
-    });
-    const me = (ctRows ?? [])[0];
-    const moduleTotals = me ? numCounts(me) : emptyCounts();
+    // Compute module totals from parts data (already filtered to this collector via RLS)
+    const moduleTotals = emptyCounts();
+    const myParts = (partRows ?? []).filter((r: any) =>
+      profile?.hr_code && r.hr_code &&
+      r.hr_code.toLowerCase() === profile.hr_code.toLowerCase()
+    );
+    for (const r of myParts) {
+      const c = numCounts(r);
+      (Object.keys(c) as (keyof typeof c)[]).forEach((k) => {
+        moduleTotals[k] = (moduleTotals[k] ?? 0) + c[k];
+      });
+    }
+
+    // Find collector record to get their sessions
+    const { data: collectorRow } = await supabase
+      .from("collectors")
+      .select("id")
+      .eq("hr_code", profile?.hr_code ?? "")
+      .single();
 
     let rq = supabase
-      .from("reports")
-      .select("id, title, body, url, report_date")
-      .order("report_date", { ascending: false });
-    if (from) rq = rq.gte("report_date", from);
-    if (to) rq = rq.lte("report_date", to);
+      .from("match_sessions")
+      .select("id, match_name, review_date, overall_notes")
+      .eq("collector_id", collectorRow?.id ?? "00000000-0000-0000-0000-000000000000")
+      .order("review_date", { ascending: false });
+    if (from) rq = rq.gte("review_date", from);
+    if (to) rq = rq.lte("review_date", to);
     const { data: reportRows } = await rq;
 
     let fq = supabase
@@ -132,7 +146,13 @@ export default async function AnalyticsPage({
         to={to ?? ""}
         parts={parts}
         moduleTotals={moduleTotals}
-        reports={(reportRows ?? []) as Report[]}
+        reports={(reportRows ?? []).map((r: any) => ({
+          id: r.id,
+          title: r.match_name,
+          body: r.overall_notes ?? null,
+          url: null,
+          report_date: r.review_date ?? null,
+        }))}
         feedbackSessions={(fsRows ?? []) as FeedbackSession[]}
       />
     );

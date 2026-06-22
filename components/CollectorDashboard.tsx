@@ -120,7 +120,7 @@ export default function CollectorDashboard({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <button
           type="button"
-          onClick={() => router.push("/reports-sessions")}
+          onClick={() => router.push("/my-reports")}
           className="bg-white rounded-2xl border border-slate-200 p-5 text-left hover:bg-slate-50 transition"
         >
           <p className="text-sm text-slate-500">Reports</p>
@@ -129,7 +129,7 @@ export default function CollectorDashboard({
         </button>
         <button
           type="button"
-          onClick={() => router.push("/reports-sessions")}
+          onClick={() => router.push("/my-sessions")}
           className="bg-white rounded-2xl border border-slate-200 p-5 text-left hover:bg-slate-50 transition"
         >
           <p className="text-sm text-slate-500">Feedback sessions</p>
