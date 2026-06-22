@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import CollectorsManager, { type Collector } from "@/components/CollectorsManager";
+import CollectorsManager from "@/components/CollectorsManager";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,8 @@ export default async function CollectorsPage() {
     .select("role")
     .eq("id", user.id)
     .single();
-  if (profile?.role !== "Admin") redirect("/analytics");
+
+  if (profile?.role !== "Admin") redirect("/dashboard");
 
   const { data: collectors } = await supabase
     .from("collectors")
@@ -24,10 +25,8 @@ export default async function CollectorsPage() {
     .order("name");
 
   const teams = Array.from(
-    new Set((collectors ?? []).map((c: any) => c.team).filter(Boolean) as string[])
-  ).sort();
+    new Set((collectors ?? []).map((c: any) => c.team as string).filter(Boolean))
+  ).sort() as string[];
 
-  return (
-    <CollectorsManager initial={(collectors ?? []) as Collector[]} teams={teams} />
-  );
+  return <CollectorsManager initial={collectors ?? []} teams={teams} />;
 }
