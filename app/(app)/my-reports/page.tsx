@@ -45,7 +45,7 @@ export default async function MyReportsPage() {
       ? supabase.from("session_notes").select("id, session_id, note_text, status, created_at").in("session_id", sessionIds).eq("hr_code", hrCode).order("created_at")
       : Promise.resolve({ data: [] }),
     sessionIds.length
-      ? supabase.from("session_videos").select("id, session_id, drive_file_id, file_name").in("session_id", sessionIds)
+      ? supabase.from("session_videos").select("id, match_session_id, drive_file_id, file_name").in("match_session_id", sessionIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -60,7 +60,7 @@ export default async function MyReportsPage() {
 
   const videosBySession: Record<string, any[]> = {};
   for (const v of videoRows ?? []) {
-    const k = v.session_id as string;
+    const k = v.match_session_id as string;
     if (!videosBySession[k]) videosBySession[k] = [];
     videosBySession[k].push({ id: v.id, drive_file_id: v.drive_file_id, file_name: v.file_name });
   }

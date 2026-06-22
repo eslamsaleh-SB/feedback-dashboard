@@ -32,7 +32,7 @@ export default async function AdminReportsPage() {
       .select("session_id"),
     supabase
       .from("session_videos")
-      .select("id, session_id, drive_file_id, file_name"),
+      .select("id, match_session_id, drive_file_id, file_name"),
   ]);
 
   const ackedIds = new Set((ackRows ?? []).map((a: any) => a.session_id as string));
@@ -46,7 +46,7 @@ export default async function AdminReportsPage() {
 
   const videosBySession: Record<string, any[]> = {};
   for (const v of videoRows ?? []) {
-    const k = v.session_id as string;
+    const k = v.match_session_id as string;
     if (!videosBySession[k]) videosBySession[k] = [];
     videosBySession[k].push({ id: v.id, drive_file_id: v.drive_file_id, file_name: v.file_name });
   }
