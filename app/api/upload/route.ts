@@ -134,7 +134,8 @@ export async function POST(req: NextRequest) {
     matchSessionId = created.id;
 
     // Fire-and-forget email notification to the collector
-    fetch("/api/session-notify", {
+    const _origin = new URL(req.url).origin;
+    fetch(`${_origin}/api/session-notify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+type VideoItem = { id: string; drive_file_id: string; file_name: string };
+type NoteItem  = { id: string; note_text: string; status: string; created_at: string };
 type SessionReport = {
   id: string;
   match_name: string;
@@ -10,12 +12,7 @@ type SessionReport = {
   overall_notes: string | null;
   acknowledged: boolean;
   notes: NoteItem[];
-};
-type NoteItem = {
-  id: string;
-  note_text: string;
-  status: string;
-  created_at: string;
+  videos: VideoItem[];
 };
 
 const statusBadge: Record<string, string> = {
@@ -24,13 +21,7 @@ const statusBadge: Record<string, string> = {
   Complete:      "bg-emerald-100 text-emerald-700",
 };
 
-export default function MyReportsView({
-  sessions,
-  hrCode,
-}: {
-  sessions: SessionReport[];
-  hrCode: string;
-}) {
+export default function MyReportsView({ sessions, hrCode }: { sessions: SessionReport[]; hrCode: string }) {
   const supabase = createClient();
   const [items, setItems] = useState(sessions);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -40,21 +31,14 @@ export default function MyReportsView({
 
   const filtered = items.filter((s) => {
     if (filter === "Acknowledged") return s.acknowledged;
-    if (filter === "Pending") return !s.acknowledged;
+    if (filter === "Pending")      return !s.acknowledged;
     return true;
   });
 
   async function acknowledge(sessionId: string) {
     setSaving(sessionId);
-    const { error } = await supabase.from("session_acknowledgments").insert({
-      session_id: sessionId,
-      hr_code: hrCode,
-    });
-    if (!error) {
-      setItems((prev) =>
-        prev.map((s) => s.id === sessionId ? { ...s, acknowledged: true } : s)
-      );
-    }
+    const { error } = await supabase.from("session_acknowledgments").insert({ session_id: sessionId, hr_code: hrCode });
+    if (!error) setItems((prev) => prev.map((s) => s.id === sessionId ? { ...s, acknowledged: true } : s));
     setSaving(null);
   }
 
@@ -68,22 +52,14 @@ export default function MyReportsView({
       .select("id, note_text, status, created_at")
       .single();
     if (!error && data) {
-      setItems((prev) =>
-        prev.map((s) =>
-          s.id === sessionId
-            ? { ...s, notes: [...s.notes, data as NoteItem] }
-            : s
-        )
-      );
+      setItems((prev) => prev.map((s) => s.id === sessionId ? { ...s, notes: [...s.notes, data as NoteItem] } : s));
       setNoteText((prev) => ({ ...prev, [sessionId]: "" }));
     }
     setSaving(null);
   }
 
   const btnCls = (f: typeof filter) =>
-    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-      filter === f ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50"
-    }`;
+    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${filter === f ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50"}`;
 
   return (
     <div className="space-y-6">
@@ -108,7 +84,6 @@ export default function MyReportsView({
             const isExp = expandedId === s.id;
             return (
               <div key={s.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                {/* Row header */}
                 <button
                   type="button"
                   onClick={() => setExpandedId(isExp ? null : s.id)}
@@ -116,13 +91,13 @@ export default function MyReportsView({
                 >
                   <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
                     <span className="font-semibold text-slate-800">{s.match_name}</span>
-                    {s.review_date && (
-                      <span className="text-xs text-slate-400">{s.review_date}</span>
-                    )}
-                    {s.acknowledged ? (
-                      <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">Acknowledged</span>
-                    ) : (
-                      <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium">Pending</span>
+                    {s.review_date && <span className="text-xs text-slate-400">{s.review_date}</span>}
+                    {s.acknowledged
+                      ? <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">Acknowledged</span>
+                      : <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium">Pending</span>
+                    }
+                    {s.videos.length > 0 && (
+                      <span className="text-xs text-slate-500">{s.videos.length} video(s)</span>
                     )}
                     {s.notes.length > 0 && (
                       <span className="text-xs text-slate-500">{s.notes.length} note(s)</span>
@@ -132,9 +107,30 @@ export default function MyReportsView({
                 </button>
 
                 {isExp && (
-                  <div className="border-t border-slate-100 px-5 pb-5 pt-4 space-y-4">
+                  <div className="border-t border-slate-100 px-5 pb-5 pt-4 space-y-5">
                     {s.overall_notes && (
                       <p className="text-sm text-slate-600 whitespace-pre-wrap">{s.overall_notes}</p>
+                    )}
+
+                    {/* Videos */}
+                    {s.videos.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-slate-700 mb-2">Videos ({s.videos.length})</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {s.videos.map((v) => (
+                            <a
+                              key={v.id}
+                              href={`https://drive.google.com/file/d/${v.drive_file_id}/view`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 transition group"
+                            >
+                              <span className="text-slate-400 text-base">▶</span>
+                              <span className="flex-1 truncate text-blue-600 group-hover:underline">{v.file_name}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
                     {/* Acknowledge */}
@@ -156,9 +152,7 @@ export default function MyReportsView({
                         {s.notes.map((n) => (
                           <div key={n.id} className="bg-slate-50 rounded-lg px-4 py-3 flex items-start justify-between gap-3">
                             <p className="text-sm text-slate-700">{n.note_text}</p>
-                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[n.status] ?? ""}`}>
-                              {n.status}
-                            </span>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[n.status] ?? ""}`}>{n.status}</span>
                           </div>
                         ))}
                       </div>

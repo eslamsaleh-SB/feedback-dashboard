@@ -17,6 +17,7 @@ export default async function AdminReportsPage() {
     { data: sessions },
     { data: noteRows },
     { data: ackRows },
+    { data: videoRows },
   ] = await Promise.all([
     supabase
       .from("match_sessions")
@@ -29,6 +30,9 @@ export default async function AdminReportsPage() {
     supabase
       .from("session_acknowledgments")
       .select("session_id"),
+    supabase
+      .from("session_videos")
+      .select("id, session_id, drive_file_id, file_name"),
   ]);
 
   const ackedIds = new Set((ackRows ?? []).map((a: any) => a.session_id as string));
@@ -37,10 +41,14 @@ export default async function AdminReportsPage() {
   for (const n of noteRows ?? []) {
     const k = n.session_id as string;
     if (!notesBySession[k]) notesBySession[k] = [];
-    notesBySession[k].push({
-      id: n.id, hr_code: n.hr_code, note_text: n.note_text,
-      status: n.status, created_at: n.created_at,
-    });
+    notesBySession[k].push({ id: n.id, hr_code: n.hr_code, note_text: n.note_text, status: n.status, created_at: n.created_at });
+  }
+
+  const videosBySession: Record<string, any[]> = {};
+  for (const v of videoRows ?? []) {
+    const k = v.session_id as string;
+    if (!videosBySession[k]) videosBySession[k] = [];
+    videosBySession[k].push({ id: v.id, drive_file_id: v.drive_file_id, file_name: v.file_name });
   }
 
   return (
@@ -56,6 +64,7 @@ export default async function AdminReportsPage() {
           collector_name: c?.name ?? null,
           acknowledged: ackedIds.has(s.id),
           notes: notesBySession[s.id] ?? [],
+          videos: videosBySession[s.id] ?? [],
         };
       })}
     />

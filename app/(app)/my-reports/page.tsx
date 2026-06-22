@@ -19,7 +19,6 @@ export default async function MyReportsPage() {
 
   const hrCode = profile?.hr_code ?? "";
 
-  // Find collector record by hr_code
   const { data: collector } = await supabase
     .from("collectors")
     .select("id")
@@ -27,38 +26,43 @@ export default async function MyReportsPage() {
     .single();
 
   if (!collector) {
-    return (
-      <div className="p-8 text-slate-500">
-        No collector record linked to your account yet.
-      </div>
-    );
+    return <div className="p-8 text-slate-500">No collector record linked to your account yet.</div>;
   }
 
-  // Fetch sessions for this collector
   const { data: sessions } = await supabase
     .from("match_sessions")
     .select("id, match_name, review_date, overall_notes")
     .eq("collector_id", collector.id)
     .order("review_date", { ascending: false });
 
-  // Fetch acknowledgments and notes
   const sessionIds = (sessions ?? []).map((s: any) => s.id as string);
 
-  const [{ data: ackRows }, { data: noteRows }] = await Promise.all([
+  const [{ data: ackRows }, { data: noteRows }, { data: videoRows }] = await Promise.all([
     sessionIds.length
       ? supabase.from("session_acknowledgments").select("session_id").in("session_id", sessionIds).eq("hr_code", hrCode)
       : Promise.resolve({ data: [] }),
     sessionIds.length
       ? supabase.from("session_notes").select("id, session_id, note_text, status, created_at").in("session_id", sessionIds).eq("hr_code", hrCode).order("created_at")
       : Promise.resolve({ data: [] }),
+    sessionIds.length
+      ? supabase.from("session_videos").select("id, session_id, drive_file_id, file_name").in("session_id", sessionIds)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const ackedIds = new Set((ackRows ?? []).map((a: any) => a.session_id as string));
+
   const notesBySession: Record<string, any[]> = {};
   for (const n of noteRows ?? []) {
     const k = n.session_id as string;
     if (!notesBySession[k]) notesBySession[k] = [];
     notesBySession[k].push({ id: n.id, note_text: n.note_text, status: n.status, created_at: n.created_at });
+  }
+
+  const videosBySession: Record<string, any[]> = {};
+  for (const v of videoRows ?? []) {
+    const k = v.session_id as string;
+    if (!videosBySession[k]) videosBySession[k] = [];
+    videosBySession[k].push({ id: v.id, drive_file_id: v.drive_file_id, file_name: v.file_name });
   }
 
   return (
@@ -71,6 +75,7 @@ export default async function MyReportsPage() {
         overall_notes: s.overall_notes,
         acknowledged: ackedIds.has(s.id),
         notes: notesBySession[s.id] ?? [],
+        videos: videosBySession[s.id] ?? [],
       }))}
     />
   );
