@@ -1,18 +1,77 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import MyReportsView from "@/components/MyReportsView";
+
 export const dynamic = "force-dynamic";
+
 export default async function MyReportsPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: profile } = await supabase.from("profiles").select("role, hr_code").eq("id", user.id).single();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, hr_code")
+    .eq("id", user.id)
+    .single();
+
   if (profile?.role !== "Viewer") redirect("/admin-reports");
-  const { data: reportRows } = await supabase.from("reports").select("id, title, body, url, report_date").order("report_date", { ascending: false });
-  const { data: ackRows } = await supabase.from("report_acknowledgments").select("report_id");
-  const ackedIds = new Set((ackRows ?? []).map((r: any) => r.report_id as string));
-  return <MyReportsView
-    myHr={profile?.hr_code ?? null}
-    reports={(reportRows ?? []).map((r: any) => ({ id: r.id, title: r.title, body: r.body, url: r.url, report_date: r.report_date, acknowledged: ackedIds.has(r.id) }))}
-  />;
+
+  const hrCode = profile?.hr_code ?? "";
+
+  // Find collector record by hr_code
+  const { data: collector } = await supabase
+    .from("collectors")
+    .select("id")
+    .eq("hr_code", hrCode)
+    .single();
+
+  if (!collector) {
+    return (
+      <div className="p-8 text-slate-500">
+        No collector record linked to your account yet.
+      </div>
+    );
+  }
+
+  // Fetch sessions for this collector
+  const { data: sessions } = await supabase
+    .from("match_sessions")
+    .select("id, match_name, review_date, overall_notes")
+    .eq("collector_id", collector.id)
+    .order("review_date", { ascending: false });
+
+  // Fetch acknowledgments and notes
+  const sessionIds = (sessions ?? []).map((s: any) => s.id as string);
+
+  const [{ data: ackRows }, { data: noteRows }] = await Promise.all([
+    sessionIds.length
+      ? supabase.from("session_acknowledgments").select("session_id").in("session_id", sessionIds).eq("hr_code", hrCode)
+      : Promise.resolve({ data: [] }),
+    sessionIds.length
+      ? supabase.from("session_notes").select("id, session_id, note_text, status, created_at").in("session_id", sessionIds).eq("hr_code", hrCode).order("created_at")
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const ackedIds = new Set((ackRows ?? []).map((a: any) => a.session_id as string));
+  const notesBySession: Record<string, any[]> = {};
+  for (const n of noteRows ?? []) {
+    const k = n.session_id as string;
+    if (!notesBySession[k]) notesBySession[k] = [];
+    notesBySession[k].push({ id: n.id, note_text: n.note_text, status: n.status, created_at: n.created_at });
+  }
+
+  return (
+    <MyReportsView
+      hrCode={hrCode}
+      sessions={(sessions ?? []).map((s: any) => ({
+        id: s.id,
+        match_name: s.match_name,
+        review_date: s.review_date,
+        overall_notes: s.overall_notes,
+        acknowledged: ackedIds.has(s.id),
+        notes: notesBySession[s.id] ?? [],
+      }))}
+    />
+  );
 }

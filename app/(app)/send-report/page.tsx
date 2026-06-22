@@ -1,4 +1,4 @@
 import { redirect } from "next/navigation";
 export default function SendReportPage() {
-  redirect("/admin-reports");
+  redirect("/upload");
 }

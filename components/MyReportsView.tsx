@@ -3,173 +3,188 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type ReportItem = {
+type SessionReport = {
   id: string;
-  title: string;
-  body: string | null;
-  url: string | null;
-  report_date: string | null;
+  match_name: string;
+  review_date: string | null;
+  overall_notes: string | null;
   acknowledged: boolean;
+  notes: NoteItem[];
+};
+type NoteItem = {
+  id: string;
+  note_text: string;
+  status: string;
+  created_at: string;
 };
 
-type FilterMode = "all" | "pending" | "acknowledged";
+const statusBadge: Record<string, string> = {
+  "Not Started": "bg-slate-100 text-slate-600",
+  "In Progress": "bg-amber-100 text-amber-700",
+  Complete:      "bg-emerald-100 text-emerald-700",
+};
 
 export default function MyReportsView({
-  reports: initialReports,
-  myHr,
+  sessions,
+  hrCode,
 }: {
-  reports: ReportItem[];
-  myHr: string | null;
+  sessions: SessionReport[];
+  hrCode: string;
 }) {
   const supabase = createClient();
-  const [reports, setReports] = useState<ReportItem[]>(initialReports);
-  const [filter, setFilter] = useState<FilterMode>("all");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [items, setItems] = useState(sessions);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [noteTexts, setNoteTexts] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState<string | null>(null);
-  const [acking, setAcking] = useState<string | null>(null);
-  const [msg, setMsg] = useState<Record<string, { type: "ok" | "err"; text: string }>>({});
+  const [noteText, setNoteText] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"All" | "Acknowledged" | "Pending">("All");
 
-  const filtered = reports.filter((r) => {
-    if (filter === "pending" && r.acknowledged) return false;
-    if (filter === "acknowledged" && !r.acknowledged) return false;
-    if (from && r.report_date && r.report_date < from) return false;
-    if (to && r.report_date && r.report_date > to) return false;
+  const filtered = items.filter((s) => {
+    if (filter === "Acknowledged") return s.acknowledged;
+    if (filter === "Pending") return !s.acknowledged;
     return true;
   });
 
-  async function acknowledge(id: string) {
-    if (!myHr) return;
-    setAcking(id);
-    const { error } = await supabase
-      .from("report_acknowledgments")
-      .insert({ report_id: id, hr_code: myHr });
-    setAcking(null);
-    if (error) {
-      setMsg((m) => ({ ...m, [id]: { type: "err", text: error.message } }));
-      return;
-    }
-    setReports((prev) => prev.map((r) => r.id === id ? { ...r, acknowledged: true } : r));
-  }
-
-  async function submitNote(id: string) {
-    if (!myHr) return;
-    const text = (noteTexts[id] ?? "").trim();
-    if (!text) return;
-    setSubmitting(id);
-    const { error } = await supabase.from("report_notes").insert({
-      report_id: id,
-      hr_code: myHr,
-      note_text: text,
+  async function acknowledge(sessionId: string) {
+    setSaving(sessionId);
+    const { error } = await supabase.from("session_acknowledgments").insert({
+      session_id: sessionId,
+      hr_code: hrCode,
     });
-    setSubmitting(null);
-    if (error) {
-      setMsg((m) => ({ ...m, [id]: { type: "err", text: error.message } }));
-      return;
+    if (!error) {
+      setItems((prev) =>
+        prev.map((s) => s.id === sessionId ? { ...s, acknowledged: true } : s)
+      );
     }
-    setNoteTexts((n) => ({ ...n, [id]: "" }));
-    setMsg((m) => ({ ...m, [id]: { type: "ok", text: "Note sent." } }));
-    setTimeout(() => setMsg((m) => { const next = { ...m }; delete next[id]; return next; }), 3000);
+    setSaving(null);
   }
 
-  const filterBtnClass = (f: FilterMode) =>
-    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${filter === f ? "bg-slate-900 text-white" : "text-slate-600 border border-slate-300 hover:bg-slate-50"}`;
+  async function addNote(sessionId: string) {
+    const text = (noteText[sessionId] ?? "").trim();
+    if (!text) return;
+    setSaving("note-" + sessionId);
+    const { data, error } = await supabase
+      .from("session_notes")
+      .insert({ session_id: sessionId, hr_code: hrCode, note_text: text })
+      .select("id, note_text, status, created_at")
+      .single();
+    if (!error && data) {
+      setItems((prev) =>
+        prev.map((s) =>
+          s.id === sessionId
+            ? { ...s, notes: [...s.notes, data as NoteItem] }
+            : s
+        )
+      );
+      setNoteText((prev) => ({ ...prev, [sessionId]: "" }));
+    }
+    setSaving(null);
+  }
+
+  const btnCls = (f: typeof filter) =>
+    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+      filter === f ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+    }`;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">My Reports</h1>
-        <p className="text-slate-500 text-sm mt-1">Reports sent to you or all collectors.</p>
+        <p className="text-slate-500 text-sm mt-1">Your match session reports. Acknowledge each one and add notes if needed.</p>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
-        <div className="flex gap-2">
-          <button className={filterBtnClass("all")} onClick={() => setFilter("all")}>All</button>
-          <button className={filterBtnClass("pending")} onClick={() => setFilter("pending")}>Pending</button>
-          <button className={filterBtnClass("acknowledged")} onClick={() => setFilter("acknowledged")}>Acknowledged</button>
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">From</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">To</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </div>
-        {(from || to) && (
-          <button onClick={() => { setFrom(""); setTo(""); }} className="text-sm text-slate-500 underline self-end pb-2">Clear dates</button>
-        )}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex gap-2">
+        {(["All","Acknowledged","Pending"] as const).map((f) => (
+          <button key={f} className={btnCls(f)} onClick={() => setFilter(f)}>{f}</button>
+        ))}
       </div>
 
       <p className="text-sm text-slate-500">{filtered.length} report(s)</p>
 
       {filtered.length === 0 ? (
-        <p className="text-slate-500">No reports for this filter.</p>
+        <p className="text-slate-500">No reports yet.</p>
       ) : (
         <div className="space-y-3">
-          {filtered.map((r) => {
-            const isExpanded = expandedId === r.id;
+          {filtered.map((s) => {
+            const isExp = expandedId === s.id;
             return (
-              <div key={r.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div key={s.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                {/* Row header */}
                 <button
                   type="button"
-                  onClick={() => setExpandedId(isExpanded ? null : r.id)}
-                  className="w-full text-left px-5 py-4 flex items-start justify-between gap-4 hover:bg-slate-50"
+                  onClick={() => setExpandedId(isExp ? null : s.id)}
+                  className="w-full text-left px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-50"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-slate-800">{r.title}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.acknowledged ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                        {r.acknowledged ? "Acknowledged" : "Pending"}
-                      </span>
-                    </div>
-                    {r.report_date && (
-                      <p className="text-xs text-slate-400 mt-0.5">{r.report_date}</p>
+                  <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+                    <span className="font-semibold text-slate-800">{s.match_name}</span>
+                    {s.review_date && (
+                      <span className="text-xs text-slate-400">{s.review_date}</span>
+                    )}
+                    {s.acknowledged ? (
+                      <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">Acknowledged</span>
+                    ) : (
+                      <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium">Pending</span>
+                    )}
+                    {s.notes.length > 0 && (
+                      <span className="text-xs text-slate-500">{s.notes.length} note(s)</span>
                     )}
                   </div>
-                  <span className="text-slate-400 text-sm mt-1">{isExpanded ? "▲" : "▼"}</span>
+                  <span className="text-slate-400 text-sm">{isExp ? "▲" : "▼"}</span>
                 </button>
 
-                {isExpanded && (
-                  <div className="px-5 pb-5 space-y-3 border-t border-slate-100 pt-4">
-                    {r.body && <p className="text-slate-700 text-sm whitespace-pre-wrap">{r.body}</p>}
-                    {r.url && (
-                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline break-all">
-                        {r.url}
-                      </a>
+                {isExp && (
+                  <div className="border-t border-slate-100 px-5 pb-5 pt-4 space-y-4">
+                    {s.overall_notes && (
+                      <p className="text-sm text-slate-600 whitespace-pre-wrap">{s.overall_notes}</p>
                     )}
-                    {!r.acknowledged && (
+
+                    {/* Acknowledge */}
+                    {!s.acknowledged && (
                       <button
-                        onClick={() => acknowledge(r.id)}
-                        disabled={acking === r.id}
-                        className="rounded-lg bg-emerald-600 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
+                        type="button"
+                        disabled={saving === s.id}
+                        onClick={() => acknowledge(s.id)}
+                        className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
                       >
-                        {acking === r.id ? "Acknowledging..." : "Acknowledge"}
+                        {saving === s.id ? "Saving…" : "Acknowledge Report"}
                       </button>
                     )}
+
+                    {/* Existing notes */}
+                    {s.notes.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-slate-700">Your Notes</p>
+                        {s.notes.map((n) => (
+                          <div key={n.id} className="bg-slate-50 rounded-lg px-4 py-3 flex items-start justify-between gap-3">
+                            <p className="text-sm text-slate-700">{n.note_text}</p>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[n.status] ?? ""}`}>
+                              {n.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add note */}
                     <div className="space-y-2">
-                      <p className="text-sm font-medium text-slate-700">Add a note</p>
-                      <textarea
-                        value={noteTexts[r.id] ?? ""}
-                        onChange={(e) => setNoteTexts((n) => ({ ...n, [r.id]: e.target.value }))}
-                        placeholder="Write a note to your supervisor..."
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm min-h-[80px]"
-                      />
-                      <button
-                        onClick={() => submitNote(r.id)}
-                        disabled={submitting === r.id || !(noteTexts[r.id] ?? "").trim()}
-                        className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
-                      >
-                        {submitting === r.id ? "Sending..." : "Send Note"}
-                      </button>
-                      {msg[r.id] && (
-                        <p className={`text-sm ${msg[r.id].type === "ok" ? "text-emerald-600" : "text-red-600"}`}>
-                          {msg[r.id].text}
-                        </p>
-                      )}
+                      <p className="text-sm font-medium text-slate-700">Add a Note</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={noteText[s.id] ?? ""}
+                          onChange={(e) => setNoteText((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                          placeholder="Ask a question or leave a comment…"
+                          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          onKeyDown={(e) => { if (e.key === "Enter") addNote(s.id); }}
+                        />
+                        <button
+                          type="button"
+                          disabled={saving === "note-" + s.id || !(noteText[s.id] ?? "").trim()}
+                          onClick={() => addNote(s.id)}
+                          className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-50"
+                        >
+                          {saving === "note-" + s.id ? "…" : "Send"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

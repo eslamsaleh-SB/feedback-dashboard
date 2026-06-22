@@ -10,51 +10,54 @@ export default async function AdminReportsPage() {
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+    .from("profiles").select("role").eq("id", user.id).single();
   if (profile?.role !== "Admin") redirect("/analytics");
 
   const [
-    { data: collectors },
-    { data: reportRows },
+    { data: sessions },
     { data: noteRows },
     { data: ackRows },
   ] = await Promise.all([
-    supabase.from("collectors").select("hr_code, name").order("name"),
-    supabase.from("reports").select("id, title, body, url, report_date, hr_code").order("created_at", { ascending: false }),
-    supabase.from("report_notes").select("id, report_id, hr_code, note_text, status, created_at").order("created_at", { ascending: false }),
-    supabase.from("report_acknowledgments").select("report_id, hr_code"),
+    supabase
+      .from("match_sessions")
+      .select("id, match_name, review_date, overall_notes, collector_id, collectors(hr_code, name)")
+      .order("review_date", { ascending: false }),
+    supabase
+      .from("session_notes")
+      .select("id, session_id, hr_code, note_text, status, created_at")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("session_acknowledgments")
+      .select("session_id"),
   ]);
 
-  const ackByReport: Record<string, string[]> = {};
-  for (const a of ackRows ?? []) {
-    const k = a.report_id as string;
-    if (!ackByReport[k]) ackByReport[k] = [];
-    ackByReport[k].push(a.hr_code as string);
+  const ackedIds = new Set((ackRows ?? []).map((a: any) => a.session_id as string));
+
+  const notesBySession: Record<string, any[]> = {};
+  for (const n of noteRows ?? []) {
+    const k = n.session_id as string;
+    if (!notesBySession[k]) notesBySession[k] = [];
+    notesBySession[k].push({
+      id: n.id, hr_code: n.hr_code, note_text: n.note_text,
+      status: n.status, created_at: n.created_at,
+    });
   }
 
   return (
     <AdminReportsView
-      collectors={(collectors ?? []).map((c: any) => ({ hr_code: c.hr_code, name: c.name }))}
-      reports={(reportRows ?? []).map((r: any) => ({
-        id: r.id,
-        title: r.title,
-        body: r.body,
-        url: r.url,
-        report_date: r.report_date,
-        hr_code: r.hr_code,
-        acked_by: ackByReport[r.id] ?? [],
-      }))}
-      notes={(noteRows ?? []).map((r: any) => ({
-        id: r.id,
-        report_id: r.report_id,
-        hr_code: r.hr_code,
-        note_text: r.note_text,
-        status: r.status,
-        created_at: r.created_at,
-      }))}
+      sessions={(sessions ?? []).map((s: any) => {
+        const c = Array.isArray(s.collectors) ? s.collectors[0] : s.collectors;
+        return {
+          id: s.id,
+          match_name: s.match_name,
+          review_date: s.review_date,
+          overall_notes: s.overall_notes,
+          hr_code: c?.hr_code ?? null,
+          collector_name: c?.name ?? null,
+          acknowledged: ackedIds.has(s.id),
+          notes: notesBySession[s.id] ?? [],
+        };
+      })}
     />
   );
 }

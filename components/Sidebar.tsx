@@ -63,11 +63,9 @@ function buildNav(role: AppRole): NavEntry[] {
     uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   }
   if (role === "Admin" || role === "Uploader") {
-    uploadItems.push({ href: "/upload", label: "Reports" });
+    uploadItems.push({ href: "/upload", label: "Send Report" });
   }
-  if (role === "Admin") {
-    uploadItems.push({ href: "/send-report", label: "Send Report" });
-  }
+  // Send Report is now merged into /admin-reports (Reports page)
   if (uploadItems.length > 0) {
     entries.push({ type: "group", key: "upload", label: "Upload Data", items: uploadItems });
   }
@@ -92,9 +90,8 @@ function buildNav(role: AppRole): NavEntry[] {
       key: "admin",
       label: "Administration",
       items: [
-        { href: "/admin-reports", label: "Admin Reports" },
-        { href: "/admin-sessions", label: "Admin Sessions" },
-        { href: "/report-monitoring", label: "Unacknowledged" },
+        { href: "/admin-reports", label: "Reports" },
+        { href: "/admin-sessions", label: "Sessions" },
         { href: "/collectors", label: "Collectors" },
         { href: "/accounts", label: "Accounts" },
       ],

@@ -24,7 +24,7 @@ export default async function DashboardPage() {
   });
 
   const [
-    { count: sessionCount },
+    { count: reportCount },
     { count: collectorCount },
     { count: scheduledSessions },
     { count: openNotes },
@@ -32,18 +32,18 @@ export default async function DashboardPage() {
     supabase.from("match_sessions").select("id", { count: "exact", head: true }),
     supabase.from("collectors").select("id", { count: "exact", head: true }),
     supabase.from("feedback_meetings").select("id", { count: "exact", head: true }).eq("status", "Scheduled"),
-    supabase.from("report_notes").select("id", { count: "exact", head: true }).eq("status", "Not Started"),
+    supabase.from("session_notes").select("id", { count: "exact", head: true }).eq("status", "Not Started"),
   ]);
 
   const stats = [
-    { label: "Match Sessions",      value: sessionCount    ?? 0, href: "/upload",          color: "text-blue-600"  },
-    { label: "Collectors",          value: collectorCount  ?? 0, href: "/collectors",       color: "text-slate-800" },
-    { label: "Scheduled Sessions",  value: scheduledSessions ?? 0, href: "/admin-sessions", color: "text-sky-600"   },
-    { label: "Open Notes",          value: openNotes       ?? 0, href: "/admin-reports",    color: openNotes ? "text-amber-600" : "text-slate-800" },
+    { label: "Send Report",         value: reportCount       ?? 0, href: "/upload",          color: "text-blue-600"  },
+    { label: "Collectors",          value: collectorCount    ?? 0, href: "/collectors",       color: "text-slate-800" },
+    { label: "Scheduled Sessions",  value: scheduledSessions ?? 0, href: "/admin-sessions",   color: "text-sky-600"   },
+    { label: "Open Notes",          value: openNotes         ?? 0, href: "/admin-reports",    color: openNotes ? "text-amber-600" : "text-slate-800" },
   ];
 
   const quickActions = [
-    { href: "/admin-reports",        title: "Reports →",       desc: "Send collector reports and manage notes."        },
+    { href: "/upload",               title: "Send Report →",   desc: "Upload a match session report for a collector."  },
     { href: "/feedback-reservation", title: "Book Feedback →", desc: "Schedule an online or offline feedback session." },
   ];
 
@@ -54,7 +54,6 @@ export default async function DashboardPage() {
         <p className="text-slate-500 text-sm mt-1">{dateStr}</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((card) => (
           <Link
@@ -68,7 +67,6 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* Quick actions */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
