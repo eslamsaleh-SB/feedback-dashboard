@@ -56,4 +56,14 @@ export default function NavBar({
         </nav>
         <div className="flex items-center gap-3 text-sm">
           <span className="hidden sm:inline text-slate-500">{email}</span>
-       
+          <button
+            onClick={signOut}
+            className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}

@@ -62,12 +62,10 @@ export default function FeedbackReservationForm({
 
   function switchGroup(group: boolean) {
     setIsGroup(group);
-    setCodes((p) => (group ? p : [p[0] ?? ""])); // single keeps one row
+    setCodes((p) => (group ? p : [p[0] ?? ""]));
   }
 
   function generateMeet() {
-    // Opens Google Meet to create a brand-new meeting. The reviewer copies the
-    // link Google generates and pastes it below (or uses "Paste from clipboard").
     window.open("https://meet.google.com/new", "_blank", "noopener,noreferrer");
     setOk("A new Google Meet tab was opened — copy its link and paste it below.");
   }
@@ -116,11 +114,43 @@ export default function FeedbackReservationForm({
       .from("feedback_attendees")
       .insert(chosen.map((hr) => ({ reservation_id: res.id, hr_code: hr })));
 
-    setBusy(false);
-    if (e2) return setErr(e2.message);
+    if (e2) {
+      setBusy(false);
+      return setErr(e2.message);
+    }
 
+    // Also create feedback_meetings rows so collectors can see their sessions
+    const meetLink_ = mode === "Online" ? meetLink.trim() || null : null;
+    const location_ = mode === "Offline" ? location : null;
+    await supabase.from("feedback_meetings").insert(
+      chosen.map((hr) => ({
+        hr_code: hr,
+        session_date: sessionDate,
+        mode,
+        meet_link: meetLink_,
+        location: location_,
+        status: "Scheduled",
+      }))
+    );
+
+    // Send email notifications (fire-and-forget; non-blocking)
+    fetch("/api/feedback-notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hr_codes: chosen,
+        session_date: sessionDate,
+        session_time: sessionTime || null,
+        mode,
+        meet_link: meetLink_,
+        location: location_,
+        shift,
+      }),
+    }).catch(() => {}); // ignore errors — email is best-effort
+
+    setBusy(false);
     setOk(
-      `Session booked for ${chosen.length} collector${chosen.length > 1 ? "s" : ""}.`
+      `Session booked for ${chosen.length} collector${chosen.length > 1 ? "s" : ""}. Email notifications sent.`
     );
     // Reset collectors + link; keep date/shift for quick repeat booking.
     setCodes([""]);
@@ -288,7 +318,11 @@ export default function FeedbackReservationForm({
           </div>
           <div className="w-44">
             <label className={labelCls}>Shift</label>
-            <select value={shift} onChange={(e) => setShift(e.target.value as Shift)} className={inputCls}>
+            <select
+              value={shift}
+              onChange={(e) => setShift(e.target.value as Shift)}
+              className={inputCls}
+            >
               <option value="">Select shift…</option>
               {SHIFTS.map((s) => (
                 <option key={s} value={s}>
@@ -300,25 +334,24 @@ export default function FeedbackReservationForm({
         </div>
       </div>
 
-      {err && <p className="text-sm text-red-600">{err}</p>}
-      {ok && <p className="text-sm text-emerald-700">{ok}</p>}
+      {err && (
+        <p className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          {err}
+        </p>
+      )}
+      {ok && (
+        <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+          {ok}
+        </p>
+      )}
 
-      <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-lg bg-slate-900 text-white px-6 py-2.5 font-medium disabled:opacity-50"
-        >
-          {busy ? "Booking…" : "Book session"}
-        </button>
-        <button
-          type="button"
-          onClick={() => router.push("/feedback-progress")}
-          className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          View Feedback Progress →
-        </button>
-      </div>
+      <button
+        type="submit"
+        disabled={busy}
+        className="rounded-lg bg-slate-900 text-white px-6 py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-slate-800"
+      >
+        {busy ? "Booking…" : "Book session"}
+      </button>
     </form>
   );
 }

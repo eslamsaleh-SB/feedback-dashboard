@@ -2,27 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  MODULES,
-  CARD_ORDER,
-  type ModuleValue,
-  type PartSummary,
-  type Report,
-  type FeedbackSession,
-} from "@/lib/modules";
+import { createClient } from "@/lib/supabase/client";
+import { MODULES, type ModuleValue, type PartSummary, type Report, type FeedbackSession } from "@/lib/modules";
 
-type Section = "matches" | "reports" | "sessions";
-
-type MatchRow = {
-  matchid: string;
-  date: string | null;
-  counts: Record<ModuleValue, number>;
-  total: number;
-  parts: number;
-};
-
-const labelFor = (v: ModuleValue) =>
-  MODULES.find((m) => m.value === v)?.label ?? v;
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="text-3xl font-bold mt-1">{value}</p>
+    </div>
+  );
+}
 
 export default function CollectorDashboard({
   myName,
@@ -48,8 +38,12 @@ export default function CollectorDashboard({
   feedbackSessions: FeedbackSession[];
 }) {
   const router = useRouter();
-  const [section, setSection] = useState<Section>("matches");
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const supabase = createClient();
+
+  const totalMistakes = Object.values(moduleTotals).reduce((a, b) => a + b, 0);
+  const modulesWith = Object.values(moduleTotals).filter((c) => c > 0).length;
+
+  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
 
   function applyFilters(next: { from?: string; to?: string }) {
     const f = next.from ?? from;
@@ -61,80 +55,30 @@ export default function CollectorDashboard({
     router.push(`/analytics${qs ? `?${qs}` : ""}`);
   }
 
-  const matches: MatchRow[] = useMemo(() => {
-    const map = new Map<string, MatchRow>();
-    for (const p of parts) {
-      let row = map.get(p.matchid);
-      if (!row) {
-        row = {
-          matchid: p.matchid,
-          date: p.date,
-          counts: {
-            players: 0,
-            event: 0,
-            formation_tactical: 0,
-            location: 0,
-            impact: 0,
-            extras: 0,
-            freeze_frame: 0,
-          },
-          total: 0,
-          parts: 0,
-        };
-        map.set(p.matchid, row);
-      }
-      for (const m of MODULES) row.counts[m.value] += p.counts[m.value] ?? 0;
-      row.total += p.total;
-      row.parts += 1;
-      if (p.date && (!row.date || p.date > row.date)) row.date = p.date;
-    }
-    return Array.from(map.values()).sort((a, b) =>
-      (b.date ?? "").localeCompare(a.date ?? "")
-    );
-  }, [parts]);
-
-  const totalMistakes = Object.values(moduleTotals).reduce((a, b) => a + b, 0);
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
-  const identity = [myHr || "—", myName || myHr || "—", myTeam || "—"].join(" - ");
-
   if (!isLinked) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
         <h1 className="text-xl font-bold mb-2">My Dashboard</h1>
         <p className="text-slate-600">
-          Your account isn’t linked to a collector profile yet. Please ask an
-          Admin to set your HR code on the Accounts page.
+          Your account isn't linked to a collector profile yet. Please ask an
+          Admin to assign you on the Accounts page.
         </p>
       </div>
     );
   }
 
-  const cards: { id: Section; label: string; value: number; hint: string }[] = [
-    { id: "reports", label: "Reports", value: reports.length, hint: "sent to you" },
-    {
-      id: "sessions",
-      label: "Feedback Sessions",
-      value: feedbackSessions.length,
-      hint: "online / offline",
-    },
-    {
-      id: "matches",
-      label: "Match Details",
-      value: matches.length,
-      hint: "matches in range",
-    },
-  ];
-
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">My Dashboard</h1>
-          <p className="text-slate-500">{identity}</p>
+          {myName && <p className="text-slate-500">{myName}</p>}
+          {myTeam && <p className="text-xs text-slate-400">{myTeam}</p>}
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Review date — from</label>
+            <label className="block text-xs text-slate-500 mb-1">From</label>
             <input
               type="date"
               value={from}
@@ -144,7 +88,7 @@ export default function CollectorDashboard({
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">to</label>
+            <label className="block text-xs text-slate-500 mb-1">To</label>
             <input
               type="date"
               value={to}
@@ -157,7 +101,7 @@ export default function CollectorDashboard({
             <button
               type="button"
               onClick={() => router.push("/analytics")}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              className={`${inputCls} text-slate-600 hover:bg-slate-50`}
             >
               Clear
             </button>
@@ -165,165 +109,65 @@ export default function CollectorDashboard({
         </div>
       </div>
 
+      {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {cards.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setSection(c.id)}
-            className={`text-left bg-white rounded-2xl border p-5 transition hover:shadow-sm ${
-              section === c.id ? "border-slate-900 ring-1 ring-slate-900" : "border-slate-200"
-            }`}
-          >
-            <p className="text-sm text-slate-500">{c.label}</p>
-            <p className="text-3xl font-bold mt-1">{c.value}</p>
-            <p className="text-xs text-slate-400 mt-1">{c.hint}</p>
-          </button>
-        ))}
+        <StatCard label="Match parts" value={parts.length} />
+        <StatCard label="Total mistakes" value={totalMistakes} />
+        <StatCard label="Modules with mistakes" value={modulesWith} />
       </div>
 
-      {section === "reports" && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <h2 className="font-semibold mb-4">Reports</h2>
-          {reports.length === 0 ? (
-            <p className="text-slate-500">No reports have been sent to you yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {reports.map((r) => (
-                <div key={r.id} className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium">{r.title}</p>
-                    <span className="text-sm text-slate-400 shrink-0">
-                      {r.report_date ?? "—"}
-                    </span>
-                  </div>
-                  {r.body && <p className="text-sm text-slate-600 mt-1">{r.body}</p>}
-                  {r.url && (
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline mt-1 inline-block"
-                    >
-                      Open report ↗
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Quick counters — reports + sessions (clicking goes to dedicated page) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <button
+          type="button"
+          onClick={() => router.push("/reports-sessions")}
+          className="bg-white rounded-2xl border border-slate-200 p-5 text-left hover:bg-slate-50 transition"
+        >
+          <p className="text-sm text-slate-500">Reports</p>
+          <p className="text-3xl font-bold mt-1">{reports.length}</p>
+          <p className="text-xs text-slate-400 mt-1">View all →</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/reports-sessions")}
+          className="bg-white rounded-2xl border border-slate-200 p-5 text-left hover:bg-slate-50 transition"
+        >
+          <p className="text-sm text-slate-500">Feedback sessions</p>
+          <p className="text-3xl font-bold mt-1">{feedbackSessions.length}</p>
+          <p className="text-xs text-slate-400 mt-1">View all →</p>
+        </button>
+      </div>
 
-      {section === "sessions" && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100 font-semibold">
-            Feedback Sessions
-          </div>
-          {feedbackSessions.length === 0 ? (
-            <p className="text-slate-500 p-5">No feedback sessions recorded yet.</p>
-          ) : (
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="text-left font-medium text-slate-500 px-5 py-3">Date</th>
-                  <th className="text-left font-medium text-slate-500 px-5 py-3">Type</th>
-                  <th className="text-left font-medium text-slate-500 px-5 py-3">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {feedbackSessions.map((s) => (
-                  <tr key={s.id} className="border-t border-slate-100">
-                    <td className="px-5 py-2.5 whitespace-nowrap">{s.session_date ?? "—"}</td>
-                    <td className="px-5 py-2.5">
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          s.mode === "Online"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-amber-50 text-amber-700"
-                        }`}
-                      >
-                        {s.mode}
-                      </span>
-                    </td>
-                    <td className="px-5 py-2.5 text-slate-600">{s.notes ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {section === "matches" && (
-        <div className="space-y-3">
-          {matches.length === 0 ? (
-            <p className="text-slate-500">No matches for this date range.</p>
-          ) : (
-            matches.map((mt) => {
-              const open = expanded === mt.matchid;
-              const present = CARD_ORDER.filter((v) => mt.counts[v] > 0);
+      {/* Module bar chart */}
+      {totalMistakes > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 className="font-semibold mb-4">Mistakes by module</h2>
+          <div className="space-y-3">
+            {MODULES.map((mod) => {
+              const c = moduleTotals[mod.value] ?? 0;
+              const pct = Math.round(
+                (c / Math.max(1, ...Object.values(moduleTotals))) * 100
+              );
               return (
-                <div
-                  key={mt.matchid}
-                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
-                >
-                  <button
-                    onClick={() => setExpanded(open ? null : mt.matchid)}
-                    className="w-full text-left p-5 flex items-center justify-between gap-4 hover:bg-slate-50"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-semibold truncate">
-                        Match {mt.matchid}{" "}
-                        <span className="text-slate-400 font-normal">
-                          ({mt.parts} {mt.parts === 1 ? "part" : "parts"})
-                        </span>
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {mt.date ?? "—"} · {mt.total} mistake(s)
-                      </p>
-                    </div>
-                    <span className="text-slate-400 text-sm shrink-0">{open ? "▲" : "▼"}</span>
-                  </button>
-                  {open && (
-                    <div className="border-t border-slate-100 p-5">
-                      {present.length === 0 ? (
-                        <p className="text-sm text-slate-400">No mistakes recorded for this match.</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {present.map((v) => (
-                            <span
-                              key={v}
-                              className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
-                            >
-                              {labelFor(v)}: <span className="font-semibold">{mt.counts[v]}</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                <div key={mod.value} className="flex items-center gap-3">
+                  <span className="w-44 shrink-0 text-sm text-slate-600">
+                    {mod.label}
+                  </span>
+                  <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
+                    <div
+                      className="h-5 bg-slate-900 rounded-full transition-all"
+                      style={{ width: `${c === 0 ? 0 : Math.max(pct, 4)}%` }}
+                    />
+                  </div>
+                  <span className="w-10 text-right text-sm font-semibold tabular-nums">
+                    {c}
+                  </span>
                 </div>
               );
-            })
-          )}
+            })}
+          </div>
         </div>
       )}
-
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold">Total mistakes by module</h2>
-          <span className="text-sm text-slate-500">{totalMistakes} total mistake(s)</span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {CARD_ORDER.map((v) => (
-            <div key={v} className="bg-white rounded-2xl border border-slate-200 p-5">
-              <p className="text-sm text-slate-500">{labelFor(v)}</p>
-              <p className="text-3xl font-bold mt-1 tabular-nums">{moduleTotals[v] ?? 0}</p>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

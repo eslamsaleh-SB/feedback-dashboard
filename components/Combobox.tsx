@@ -1,158 +1,102 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export type ComboOption = { value: string; label: string };
 
-/**
- * A lightweight searchable dropdown (combobox) — no external dependencies.
- * Type to filter; click or press Enter to select; Esc / click-away to close.
- * Styled to match the app's native inputs.
- */
 export default function Combobox({
   options,
   value,
   onChange,
   placeholder = "Select…",
-  searchPlaceholder = "Type to search…",
+  searchPlaceholder = "Search…",
   disabled = false,
-  allowClear = false,
-  className = "",
 }: {
   options: ComboOption[];
   value: string;
-  onChange: (value: string) => void;
+  onChange: (v: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
   disabled?: boolean;
-  allowClear?: boolean;
-  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const selected = options.find((o) => o.value === value) || null;
+  const selected = options.find((o) => o.value === value);
+  const filtered = query.trim()
+    ? options.filter((o) =>
+        o.label.toLowerCase().includes(query.toLowerCase())
+      )
+    : options;
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(q));
-  }, [options, query]);
-
-  // Close on outside click.
   useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
         setQuery("");
       }
     }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Focus the search box when opened.
   useEffect(() => {
-    if (open) {
-      setActive(0);
-      const t = setTimeout(() => inputRef.current?.focus(), 0);
-      return () => clearTimeout(t);
-    }
+    if (open) inputRef.current?.focus();
   }, [open]);
 
-  function choose(opt: ComboOption) {
-    onChange(opt.value);
-    setOpen(false);
-    setQuery("");
-  }
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActive((a) => Math.min(a + 1, filtered.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActive((a) => Math.max(a - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (filtered[active]) choose(filtered[active]);
-    } else if (e.key === "Escape") {
-      setOpen(false);
-      setQuery("");
-    }
-  }
-
-  const base =
-    "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-left flex items-center justify-between gap-2";
-
   return (
-    <div ref={rootRef} className={`relative ${className}`}>
+    <div ref={ref} className="relative">
       <button
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setOpen((o) => !o)}
-        className={`${base} ${disabled ? "opacity-50 cursor-not-allowed" : "hover:border-slate-400"}`}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((o) => !o);
+          setQuery("");
+        }}
+        className={`w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-left text-sm flex items-center justify-between gap-2 truncate${disabled ? " opacity-50 cursor-not-allowed" : ""}`}
       >
-        <span className={selected ? "text-slate-900 truncate" : "text-slate-400 truncate"}>
-          {selected ? selected.label : placeholder}
+        <span className={`truncate ${selected ? "" : "text-slate-400"}`}>
+          {selected?.label ?? placeholder}
         </span>
-        <span className="flex items-center gap-1 shrink-0">
-          {allowClear && selected && !disabled && (
-            <span
-              role="button"
-              tabIndex={-1}
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange("");
-              }}
-              className="text-slate-400 hover:text-slate-700 px-1"
-              title="Clear"
-            >
-              ✕
-            </span>
-          )}
-          <span className="text-slate-400 text-xs">▼</span>
-        </span>
+        <span className="text-slate-400 text-xs shrink-0">&#9660;</span>
       </button>
 
-      {open && (
-        <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
+      {open && !disabled && (
+        <div className="absolute z-50 mt-1 w-full min-w-[220px] bg-white border border-slate-200 rounded-lg shadow-lg flex flex-col max-h-72">
           <div className="p-2 border-b border-slate-100">
             <input
               ref={inputRef}
               value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setActive(0);
-              }}
-              onKeyDown={onKeyDown}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-slate-500"
+              className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
             />
           </div>
-          <ul className="max-h-60 overflow-auto py-1">
+          <div className="overflow-y-auto flex-1">
             {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-slate-400">No matches.</li>
+              <p className="px-3 py-2 text-sm text-slate-400">No results</p>
             ) : (
-              filtered.map((o, i) => (
-                <li key={o.value}>
-                  <button
-                    type="button"
-                    onMouseEnter={() => setActive(i)}
-                    onClick={() => choose(o)}
-                    className={`w-full text-left px-3 py-2 text-sm ${
-                      i === active ? "bg-slate-100" : ""
-                    } ${o.value === value ? "font-semibold text-slate-900" : "text-slate-700"}`}
-                  >
-                    {o.label}
-                  </button>
-                </li>
+              filtered.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${
+                    o.value === value ? "font-semibold bg-slate-50" : ""
+                  }`}
+                >
+                  {o.label}
+                </button>
               ))
             )}
-          </ul>
+          </div>
         </div>
       )}
     </div>

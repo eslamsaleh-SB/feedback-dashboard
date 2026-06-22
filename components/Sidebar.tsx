@@ -4,44 +4,96 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Role = "Admin" | "Uploader" | "Viewer";
+export type AppRole =
+  | "Admin"
+  | "Uploader"
+  | "Viewer"
+  | "TeamLeader"
+  | "Supervisor"
+  | "QualityLeader";
+
 type Item = { href: string; label: string };
 
-// Uploaders are shown as "Reviewers" in the UI (the DB role value stays Uploader).
-const roleLabel = (role: Role) => (role === "Uploader" ? "Reviewer" : role);
+const roleLabel = (role: AppRole): string => {
+  const map: Record<AppRole, string> = {
+    Admin: "Admin",
+    Uploader: "Reviewer",
+    Viewer: "Collector",
+    TeamLeader: "Team Leader",
+    Supervisor: "Supervisor",
+    QualityLeader: "Quality Leader",
+  };
+  return map[role] ?? role;
+};
 
-export default function Sidebar({ email, role }: { email: string; role: Role }) {
+function navItems(role: AppRole): Item[] {
+  if (role === "Viewer") {
+    return [
+      { href: "/analytics", label: "My Dashboard" },
+      { href: "/reports-sessions", label: "Reports & Sessions" },
+      { href: "/quality-score", label: "Quality Score" },
+    ];
+  }
+
+  const base: Item[] = [
+    { href: "/analytics", label: "Collectors Performance" },
+    { href: "/match-totals", label: "Match Total per Module" },
+  ];
+
+  const canSeeFeedback =
+    role === "Admin" || role === "Uploader" || role === "Supervisor";
+  if (canSeeFeedback) {
+    base.push(
+      { href: "/feedback-reservation", label: "Feedback Reservation" },
+      { href: "/feedback-progress", label: "Feedback Progress" }
+    );
+  }
+
+  if (role === "Admin" || role === "Uploader") {
+    base.push(
+      { href: "/upload", label: "Report" },
+      { href: "/module-upload", label: "Module Data" }
+    );
+  }
+
+  if (role === "Admin" || role === "QualityLeader") {
+    base.push({ href: "/quality-upload", label: "Quality Score Upload" });
+  }
+
+  base.push({ href: "/quality-score", label: "Quality Score" });
+
+  if (role === "Admin") {
+    base.push(
+      { href: "/admin-reports", label: "Admin Reports & Sessions" },
+      { href: "/report-monitoring", label: "Unacknowledged Reports" },
+      { href: "/collectors", label: "Collectors" },
+      { href: "/accounts", label: "Accounts" }
+    );
+  }
+
+  return base;
+}
+
+export default function Sidebar({
+  email,
+  role,
+}: {
+  email: string;
+  role: AppRole;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
-  const isViewer = role === "Viewer";
 
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/login");
   }
 
-  // Collectors get a single dashboard; Admins/Reviewers get analytics + tools.
-  const items: Item[] = isViewer
-    ? [{ href: "/analytics", label: "My Dashboard" }]
-    : [
-        { href: "/analytics", label: "Collectors Performance" },
-        { href: "/match-totals", label: "Match Total per Module" },
-        { href: "/feedback-reservation", label: "Feedback Reservation" },
-        { href: "/feedback-progress", label: "Feedback Progress" },
-        { href: "/upload", label: "Report" },
-        { href: "/module-upload", label: "Module Data" },
-        ...(role === "Admin"
-          ? [
-              { href: "/collectors", label: "Collectors" },
-              { href: "/accounts", label: "Accounts" },
-            ]
-          : []),
-      ];
+  const items = navItems(role);
 
   return (
-    <aside className="w-60 shrink-0 border-r border-slate-200 bg-white min-h-screen sticky top-0 flex flex-col">
-      {/* Hudl logo + dashboard title */}
+    <aside className="w-60 shrink-0 border-r border-slate-200 bg-white h-screen sticky top-0 flex flex-col overflow-y-auto">
       <div className="px-4 py-4 border-b border-slate-100 flex flex-col items-center text-center gap-2">
         <img src="/Logo/logo.png" alt="Hudl" className="h-8 w-auto max-w-full" />
         <span className="text-sm font-semibold text-slate-700 leading-tight">
