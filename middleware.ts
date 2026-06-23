@@ -6,6 +6,15 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  const { pathname } = request.nextUrl;
+
+  // Public, unauthenticated API endpoints (e.g. the signup page needs the team
+  // list BEFORE the user has an account). These must bypass BOTH the auth gate
+  // and the logged-in redirect so they work for anonymous and signed-in callers.
+  if (pathname.startsWith("/api/teams")) {
+    return response;
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -31,7 +40,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/reset-password");
