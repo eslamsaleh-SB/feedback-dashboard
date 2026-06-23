@@ -139,6 +139,49 @@ export default function MatchTotals({
     ? MODULES.find((m) => m.value === moduleFilter)?.label
     : null;
 
+  function exportCsv() {
+    const headers = [
+      "Match ID", "Review Date", "Collector Code", "Collector Name", "Team",
+      "Part", "Players", "Event", "Formation / Tactical", "Location",
+      "Impact", "Extras", "Freeze Frame", "Total",
+    ];
+    const cell = (v: string | number | null) => {
+      const x = v == null ? "" : String(v);
+      return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x;
+    };
+    const lines = [headers.join(",")];
+    for (const m of matches) {
+      for (const p of m.parts) {
+        lines.push(
+          [
+            m.matchid,
+            m.date ? m.date.slice(0, 10) : "",
+            p.hr_code ?? "",
+            p.name ?? "",
+            p.team ?? "",
+            p.partid,
+            p.counts.players, p.counts.event, p.counts.formation_tactical,
+            p.counts.location, p.counts.impact, p.counts.extras, p.counts.freeze_frame,
+            p.total,
+          ].map(cell).join(",")
+        );
+      }
+    }
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    const modPart = moduleFilter ? `_${moduleFilter}` : "";
+    a.href = url;
+    a.download = `match-total-per-module${modPart}_${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -250,15 +293,25 @@ export default function MatchTotals({
         </div>
       </div>
 
-      <div className="text-sm text-slate-500">
-        {matches.length} match(es) sorted by highest{" "}
-        {moduleLabel ? moduleLabel : "total"} errors
-        {capped && (
-          <span className="text-amber-600">
-            {" "}— showing top {MAX_MATCHES} across the full dataset. Narrow by
-            collector, date, errors, or Match ID to see more.
-          </span>
-        )}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-sm text-slate-500">
+          {matches.length} match(es) sorted by highest{" "}
+          {moduleLabel ? moduleLabel : "total"} errors
+          {capped && (
+            <span className="text-amber-600">
+              {" "}— showing top {MAX_MATCHES} across the full dataset. Narrow by
+              collector, date, errors, or Match ID to see more.
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={matches.length === 0}
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+        >
+          Export CSV
+        </button>
       </div>
 
       {shown.length === 0 ? (
@@ -315,17 +368,17 @@ export default function MatchTotals({
                       } hover:bg-slate-50`}
                     >
                       <td className="px-4 py-2.5 whitespace-nowrap align-top">
+                        <span className="font-semibold text-slate-800">
+                          {m.matchid}
+                        </span>
                         {first && (
-                          <span className="font-semibold text-slate-800">
-                            {m.matchid}{" "}
-                            <span className="text-slate-400 font-normal">
-                              ({m.parts.length})
-                            </span>
+                          <span className="text-slate-400 font-normal">
+                            {" "}({m.parts.length})
                           </span>
                         )}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-slate-500 align-top">
-                        {first && (m.date ? m.date.slice(0, 10) : "—")}
+                        {m.date ? m.date.slice(0, 10) : "—"}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap align-top">
                         <span className="font-medium">{p.hr_code ?? "—"}</span>
