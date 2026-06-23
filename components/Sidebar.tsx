@@ -96,8 +96,7 @@ function buildNav(role: AppRole): NavEntry[] {
       items: [
         { href: "/admin-reports", label: "Reports" },
         { href: "/feedback-progress", label: "Feedback Progress" },
-        { href: "/collectors", label: "Collectors" },
-        { href: "/accounts", label: "Accounts" },
+        { href: "/users", label: "Users" },
       ],
     });
   }
