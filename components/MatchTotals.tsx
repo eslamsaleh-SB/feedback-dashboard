@@ -218,7 +218,7 @@ export default function MatchTotals({
             ))}
           </select>
         </div>
-        <div className="w-56">
+        <div className="w-72">
           <label className="block text-xs text-slate-500 mb-1">
             Errors {moduleLabel ? `(${moduleLabel})` : "(total)"} — match total
           </label>
@@ -228,7 +228,7 @@ export default function MatchTotals({
               onChange={(e) => {
                 const op = e.target.value as ErrOp;
                 setErrOp(op);
-                if (errVal.trim() !== "") applyFilters({ errop: op });
+                applyFilters({ errop: op, errval: errVal });
               }}
               className={`${inputCls} w-20`}
             >
@@ -241,13 +241,19 @@ export default function MatchTotals({
               min={0}
               value={errVal}
               onChange={(e) => setErrVal(e.target.value)}
-              onBlur={() => applyFilters({ errval: errVal })}
               onKeyDown={(e) => {
-                if (e.key === "Enter") applyFilters({ errval: errVal });
+                if (e.key === "Enter") applyFilters({ errop: errOp, errval: errVal });
               }}
               placeholder="any"
               className={`${inputCls} w-full`}
             />
+            <button
+              type="button"
+              onClick={() => applyFilters({ errop: errOp, errval: errVal })}
+              className="rounded-lg bg-slate-900 text-white px-3 text-sm font-medium"
+            >
+              Go
+            </button>
           </div>
         </div>
         <div className="w-56">
