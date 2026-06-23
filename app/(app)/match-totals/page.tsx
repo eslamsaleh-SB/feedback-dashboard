@@ -5,6 +5,7 @@ import MatchTotals, { type EnrichedPart } from "@/components/MatchTotals";
 export const dynamic = "force-dynamic";
 
 const isoOk = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
+const OPS = new Set(["gte", "eq", "lte"]);
 
 export default async function MatchTotalsPage({
   searchParams,
@@ -15,6 +16,8 @@ export default async function MatchTotalsPage({
     collector?: string;
     match?: string;
     module?: string;
+    errop?: string;
+    errval?: string;
   };
 }) {
   const supabase = createClient();
@@ -39,6 +42,12 @@ export default async function MatchTotalsPage({
   const matchId = searchParams.match?.trim() || null;
   const moduleParam = searchParams.module?.trim() || null;
 
+  // Error filter is now applied SERVER-SIDE (across the whole dataset).
+  const errOp =
+    searchParams.errop && OPS.has(searchParams.errop) ? searchParams.errop : "gte";
+  const errRaw = searchParams.errval?.trim();
+  const errVal = errRaw && /^\d+$/.test(errRaw) ? parseInt(errRaw, 10) : null;
+
   const { data: collectors } = await supabase
     .from("collectors")
     .select("name, hr_code, team")
@@ -48,17 +57,17 @@ export default async function MatchTotalsPage({
     if (c.hr_code) byHr.set(c.hr_code, { name: c.name, team: c.team ?? null });
   });
 
-  // When a module is selected we remove the row limit so the full dataset is
-  // searched — the module-level sort on the server returns only the relevant
-  // rows anyway.  Without a module, cap at 8 000 rows for performance.
-  const rowLimit = moduleParam ? 50000 : 8000;
-
-  const { data: partRows } = await supabase.rpc("match_module_breakdown", {
+  // The DB function ranks/filters across ALL data and returns the top 250
+  // MATCHES (every part row for those matches).
+  const { data: partRows } = await supabase.rpc("match_module_breakdown_v2", {
     p_from: from,
     p_to: to,
     p_collector: collector,
     p_matchid: matchId,
-    p_limit: rowLimit,
+    p_module: moduleParam,
+    p_err_op: errOp,
+    p_err_val: errVal,
+    p_limit: 250,
   });
 
   const rows: EnrichedPart[] = (partRows ?? []).map((r: any) => ({
@@ -95,9 +104,11 @@ export default async function MatchTotalsPage({
       collector={collector ?? "all"}
       matchId={matchId ?? ""}
       module={moduleParam ?? ""}
+      errOp={errOp as "gte" | "eq" | "lte"}
+      errVal={errVal != null ? String(errVal) : ""}
       rows={rows}
       collectors={collectorOptions}
-      limited={!matchId && !moduleParam && (partRows?.length ?? 0) >= 8000}
+      capped={(partRows?.length ?? 0) > 0 && new Set((partRows ?? []).map((r: any) => r.matchid)).size >= 250}
     />
   );
 }
