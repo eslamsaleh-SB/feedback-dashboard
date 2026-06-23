@@ -83,8 +83,8 @@ export default function LoginPage() {
               <label className="block text-sm text-slate-600 mb-1">Team</label>
               <select value={team} onChange={(e) => setTeam(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white">
                 <option value="">-- select your team --</option>
-                {teams.map((t) => <option key={t} value={t}>{t}</option>)}
                 <option value="__none__">Team Not Listed</option>
+                {teams.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </>
