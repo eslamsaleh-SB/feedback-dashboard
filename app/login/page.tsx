@@ -19,12 +19,12 @@ export default function LoginPage() {
   const [message, setMessage] = useState<{ type: "ok"|"err"; text: string }|null>(null);
 
   useEffect(() => {
-    if (mode !== "signup") return;
-    fetch("/api/teams")
+    // Load the team list once on mount (works in any mode, avoids stale cache).
+    fetch("/api/teams", { cache: "no-store" })
       .then((r) => r.json())
-      .then(({ teams }: { teams: string[] }) => setTeams(teams))
-      .catch(() => {});
-  }, [mode]);
+      .then(({ teams }: { teams: string[] }) => setTeams(Array.isArray(teams) ? teams : []))
+      .catch(() => setTeams([]));
+  }, []);
 
   function switchMode(next: Mode) {
     setMode(next); setMessage(null); setEmail(""); setPassword("");
@@ -47,8 +47,12 @@ export default function LoginPage() {
       if (error) return setMessage({ type: "err", text: error.message });
       router.replace("/dashboard"); return;
     }
-    const code = hrCode.trim();
+    const code = hrCode.trim().toUpperCase();
     if (!code) { setLoading(false); return setMessage({ type: "err", text: "Enter your HR code." }); }
+    if (!/^A-\d+$/.test(code)) {
+      setLoading(false);
+      return setMessage({ type: "err", text: "HR code must be in the form A-1234 (the letter A, a dash, then numbers). Don't enter your name." });
+    }
     const { data: available, error: checkErr } = await supabase.rpc("hr_code_available", { p_code: code });
     if (checkErr) { setLoading(false); return setMessage({ type: "err", text: checkErr.message }); }
     if (available === false) { setLoading(false); return setMessage({ type: "err", text: `HR code "${code}" is already registered.` }); }
