@@ -36,26 +36,30 @@ export default function MatchTotals({
   collector,
   matchId,
   module: moduleProp,
+  errOp: errOpProp,
+  errVal: errValProp,
   rows,
   collectors,
-  limited,
+  capped,
 }: {
   from: string;
   to: string;
   collector: string;
   matchId: string;
   module?: string;
+  errOp?: ErrOp;
+  errVal?: string;
   rows: EnrichedPart[];
   collectors: CollectorOpt[];
-  limited: boolean;
+  capped?: boolean;
 }) {
   const router = useRouter();
   const [matchInput, setMatchInput] = useState(matchId);
-  const [moduleFilter, setModuleFilter] = useState<"" | ModuleValue>(
-    (moduleProp as ModuleValue | undefined) ?? ""
-  );
-  const [errOp, setErrOp] = useState<ErrOp>("gte");
-  const [errVal, setErrVal] = useState("");
+  const moduleFilter = (moduleProp as ModuleValue | "" | undefined) ?? "";
+  // Error filter is driven by the URL (server applies it). Local state only
+  // holds what the user is typing until they apply it.
+  const [errOp, setErrOp] = useState<ErrOp>(errOpProp ?? "gte");
+  const [errVal, setErrVal] = useState(errValProp ?? "");
 
   function applyFilters(next: {
     from?: string;
@@ -63,33 +67,34 @@ export default function MatchTotals({
     collector?: string;
     match?: string;
     module?: string;
+    errop?: ErrOp;
+    errval?: string;
   }) {
     const f = next.from ?? from;
     const t = next.to ?? to;
     const c = next.collector ?? collector;
     const m = (next.match ?? matchId).trim();
     const mod = "module" in next ? next.module : moduleFilter;
+    const eop = next.errop ?? errOp;
+    const ev = ("errval" in next ? next.errval : errVal)?.trim() ?? "";
     const params = new URLSearchParams();
     if (f) params.set("from", f);
     if (t) params.set("to", t);
     if (c && c !== "all") params.set("collector", c);
     if (m) params.set("match", m);
     if (mod) params.set("module", mod);
+    if (ev !== "" && /^\d+$/.test(ev)) {
+      params.set("errop", eop);
+      params.set("errval", ev);
+    }
     const qs = params.toString();
     router.push(`/match-totals${qs ? `?${qs}` : ""}`);
   }
 
+  // Server already filtered + ranked across the whole dataset. The client only
+  // groups the returned rows by match for display.
   const metric = (p: EnrichedPart) =>
     moduleFilter ? p.counts[moduleFilter] : p.total;
-
-  const errN = parseInt(errVal, 10);
-  const errActive = Number.isFinite(errN);
-  const passErr = (v: number) => {
-    if (!errActive) return true;
-    if (errOp === "gte") return v >= errN;
-    if (errOp === "lte") return v <= errN;
-    return v === errN;
-  };
 
   const matches = useMemo(() => {
     const map = new Map<
@@ -106,7 +111,7 @@ export default function MatchTotals({
       if (r.date && (!m.date || r.date > m.date)) m.date = r.date;
     }
 
-    let arr = Array.from(map.values()).map((m) => {
+    const arr = Array.from(map.values()).map((m) => {
       const parts = [...m.parts].sort(
         (a, b) => a.partid - b.partid || metric(b) - metric(a)
       );
@@ -114,14 +119,11 @@ export default function MatchTotals({
       return { ...m, parts, total };
     });
 
-    // Filter at the MATCH level (not per-part)
-    arr = arr.filter((m) => passErr(m.total));
-
-    // Default sort: highest errors first
+    // Keep the server's highest-errors-first order.
     arr.sort((a, b) => b.total - a.total);
     return arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, moduleFilter, errOp, errVal]);
+  }, [rows, moduleFilter]);
 
   const shown = matches.slice(0, MAX_MATCHES);
 
@@ -162,11 +164,7 @@ export default function MatchTotals({
           <label className="block text-xs text-slate-500 mb-1">Module</label>
           <select
             value={moduleFilter}
-            onChange={(e) => {
-              const v = e.target.value as "" | ModuleValue;
-              setModuleFilter(v);
-              applyFilters({ module: v });
-            }}
+            onChange={(e) => applyFilters({ module: e.target.value })}
             className={`${inputCls} w-full`}
           >
             <option value="">All modules</option>
@@ -184,7 +182,11 @@ export default function MatchTotals({
           <div className="flex gap-2">
             <select
               value={errOp}
-              onChange={(e) => setErrOp(e.target.value as ErrOp)}
+              onChange={(e) => {
+                const op = e.target.value as ErrOp;
+                setErrOp(op);
+                if (errVal.trim() !== "") applyFilters({ errop: op });
+              }}
               className={`${inputCls} w-20`}
             >
               <option value="gte">≥</option>
@@ -196,6 +198,10 @@ export default function MatchTotals({
               min={0}
               value={errVal}
               onChange={(e) => setErrVal(e.target.value)}
+              onBlur={() => applyFilters({ errval: errVal })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyFilters({ errval: errVal });
+              }}
               placeholder="any"
               className={`${inputCls} w-full`}
             />
@@ -247,14 +253,10 @@ export default function MatchTotals({
       <div className="text-sm text-slate-500">
         {matches.length} match(es) sorted by highest{" "}
         {moduleLabel ? moduleLabel : "total"} errors
-        {matches.length > MAX_MATCHES && (
+        {capped && (
           <span className="text-amber-600">
-            {" "}— showing top {MAX_MATCHES}. Narrow by collector, date, or Match ID.
-          </span>
-        )}
-        {limited && (
-          <span className="text-amber-600">
-            {" "}(loaded up to 8,000 rows — search a Match ID or narrow dates to reach older data.)
+            {" "}— showing top {MAX_MATCHES} across the full dataset. Narrow by
+            collector, date, errors, or Match ID to see more.
           </span>
         )}
       </div>
