@@ -72,14 +72,18 @@ function buildNav(role: AppRole): NavEntry[] {
 
   // Feedback group
   if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
+    const feedbackItems: NavItem[] = [];
+    // Feedback Progress lives under Administration for Admins (moved there).
+    // Other feedback roles still reach it from here.
+    if (role !== "Admin") {
+      feedbackItems.push({ href: "/feedback-progress", label: "Feedback Progress" });
+    }
+    feedbackItems.push({ href: "/feedback-reservation", label: "Feedback Reservations" });
     entries.push({
       type: "group",
       key: "feedback",
       label: "Feedback",
-      items: [
-        { href: "/feedback-progress", label: "Feedback Progress" },
-        { href: "/feedback-reservation", label: "Feedback Reservations" },
-      ],
+      items: feedbackItems,
     });
   }
 
@@ -91,7 +95,7 @@ function buildNav(role: AppRole): NavEntry[] {
       label: "Administration",
       items: [
         { href: "/admin-reports", label: "Reports" },
-        { href: "/admin-sessions", label: "Sessions" },
+        { href: "/feedback-progress", label: "Feedback Progress" },
         { href: "/collectors", label: "Collectors" },
         { href: "/accounts", label: "Accounts" },
       ],
