@@ -49,9 +49,9 @@ export default function LoginPage() {
     }
     const code = hrCode.trim().toUpperCase();
     if (!code) { setLoading(false); return setMessage({ type: "err", text: "Enter your HR code." }); }
-    if (!/^A-\d+$/.test(code)) {
+    if (!/^[AI]-\d+$/.test(code)) {
       setLoading(false);
-      return setMessage({ type: "err", text: "HR code must be in the form A-1234 (the letter A, a dash, then numbers). Don't enter your name." });
+      return setMessage({ type: "err", text: "HR code must be A-1234 or I-1234 (letter A or I, a dash, then numbers). Don't enter your name." });
     }
     const { data: available, error: checkErr } = await supabase.rpc("hr_code_available", { p_code: code });
     if (checkErr) { setLoading(false); return setMessage({ type: "err", text: checkErr.message }); }
