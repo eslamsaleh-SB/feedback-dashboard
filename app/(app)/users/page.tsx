@@ -60,5 +60,5 @@ export default async function UsersPage() {
     };
   });
 
-  return <UsersManager rows={rows} teams={teams} />;
+  return <UsersManager rows={rows} teams={teams} currentUserId={user.id} />;
 }
