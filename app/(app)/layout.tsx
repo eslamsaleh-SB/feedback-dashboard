@@ -34,29 +34,17 @@ export default async function AppLayout({
     );
     const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
     const fullName = typeof meta.full_name === "string" ? meta.full_name : null;
-    const hr = typeof meta.hr_code === "string" ? meta.hr_code.trim().toUpperCase() : "";
 
+    // Create the profile UNLINKED. We deliberately do NOT pull hr_code from the
+    // (possibly stale) signup metadata, so a re-registered account never
+    // silently re-claims an old code. An Admin assigns the collector on the
+    // Users page.
     await admin
       .from("profiles")
       .upsert(
         { id: user.id, email: user.email ?? null, full_name: fullName, role: "Viewer" },
         { onConflict: "id" }
       );
-
-    if (hr) {
-      await admin
-        .from("collectors")
-        .upsert({ hr_code: hr, name: fullName || hr }, { onConflict: "hr_code", ignoreDuplicates: true });
-      const { data: col } = await admin
-        .from("collectors")
-        .select("id")
-        .eq("hr_code", hr)
-        .maybeSingle();
-      await admin
-        .from("profiles")
-        .update({ hr_code: hr, collector_id: col?.id ?? null })
-        .eq("id", user.id);
-    }
 
     const reread = await supabase
       .from("profiles")
