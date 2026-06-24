@@ -207,6 +207,22 @@ export default function UsersManager({
     setOk("User deleted.");
   }
 
+  async function resetPw(r: UserRow) {
+    if (!confirm(`Reset the password for ${r.email ?? r.hr_code}? A new temporary password is generated for you to share — no email is sent.`)) return;
+    setBusy(true);
+    setMsg(null);
+    setOk(null);
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resetPassword", profileId: r.profileId }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) { setMsg(j.error || "Could not reset password"); return; }
+    setOk(`New temporary password for ${r.email ?? r.hr_code}: ${j.tempPassword} — share it; they can change it after signing in.`);
+  }
+
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -404,6 +420,7 @@ export default function UsersManager({
                     ) : (
                       <div className="flex gap-3 justify-end text-sm">
                         <button onClick={() => startEdit(r)} className="text-slate-600 hover:text-slate-900">Edit</button>
+                        <button onClick={() => resetPw(r)} disabled={busy} className="text-blue-600 hover:text-blue-800 disabled:opacity-50">Reset PW</button>
                         <button onClick={() => remove(r)} disabled={busy} className="text-red-600 hover:text-red-800 disabled:opacity-50">Delete</button>
                       </div>
                     )}

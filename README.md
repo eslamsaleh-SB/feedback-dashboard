@@ -1,56 +1,65 @@
-# v36 — Admin "View As" (read‑only preview)
+# v38 — ALL pending changes, in one package
 
-Lets an Admin preview the app exactly as any user (any role) sees it — their nav,
-their pages, their data — without logging in as them. It never touches the target's
-account or session, and writes are blocked while previewing.
+Everything prepared so far, consolidated so you can commit once. Every file is at
+its correct relative path — copy the tree over your project (or push your project
+folder, since these are the same files already saved there) and commit.
 
-## Do I need to run any SQL?
-**No.** This is entirely application code — no schema change, no migration, no query.
-(The only still‑pending DB item is the separate Team‑Leader error cleanup, which is
-unrelated to this.)
+Type‑checks clean against the project's `tsconfig.json`.
 
-## How it works
-- A `view_as` cookie (set only for Admins, via `/api/view-as`) holds the target profile id.
-- `lib/effective.ts → getEffective()` returns the **target's** role + HR code when an Admin
-  is previewing, otherwise the real profile. Every page uses this for its role‑gate and data.
-- A top bar (`ViewAsBar`) lets the Admin pick any user and shows a "Viewing as … — Exit" banner.
-- Mutating API routes refuse to run while a preview is active (read‑only).
+------------------------------------------------------------------------------
+## A) Code — deploy these files (no order needed if committed together; if you
+##    upload folder‑by‑folder, upload `lib/effective.ts` FIRST so the build stays green)
+------------------------------------------------------------------------------
 
-## Files to deploy (path = destination; replace existing, or create new)
-**New files**
-- `lib/effective.ts`
-- `components/ViewAsBar.tsx`
-- `app/api/view-as/route.ts`
-
-**Changed files**
-- `app/(app)/layout.tsx`            (renders the bar; sidebar/role follow the preview)
-- `app/api/upload/route.ts`         (read‑only guard)
-- `app/api/modules/upload/route.ts` (read‑only guard)
-- `app/api/quality-upload/route.ts` (read‑only guard)
-- `app/api/admin/users/route.ts`    (read‑only guard)
-- 18 pages under `app/(app)/…/page.tsx` (use the effective profile):
+**View As (read‑only admin preview) + per‑user Reset PW**
+- `lib/effective.ts`                      (new — effective-profile resolver)
+- `components/ViewAsBar.tsx`              (new — top bar + "Viewing as… Exit")
+- `app/api/view-as/route.ts`             (new — admin-only cookie set/clear)
+- `app/(app)/layout.tsx`                 (top bar + sidebar/role follow the preview)
+- `components/UsersManager.tsx`          (adds **Reset PW** button per user)
+- `app/api/admin/users/route.ts`         (adds `resetPassword` action; read‑only guard)
+- `app/api/upload/route.ts`              (read‑only guard while previewing)
+- `app/api/modules/upload/route.ts`      (read‑only guard)
+- `app/api/quality-upload/route.ts`      (read‑only guard)
+- 18 pages under `app/(app)/.../page.tsx` (use the effective profile for role + data):
   accounts, admin-reports, admin-sessions, analytics, collectors, dashboard,
   feedback-progress, feedback-reservation, match-totals, module-upload,
   my-matches, my-reports, my-sessions, quality-score, report-monitoring,
   reports-sessions, upload, users
 
-Every file in this folder is already at its correct relative path, so you can copy the
-tree straight over your project (or push your project folder — these are the same files
-already saved there) and commit once.
+**Feedback status sync**
+- `components/feedback-progress` lives in `components/FeedbackProgress.tsx`
+  (already in the list above as part of feedback-progress) — marking attendance now
+  also updates the collector‑facing `feedback_meetings` row, so the collector's
+  "My Sessions" shows the same status as the admin.
+  Mapping: Attended/Attended Late→Completed, Absent→Absent, Cancelled→Cancelled, blank→Scheduled.
 
-## Deploy order (only matters if uploading one folder at a time)
-Upload **`lib/effective.ts` first** — once it exists, every other changed file compiles,
-so `main` stays green no matter the order of the remaining commits.
+------------------------------------------------------------------------------
+## B) SQL — run in Supabase (currently down for me; run when it's back)
+------------------------------------------------------------------------------
+- `sql/01_remove_non_collector_errors.sql`
+  Removes module_totals rows attributed to non‑Collector roles (role != Viewer).
+  **Run the PREVIEW select first**, then uncomment the DELETE.
+- `sql/02_per_video_schema_FOUNDATION.sql`
+  Foundation tables for the per‑video notes/acknowledgment feature (acks, notes,
+  replies, status) + `position` on session_videos for strict sequential order.
+  Review only for now — it pairs with the per‑video UI (see C).
 
-## Quick test after deploy (as an Admin)
-1. Top bar shows an "Admin preview — View as a user…" picker.
-2. Pick a Collector → you land on their Home/My Reports/My Match Details with **their** data;
-   the sidebar shows the Collector menu; an amber "Viewing as … (read‑only)" banner appears.
-3. Pick a Reviewer → you see the Reviewer pages.
-4. Try an upload or a Users edit while previewing → blocked ("Read‑only: exit the preview…").
-5. Click **Exit** → back to your own Admin view.
+------------------------------------------------------------------------------
+## C) NOT included yet — per‑video notes & acknowledgment UI (the large build)
+------------------------------------------------------------------------------
+The schema is in `sql/02_…`. The UI + behaviour still to build:
+- Reviewer: after importing videos, redirect to the report and comment per video.
+- Collector: **strict sequential** acknowledgment (watch+ack video 1 before video 2
+  unlocks), plus a note per video.
+- Reviewers reply to notes; first reply flips the note Open→Replied; mark Resolved.
+- Progress tracker (Open/Replied/Resolved) for both sides.
+- Email to the collector once every note on a report has a reply (includes match
+  name + report date, "reviewed by the Quality team").
+This is ~8–10 new files + an email route; it's the next dedicated build.
 
-## Notes
-- Previewing uses **your** Admin read access to show the target's data; it does not use
-  their login and cannot change their account or session.
-- Self‑account is excluded from the picker; the cookie is Admin‑gated server‑side.
+------------------------------------------------------------------------------
+## Reset password note
+The "email rate limit exceeded" you saw is Supabase's built‑in email cap. The new
+**Reset PW** button avoids email entirely (sets a temp password to share). To make
+the *emailed* reset reliable, configure custom SMTP in Supabase → Auth → SMTP.

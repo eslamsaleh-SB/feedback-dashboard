@@ -124,5 +124,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, id: newId, tempPassword, collectorId: col?.id ?? null });
   }
 
+  // ---- RESET PASSWORD (admin-triggered; no email, so no rate limit) ---------
+  if (action === "resetPassword") {
+    const id = String(body.profileId || "");
+    if (!id) return NextResponse.json({ error: "Missing user id" }, { status: 400 });
+    if (id === user.id) {
+      return NextResponse.json({ error: "Use the login page's 'Forgot password' for your own account." }, { status: 400 });
+    }
+    const tempPassword =
+      "Hudl-" + Math.random().toString(36).slice(2, 10) + "-" + Math.floor(Math.random() * 9000 + 1000);
+    const { error } = await a.auth.admin.updateUserById(id, { password: tempPassword });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, tempPassword });
+  }
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

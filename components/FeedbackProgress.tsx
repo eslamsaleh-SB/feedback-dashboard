@@ -63,7 +63,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     );
   }
 
-  async function save(a: Attendee) {
+  async function save(sess: Session, a: Attendee) {
     setSavingId(a.id);
     setSavedId(null);
     setMsg(null);
@@ -71,8 +71,24 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
       .from("feedback_attendees")
       .update({ attendance: a.attendance, comment: a.comment })
       .eq("id", a.id);
+    if (error) {
+      setSavingId(null);
+      return setMsg(error.message);
+    }
+    // Keep the collector-facing record (feedback_meetings) in sync so the
+    // collector's "My Sessions" reflects the attendance the admin just set.
+    const status =
+      a.attendance == null
+        ? "Scheduled"
+        : a.attendance === "Attended" || a.attendance === "Attended Late"
+        ? "Completed"
+        : a.attendance; // "Absent" | "Cancelled"
+    await supabase
+      .from("feedback_meetings")
+      .update({ status })
+      .eq("hr_code", a.hr_code)
+      .eq("session_date", sess.session_date);
     setSavingId(null);
-    if (error) return setMsg(error.message);
     setSavedId(a.id);
     setTimeout(() => setSavedId((s) => (s === a.id ? null : s)), 1500);
   }
@@ -245,7 +261,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                         </td>
                         <td className="px-4 py-2.5 text-right whitespace-nowrap">
                           <button
-                            onClick={() => save(a)}
+                            onClick={() => save(s, a)}
                             disabled={savingId === a.id}
                             className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
                           >
