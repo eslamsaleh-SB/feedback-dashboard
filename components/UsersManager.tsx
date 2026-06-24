@@ -106,12 +106,50 @@ export default function UsersManager({
     setBusy(true);
     setMsg(null);
     setOk(null);
-    // 1) Collector fields (name / code / team) — only if linked.
-    if (r.collectorId) {
+    let finalCode = r.hr_code;
+    let finalCollectorId = r.collectorId;
+    let finalName = draft.name.trim();
+    let finalTeam = draft.team.trim() || null;
+
+    const newCode = draft.hr.trim().toUpperCase();
+    const codeChanged = !!newCode && newCode !== (r.hr_code ?? "").toUpperCase();
+
+    // 1) Code change = RE-LINK to the existing collector with that code (create
+    // it if missing). Never rename another collector, so no "already used" error.
+    if (codeChanged) {
+      const { data: existing, error: selErr } = await supabase
+        .from("collectors")
+        .select("id, name, team")
+        .eq("hr_code", newCode)
+        .maybeSingle();
+      if (selErr) { setMsg(selErr.message); setBusy(false); return; }
+      let colId: string;
+      if (existing) {
+        colId = existing.id as string;
+        finalName = existing.name && existing.name !== newCode ? (existing.name as string) : "";
+        finalTeam = (existing.team as string | null) ?? null;
+      } else {
+        const ins = await supabase
+          .from("collectors")
+          .insert({ hr_code: newCode, name: finalName || newCode, team: finalTeam })
+          .select("id")
+          .single();
+        if (ins.error || !ins.data) { setMsg(ins.error?.message || "Could not create collector"); setBusy(false); return; }
+        colId = ins.data.id as string;
+      }
+      const { error } = await supabase
+        .from("profiles")
+        .update({ hr_code: newCode, collector_id: colId })
+        .eq("id", r.profileId);
+      if (error) { setMsg(error.message); setBusy(false); return; }
+      finalCode = newCode;
+      finalCollectorId = colId;
+    } else if (r.collectorId) {
+      // Code unchanged: just update the linked collector's name/team.
       const { error } = await supabase.rpc("admin_update_collector", {
         p_id: r.collectorId,
         p_name: draft.name,
-        p_hr: draft.hr,
+        p_hr: r.hr_code,
         p_team: draft.team,
       });
       if (error) { setMsg(error.message); setBusy(false); return; }
@@ -137,9 +175,10 @@ export default function UsersManager({
         x.profileId === r.profileId
           ? {
               ...x,
-              name: draft.name.trim(),
-              hr_code: draft.hr.trim() || x.hr_code,
-              team: draft.team.trim() || null,
+              name: finalName,
+              hr_code: finalCode,
+              team: finalTeam,
+              collectorId: finalCollectorId,
               role: draft.role,
               email: newEmail || x.email,
             }
@@ -377,8 +416,8 @@ export default function UsersManager({
       </div>
 
       <p className="text-xs text-slate-400">
-        Changing a user&rsquo;s <span className="font-medium">Code</span> updates it everywhere (profile,
-        mistakes, reports, feedback). Deleting a user removes their login only — their collected data stays.
+        Changing a user&rsquo;s <span className="font-medium">Code</span> re-points their account to the collector
+        with that code (it never renames another collector). Deleting a user removes their login only — their collected data stays.
       </p>
     </div>
   );
