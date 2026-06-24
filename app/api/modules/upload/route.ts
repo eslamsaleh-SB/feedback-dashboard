@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isViewingAs } from "@/lib/effective";
 
 export const runtime = "nodejs";
 
@@ -112,6 +113,13 @@ function detectDateOrder(
 
 export async function POST(req: NextRequest) {
   const supabase = createClient();
+  if (isViewingAs()) {
+    return NextResponse.json(
+      { error: "Read-only: exit the 'View as' preview before making changes." },
+      { status: 403 }
+    );
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

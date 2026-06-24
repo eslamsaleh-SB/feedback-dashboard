@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import Sidebar, { type AppRole } from "@/components/Sidebar";
+import ViewAsBar from "@/components/ViewAsBar";
+import { getEffective } from "@/lib/effective";
 
 export default async function AppLayout({
   children,
@@ -12,21 +14,16 @@ export default async function AppLayout({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) redirect("/login");
 
-  let { data: profile } = await supabase
+  // Self-heal: ensure a profile row exists for the real user (created UNLINKED;
+  // an Admin assigns the collector on the Users page).
+  const { data: meCheck } = await supabase
     .from("profiles")
-    .select("role")
+    .select("id")
     .eq("id", user.id)
-    .single();
-
-  // Self-heal: a signed-in user with no profile row. This happens when a prior
-  // account was deleted at the DB/profile level only (the auth.users row
-  // survived), so a later sign-up reused the existing auth row and the
-  // handle_new_user trigger never fired. Recreate + link the profile here so
-  // the person is usable again and shows up in the Users list.
-  if (!profile && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    .maybeSingle();
+  if (!meCheck && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const admin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -34,33 +31,43 @@ export default async function AppLayout({
     );
     const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
     const fullName = typeof meta.full_name === "string" ? meta.full_name : null;
-
-    // Create the profile UNLINKED. We deliberately do NOT pull hr_code from the
-    // (possibly stale) signup metadata, so a re-registered account never
-    // silently re-claims an old code. An Admin assigns the collector on the
-    // Users page.
     await admin
       .from("profiles")
       .upsert(
         { id: user.id, email: user.email ?? null, full_name: fullName, role: "Viewer" },
         { onConflict: "id" }
       );
-
-    const reread = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    profile = reread.data;
   }
 
-  const role = (profile?.role ?? "Viewer") as AppRole;
+  const eff = await getEffective(supabase);
+  if (!eff) redirect("/login");
+  const role = eff.profile.role as AppRole;
+
+  // Account list for the Admin "View as" picker.
+  let accounts: { id: string; label: string }[] = [];
+  if (eff.isAdmin) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, role, hr_code")
+      .order("email");
+    accounts = (profs ?? [])
+      .filter((p: any) => p.id !== eff.realUserId)
+      .map((p: any) => ({
+        id: p.id as string,
+        label: `${p.hr_code ? p.hr_code + " " : ""}${p.full_name ?? p.email ?? p.id} · ${p.role}`,
+      }));
+  }
+
+  const sidebarEmail = eff.viewingAs ? eff.viewingAs.label : user.email ?? "";
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      <Sidebar email={user.email ?? ""} role={role} />
+      <Sidebar email={sidebarEmail} role={role} />
       <main className="flex-1 min-w-0 px-6 py-8">
-        <div className="max-w-6xl mx-auto">{children}</div>
+        <div className="max-w-6xl mx-auto">
+          {eff.isAdmin && <ViewAsBar accounts={accounts} viewingAs={eff.viewingAs} />}
+          {children}
+        </div>
       </main>
     </div>
   );

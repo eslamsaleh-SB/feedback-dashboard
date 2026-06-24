@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getEffective } from "@/lib/effective";
 import MatchTotals, { type EnrichedPart } from "@/components/MatchTotals";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +25,8 @@ export default async function MatchTotalsPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user!.id)
-    .single();
+  const eff = await getEffective(supabase);
+  const profile = eff?.profile ?? null;
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
   // Collectors (Viewer) are not allowed on this page
   if (role === "Viewer") redirect("/analytics");

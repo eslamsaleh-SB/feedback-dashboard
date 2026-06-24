@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getEffective } from "@/lib/effective";
 import FeedbackReservationForm from "@/components/FeedbackReservationForm";
 
 export const dynamic = "force-dynamic";
@@ -11,11 +12,8 @@ export default async function FeedbackReservationPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const eff = await getEffective(supabase);
+  const profile = eff?.profile ?? null;
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
   if (role === "Viewer") redirect("/analytics");
 

@@ -1,50 +1,56 @@
-# v34 — Match Total per Module: server-side filtering
+# v36 — Admin "View As" (read‑only preview)
 
-## What this fixes
-- **Errors (total) / Match Total filter now covers the entire dataset**, not just
-  the rows currently shown in the table. Ranking and filtering happen in the
-  database, then the top 250 matches are returned.
-- **When a module is selected**, the Errors filter and the ranking are based on
-  **that module's totals only** (e.g. pick "Players" + `≥ 50` → matches whose
-  Players total across all parts is ≥ 50, ranked by Players).
+Lets an Admin preview the app exactly as any user (any role) sees it — their nav,
+their pages, their data — without logging in as them. It never touches the target's
+account or session, and writes are blocked while previewing.
+
+## Do I need to run any SQL?
+**No.** This is entirely application code — no schema change, no migration, no query.
+(The only still‑pending DB item is the separate Team‑Leader error cleanup, which is
+unrelated to this.)
 
 ## How it works
-The browser used to load a capped slice of rows and filter them locally, so
-anything outside that slice was invisible to the filter. The new SQL function
-`match_module_breakdown_v2` computes each match's total over the whole
-`module_totals` table, applies the threshold at the match level, ranks, and
-returns every part row for the top 250 matches.
+- A `view_as` cookie (set only for Admins, via `/api/view-as`) holds the target profile id.
+- `lib/effective.ts → getEffective()` returns the **target's** role + HR code when an Admin
+  is previewing, otherwise the real profile. Every page uses this for its role‑gate and data.
+- A top bar (`ViewAsBar`) lets the Admin pick any user and shows a "Viewing as … — Exit" banner.
+- Mutating API routes refuse to run while a preview is active (read‑only).
 
-## Deploy steps (3 files)
+## Files to deploy (path = destination; replace existing, or create new)
+**New files**
+- `lib/effective.ts`
+- `components/ViewAsBar.tsx`
+- `app/api/view-as/route.ts`
 
-### 1. Run the SQL (Supabase → SQL Editor)
-Run `01_match_module_breakdown_v2.sql`. It's `create or replace` and safe to
-re-run. It does **not** drop the old function, so the live site keeps working
-until you upload the two files below.
+**Changed files**
+- `app/(app)/layout.tsx`            (renders the bar; sidebar/role follow the preview)
+- `app/api/upload/route.ts`         (read‑only guard)
+- `app/api/modules/upload/route.ts` (read‑only guard)
+- `app/api/quality-upload/route.ts` (read‑only guard)
+- `app/api/admin/users/route.ts`    (read‑only guard)
+- 18 pages under `app/(app)/…/page.tsx` (use the effective profile):
+  accounts, admin-reports, admin-sessions, analytics, collectors, dashboard,
+  feedback-progress, feedback-reservation, match-totals, module-upload,
+  my-matches, my-reports, my-sessions, quality-score, report-monitoring,
+  reports-sessions, upload, users
 
-### 2. Upload `page.tsx`
-Destination (replace existing):
-`app/(app)/match-totals/page.tsx`
+Every file in this folder is already at its correct relative path, so you can copy the
+tree straight over your project (or push your project folder — these are the same files
+already saved there) and commit once.
 
-### 3. Upload `MatchTotals.tsx`
-Destination (replace existing):
-`components/MatchTotals.tsx`
+## Deploy order (only matters if uploading one folder at a time)
+Upload **`lib/effective.ts` first** — once it exists, every other changed file compiles,
+so `main` stays green no matter the order of the remaining commits.
 
-Order doesn't matter much, but running the SQL first avoids a brief window where
-the new page calls a function that doesn't exist yet. After both files are
-committed, Vercel auto-deploys.
-
-## Quick test after deploy
-1. Open **Match Total per Module** with no filters → matches ranked by total errors.
-2. Set **Errors (total) ≥ 200** → only matches whose grand total ≥ 200, drawn
-   from the whole dataset (not just the first page).
-3. Select **Module = Players**, then **≥ 50** → ranked/filtered by Players only;
-   the label reads "Errors (Players) — match total".
-4. Set **≤ 5** → low-error matches appear (these were previously impossible to
-   reach because they were never in the loaded slice).
+## Quick test after deploy (as an Admin)
+1. Top bar shows an "Admin preview — View as a user…" picker.
+2. Pick a Collector → you land on their Home/My Reports/My Match Details with **their** data;
+   the sidebar shows the Collector menu; an amber "Viewing as … (read‑only)" banner appears.
+3. Pick a Reviewer → you see the Reviewer pages.
+4. Try an upload or a Users edit while previewing → blocked ("Read‑only: exit the preview…").
+5. Click **Exit** → back to your own Admin view.
 
 ## Notes
-- Type-checked clean against the project's `tsconfig.json`.
-- No other pages reference `match_module_breakdown_v2`, so nothing else changes.
-- The error filter is now part of the URL (`?errop=gte&errval=200`), so filtered
-  views are shareable/bookmarkable.
+- Previewing uses **your** Admin read access to show the target's data; it does not use
+  their login and cannot change their account or session.
+- Self‑account is excluded from the picker; the cookie is Admin‑gated server‑side.

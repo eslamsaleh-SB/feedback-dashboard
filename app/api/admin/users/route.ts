@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isViewingAs } from "@/lib/effective";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -15,6 +16,13 @@ function adminClient() {
 export async function POST(req: NextRequest) {
   // 1) Caller must be a signed-in Admin.
   const supabase = createClient();
+  if (isViewingAs()) {
+    return NextResponse.json(
+      { error: "Read-only: exit the 'View as' preview before making changes." },
+      { status: 403 }
+    );
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

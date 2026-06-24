@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getEffective } from "@/lib/effective";
 import { redirect } from "next/navigation";
 import CollectorMatchDetails from "@/components/CollectorMatchDetails";
 import type { EnrichedPart } from "@/components/MatchTotals";
@@ -11,7 +12,8 @@ export default async function MyMatchesPage({ searchParams }: { searchParams: { 
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: profile } = await supabase.from("profiles").select("role, hr_code").eq("id", user.id).single();
+  const eff = await getEffective(supabase);
+  const profile = eff?.profile ?? null;
   if (profile?.role !== "Viewer") redirect("/match-totals");
   const from = isoOk(searchParams.from) ?? "";
   const to = isoOk(searchParams.to) ?? "";

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getEffective } from "@/lib/effective";
 import QualityScoreDashboard from "@/components/QualityScoreDashboard";
 import type { AppRole } from "@/components/Sidebar";
 
@@ -17,11 +18,8 @@ export default async function QualityScorePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, hr_code, team")
-    .eq("id", user!.id)
-    .single();
+  const eff = await getEffective(supabase);
+  const profile = eff?.profile ?? null;
 
   const role = (profile?.role ?? "Viewer") as AppRole;
   const myHr = profile?.hr_code ?? null;

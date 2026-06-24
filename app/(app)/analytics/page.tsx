@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getEffective } from "@/lib/effective";
 import CollectorDashboard from "@/components/CollectorDashboard";
 import CollectorsPerformance from "@/components/CollectorsPerformance";
 import {
@@ -45,11 +46,8 @@ export default async function AnalyticsPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, collector_id, hr_code, team")
-    .eq("id", user!.id)
-    .single();
+  const eff = await getEffective(supabase);
+  const profile = eff?.profile ?? null;
   const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
 
   const from = isoOk(searchParams.from);

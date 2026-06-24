@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getEffective } from "@/lib/effective";
 import ReportsSessionsView from "@/components/ReportsSessionsView";
 
 export const dynamic = "force-dynamic";
@@ -9,11 +10,8 @@ export default async function ReportsSessionsPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, hr_code")
-    .eq("id", user!.id)
-    .single();
+  const eff = await getEffective(supabase);
+  const profile = eff?.profile ?? null;
 
   const role = profile?.role ?? "Viewer";
   const myHr = profile?.hr_code ?? null;

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getEffective } from "@/lib/effective";
 import type { AppRole } from "@/components/Sidebar";
 import Link from "next/link";
 export const dynamic = "force-dynamic";
@@ -9,11 +10,8 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, hr_code")
-    .eq("id", user.id)
-    .single();
+  const eff = await getEffective(supabase);
+  const profile = eff?.profile ?? null;
 
   const role = (profile?.role ?? "Viewer") as AppRole;
   if (role === "Viewer") redirect("/analytics");
