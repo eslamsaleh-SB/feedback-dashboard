@@ -9,9 +9,13 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Public, unauthenticated API endpoints (e.g. the signup page needs the team
-  // list BEFORE the user has an account). These must bypass BOTH the auth gate
-  // and the logged-in redirect so they work for anonymous and signed-in callers.
-  if (pathname.startsWith("/api/teams")) {
+  // list BEFORE the user has an account, and the new signup endpoint provisions
+  // the account itself). These must bypass BOTH the auth gate and the logged-in
+  // redirect so they work for anonymous and signed-in callers.
+  if (
+    pathname.startsWith("/api/teams") ||
+    pathname.startsWith("/api/auth/signup")
+  ) {
     return response;
   }
 

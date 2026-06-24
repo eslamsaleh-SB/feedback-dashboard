@@ -1,65 +1,47 @@
-# v38 — ALL pending changes, in one package
+# v40 — Signup without confirmation email (fixes "email rate limit exceeded")
 
-Everything prepared so far, consolidated so you can commit once. Every file is at
-its correct relative path — copy the tree over your project (or push your project
-folder, since these are the same files already saved there) and commit.
+## Problem
+New users trying to register hit Supabase's built-in email rate limit
+("email rate limit exceeded"). Supabase's free tier sends only a handful
+of confirmation/reset emails per hour, regardless of how many users you have.
+The old signup flow used `supabase.auth.signUp()` which always tries to send
+a confirmation email.
 
-Type‑checks clean against the project's `tsconfig.json`.
+## Fix
+Signup now goes through a server route that uses the **admin** API with
+`email_confirm: true`, so Supabase never tries to email the new user.
+The `handle_new_user()` trigger still runs and creates the profile + links
+the collector exactly as before.
 
-------------------------------------------------------------------------------
-## A) Code — deploy these files (no order needed if committed together; if you
-##    upload folder‑by‑folder, upload `lib/effective.ts` FIRST so the build stays green)
-------------------------------------------------------------------------------
+No email = no rate limit.
 
-**View As (read‑only admin preview) + per‑user Reset PW**
-- `lib/effective.ts`                      (new — effective-profile resolver)
-- `components/ViewAsBar.tsx`              (new — top bar + "Viewing as… Exit")
-- `app/api/view-as/route.ts`             (new — admin-only cookie set/clear)
-- `app/(app)/layout.tsx`                 (top bar + sidebar/role follow the preview)
-- `components/UsersManager.tsx`          (adds **Reset PW** button per user)
-- `app/api/admin/users/route.ts`         (adds `resetPassword` action; read‑only guard)
-- `app/api/upload/route.ts`              (read‑only guard while previewing)
-- `app/api/modules/upload/route.ts`      (read‑only guard)
-- `app/api/quality-upload/route.ts`      (read‑only guard)
-- 18 pages under `app/(app)/.../page.tsx` (use the effective profile for role + data):
-  accounts, admin-reports, admin-sessions, analytics, collectors, dashboard,
-  feedback-progress, feedback-reservation, match-totals, module-upload,
-  my-matches, my-reports, my-sessions, quality-score, report-monitoring,
-  reports-sessions, upload, users
+## Files
 
-**Feedback status sync**
-- `components/feedback-progress` lives in `components/FeedbackProgress.tsx`
-  (already in the list above as part of feedback-progress) — marking attendance now
-  also updates the collector‑facing `feedback_meetings` row, so the collector's
-  "My Sessions" shows the same status as the admin.
-  Mapping: Attended/Attended Late→Completed, Absent→Absent, Cancelled→Cancelled, blank→Scheduled.
+| File | Change |
+| --- | --- |
+| `app/api/auth/signup/route.ts` | **NEW** — public POST endpoint that validates the inputs, checks the HR code is free, and calls `auth.admin.createUser({ email_confirm: true })`. |
+| `app/login/page.tsx` | Signup mode now POSTs to `/api/auth/signup` instead of calling `supabase.auth.signUp()`. |
+| `middleware.ts` | Whitelist `/api/auth/signup` so unauthenticated callers can reach it (same pattern as `/api/teams`). |
 
-------------------------------------------------------------------------------
-## B) SQL — run in Supabase (currently down for me; run when it's back)
-------------------------------------------------------------------------------
-- `sql/01_remove_non_collector_errors.sql`
-  Removes module_totals rows attributed to non‑Collector roles (role != Viewer).
-  **Run the PREVIEW select first**, then uncomment the DELETE.
-- `sql/02_per_video_schema_FOUNDATION.sql`
-  Foundation tables for the per‑video notes/acknowledgment feature (acks, notes,
-  replies, status) + `position` on session_videos for strict sequential order.
-  Review only for now — it pairs with the per‑video UI (see C).
+## Deploy
+1. Copy the three files above into the repo at the same relative paths.
+2. Commit + push (`git push origin main`).
+3. Vercel auto-deploys. No SQL, no env-var changes — `SUPABASE_SERVICE_ROLE_KEY`
+   is already set on Vercel.
 
-------------------------------------------------------------------------------
-## C) NOT included yet — per‑video notes & acknowledgment UI (the large build)
-------------------------------------------------------------------------------
-The schema is in `sql/02_…`. The UI + behaviour still to build:
-- Reviewer: after importing videos, redirect to the report and comment per video.
-- Collector: **strict sequential** acknowledgment (watch+ack video 1 before video 2
-  unlocks), plus a note per video.
-- Reviewers reply to notes; first reply flips the note Open→Replied; mark Resolved.
-- Progress tracker (Open/Replied/Resolved) for both sides.
-- Email to the collector once every note on a report has a reply (includes match
-  name + report date, "reviewed by the Quality team").
-This is ~8–10 new files + an email route; it's the next dedicated build.
+## How to verify
+- Open the live site in an incognito window.
+- Click "Need an account? Sign up", fill in name / HR code / team / email / password, submit.
+- Expect "Account created. You can sign in now." — no email is sent, no rate-limit error.
+- Sign in with the same email + password.
 
-------------------------------------------------------------------------------
-## Reset password note
-The "email rate limit exceeded" you saw is Supabase's built‑in email cap. The new
-**Reset PW** button avoids email entirely (sets a temp password to share). To make
-the *emailed* reset reliable, configure custom SMTP in Supabase → Auth → SMTP.
+## Note about *password reset*
+Password reset emails (`auth.resetPasswordForEmail`) still go through Supabase's
+email service and **are still rate-limited**. Two options:
+
+1. **Recommended** — configure custom SMTP in Supabase
+   (Dashboard → Project Settings → Auth → SMTP Settings) using your existing
+   Gmail creds (`GMAIL_USER` / `GMAIL_APP_PASSWORD`). Then resets go through
+   Gmail and the limit no longer applies.
+2. Use the admin **Reset PW** button on the Users page (already implemented in
+   `/api/admin/users` `resetPassword`) — generates a temp password, no email.

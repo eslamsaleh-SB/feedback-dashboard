@@ -53,15 +53,23 @@ export default function LoginPage() {
       setLoading(false);
       return setMessage({ type: "err", text: "HR code must be A-1234 or I-1234 (letter A or I, a dash, then numbers). Don't enter your name." });
     }
-    const { data: available, error: checkErr } = await supabase.rpc("hr_code_available", { p_code: code });
-    if (checkErr) { setLoading(false); return setMessage({ type: "err", text: checkErr.message }); }
-    if (available === false) { setLoading(false); return setMessage({ type: "err", text: `HR code "${code}" is already registered.` }); }
-    const { error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { full_name: fullName, hr_code: code, team: team === "__none__" ? null : team || null } },
+    // Sign up through our server route (admin createUser with email_confirm:true).
+    // This avoids Supabase's built-in email rate limit that blocks normal signUp().
+    const res = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        email,
+        password,
+        full_name: fullName,
+        hr_code: code,
+        team: team === "__none__" ? null : team || null,
+      }),
     });
+    const out = await res.json().catch(() => ({} as { error?: string }));
     setLoading(false);
-    if (error) return setMessage({ type: "err", text: error.message });
+    if (!res.ok) return setMessage({ type: "err", text: out?.error || "Could not create account." });
     setMessage({ type: "ok", text: "Account created. You can sign in now." });
     switchMode("signin");
   }
