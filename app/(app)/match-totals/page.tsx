@@ -108,6 +108,7 @@ export default async function MatchTotalsPage({
       errVal={errVal != null ? String(errVal) : ""}
       rows={rows}
       collectors={collectorOptions}
+      canDelete={role === "Admin"}
       capped={(partRows?.length ?? 0) > 0 && new Set((partRows ?? []).map((r: any) => r.matchid)).size >= 250}
     />
   );
