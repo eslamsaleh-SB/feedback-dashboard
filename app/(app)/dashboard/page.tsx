@@ -21,6 +21,8 @@ export default async function DashboardPage() {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
 
+  // Scheduled sessions = feedback_attendees rows with attendance still null
+  // (post-feedback_meetings-retirement; one attendee row = one collector seat).
   const [
     { count: reportCount },
     { count: collectorCount },
@@ -29,7 +31,7 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     supabase.from("match_sessions").select("id", { count: "exact", head: true }),
     supabase.from("collectors").select("id", { count: "exact", head: true }),
-    supabase.from("feedback_meetings").select("id", { count: "exact", head: true }).eq("status", "Scheduled"),
+    supabase.from("feedback_attendees").select("id", { count: "exact", head: true }).is("attendance", null),
     supabase.from("session_notes").select("id", { count: "exact", head: true }).eq("status", "Not Started"),
   ]);
 

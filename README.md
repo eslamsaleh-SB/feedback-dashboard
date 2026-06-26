@@ -1,47 +1,66 @@
-# v40 — Signup without confirmation email (fixes "email rate limit exceeded")
+# v41 — Retire the legacy `feedback_meetings` table
 
-## Problem
-New users trying to register hit Supabase's built-in email rate limit
-("email rate limit exceeded"). Supabase's free tier sends only a handful
-of confirmation/reset emails per hour, regardless of how many users you have.
-The old signup flow used `supabase.auth.signUp()` which always tries to send
-a confirmation email.
+## Why
+`feedback_meetings` was a parallel copy of feedback data so the collector
+"My Sessions" page had something to read. The canonical source is
+`feedback_reservations` + `feedback_attendees`. Keeping two tables in sync
+caused drift between what the admin set on **Feedback Progress** and what the
+collector saw on **My Sessions**.
 
-## Fix
-Signup now goes through a server route that uses the **admin** API with
-`email_confirm: true`, so Supabase never tries to email the new user.
-The `handle_new_user()` trigger still runs and creates the profile + links
-the collector exactly as before.
+This update repoints every screen at the canonical source and drops the
+duplicate table.
 
-No email = no rate limit.
+## How "Feedback Reservation" maps after the change
 
-## Files
-
-| File | Change |
+| Screen | Data source (after v41) |
 | --- | --- |
-| `app/api/auth/signup/route.ts` | **NEW** — public POST endpoint that validates the inputs, checks the HR code is free, and calls `auth.admin.createUser({ email_confirm: true })`. |
-| `app/login/page.tsx` | Signup mode now POSTs to `/api/auth/signup` instead of calling `supabase.auth.signUp()`. |
-| `middleware.ts` | Whitelist `/api/auth/signup` so unauthenticated callers can reach it (same pattern as `/api/teams`). |
+| Admin → Feedback → **Feedback Reservation** (book a session) | inserts into `feedback_reservations` + `feedback_attendees` only |
+| Admin → Feedback → **Feedback Progress** (set attendance) | reads/writes `feedback_attendees` only |
+| Admin → **Feedback Sessions** (`/admin-sessions`, status list) | reads `feedback_attendees` joined to `feedback_reservations`; status changes write `feedback_attendees.attendance` |
+| Admin home (`/dashboard` — "Scheduled Sessions" stat) | counts `feedback_attendees` rows with `attendance is null` |
+| Collector → **My Sessions** | reads `feedback_attendees` (joined to reservation) for their own `hr_code` |
+| Collector → **Reports & Sessions** | same canonical source, scoped by RLS |
+| Collector → **Home / Analytics** (sessions card) | same canonical source |
 
-## Deploy
-1. Copy the three files above into the repo at the same relative paths.
-2. Commit + push (`git push origin main`).
-3. Vercel auto-deploys. No SQL, no env-var changes — `SUPABASE_SERVICE_ROLE_KEY`
-   is already set on Vercel.
+The collector now sees *exactly* what the admin marks — no more "out of
+sync" rows.
 
-## How to verify
-- Open the live site in an incognito window.
-- Click "Need an account? Sign up", fill in name / HR code / team / email / password, submit.
-- Expect "Account created. You can sign in now." — no email is sent, no rate-limit error.
-- Sign in with the same email + password.
+## Deploy order (important)
 
-## Note about *password reset*
-Password reset emails (`auth.resetPasswordForEmail`) still go through Supabase's
-email service and **are still rate-limited**. Two options:
+1. **Run SQL `sql/01_rls_self_read.sql`** in the Supabase SQL editor.
+   This adds the additive SELECT policies so collectors can read their own
+   attendee/reservation rows. **Run this before pushing the code**, otherwise
+   collectors will see an empty My Sessions page during the gap.
+2. Copy these files into the repo at the same relative paths and push to
+   `main` (Vercel auto-deploys):
+   - `app/(app)/my-sessions/page.tsx`
+   - `app/(app)/dashboard/page.tsx`
+   - `app/(app)/analytics/page.tsx`
+   - `app/(app)/admin-sessions/page.tsx`
+   - `app/(app)/reports-sessions/page.tsx`
+   - `components/AdminSessionsView.tsx`
+   - `components/FeedbackProgress.tsx`
+   - `components/FeedbackReservationForm.tsx`
+3. **Verify on the live site:**
+   - Sign in as a Viewer/Collector → "My Sessions" still shows their sessions.
+   - Sign in as Admin → "Feedback Sessions" (`/admin-sessions`) lists every
+     attendee with the right status; dashboard "Scheduled Sessions" count is
+     non-zero (if there are pending sessions); booking a new session still
+     emails the attendees.
+   - Change a status on `/admin-sessions` — the collector's "My Sessions" view
+     should now reflect it.
+4. **Run SQL `sql/02_drop_feedback_meetings.sql`** in the Supabase SQL editor.
+   This drops the table for good. **Don't run step 4 until step 3 passes.**
 
-1. **Recommended** — configure custom SMTP in Supabase
-   (Dashboard → Project Settings → Auth → SMTP Settings) using your existing
-   Gmail creds (`GMAIL_USER` / `GMAIL_APP_PASSWORD`). Then resets go through
-   Gmail and the limit no longer applies.
-2. Use the admin **Reset PW** button on the Users page (already implemented in
-   `/api/admin/users` `resetPassword`) — generates a temp password, no email.
+## Rollback
+- The SQL in step 4 is destructive. Take a CSV export of `feedback_meetings`
+  from the SQL editor first (`select * from public.feedback_meetings;` → Download CSV).
+- If you need to revert the code, revert the v41 commit on GitHub; the
+  additive RLS policies from step 1 do no harm if the old code is back.
+
+## Notes for future cleanup
+- `created_by` state in `FeedbackReservationForm.tsx` is now unused (it was
+  only set on the dropped `feedback_meetings` insert). It's harmless and was
+  left in place to keep the diff small; remove it later if you do a tidy pass.
+- `sess` parameter on the `save()` function in `FeedbackProgress.tsx` is also
+  now unused but still passed by callers — same reasoning.

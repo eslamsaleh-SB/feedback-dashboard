@@ -63,7 +63,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     );
   }
 
-  async function save(sess: Session, a: Attendee) {
+  async function save(_sess: Session, a: Attendee) {
     setSavingId(a.id);
     setSavedId(null);
     setMsg(null);
@@ -75,19 +75,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
       setSavingId(null);
       return setMsg(error.message);
     }
-    // Keep the collector-facing record (feedback_meetings) in sync so the
-    // collector's "My Sessions" reflects the attendance the admin just set.
-    const status =
-      a.attendance == null
-        ? "Scheduled"
-        : a.attendance === "Attended" || a.attendance === "Attended Late"
-        ? "Completed"
-        : a.attendance; // "Absent" | "Cancelled"
-    await supabase
-      .from("feedback_meetings")
-      .update({ status })
-      .eq("hr_code", a.hr_code)
-      .eq("session_date", sess.session_date);
+    // (feedback_meetings was retired; collectors read feedback_attendees directly.)
     setSavingId(null);
     setSavedId(a.id);
     setTimeout(() => setSavedId((s) => (s === a.id ? null : s)), 1500);
@@ -147,7 +135,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Code / name / team…"
+            placeholder="Code / name / team..."
             className={`${inputCls} w-full`}
           />
         </div>
@@ -193,11 +181,11 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                 </span>
                 {s.is_group && (
                   <span className="rounded-full bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs">
-                    Group · {s.attendees.length}
+                    Group - {s.attendees.length}
                   </span>
                 )}
                 {s.mode === "Offline" && s.location && (
-                  <span className="text-slate-500">📍 {s.location}</span>
+                  <span className="text-slate-500">{s.location}</span>
                 )}
                 {s.mode === "Online" && s.meet_link && (
                   <a
@@ -243,7 +231,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                               statusStyle[a.attendance ?? ""]
                             }`}
                           >
-                            <option value="">— not marked —</option>
+                            <option value="">-- not marked --</option>
                             {STATUSES.map((st) => (
                               <option key={st} value={st}>
                                 {st}
@@ -255,7 +243,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                           <input
                             value={a.comment ?? ""}
                             onChange={(e) => editAttendee(s.id, a.id, { comment: e.target.value })}
-                            placeholder="Reason / notes (late by…, absence reason, etc.)"
+                            placeholder="Reason / notes (late by..., absence reason, etc.)"
                             className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
                           />
                         </td>
@@ -265,7 +253,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                             disabled={savingId === a.id}
                             className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
                           >
-                            {savingId === a.id ? "Saving…" : savedId === a.id ? "Saved ✓" : "Save"}
+                            {savingId === a.id ? "Saving..." : savedId === a.id ? "Saved" : "Save"}
                           </button>
                         </td>
                       </tr>

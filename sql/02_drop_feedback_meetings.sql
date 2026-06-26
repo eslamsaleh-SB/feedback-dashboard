@@ -1,0 +1,14 @@
+-- =============================================================================
+-- STEP 2 — RUN ONLY AFTER:
+--   (a) STEP 1 (01_rls_self_read.sql) has been executed,
+--   (b) the v41 code is deployed and verified on the live site, and
+--   (c) you've spot-checked that /my-sessions still shows correct rows for a
+--       sample collector (and admins still see /admin-sessions).
+-- =============================================================================
+-- (Optional safety) export the legacy data first so you can restore if needed:
+--   In Supabase SQL editor: select * from public.feedback_meetings;
+--   then "Download CSV". Keep the file somewhere safe.
+--
+-- Drop the duplicate table. CASCADE removes any leftover indexes, FKs,
+-- policies, and triggers that depended on it.
+drop table if exists public.feedback_meetings cascade;

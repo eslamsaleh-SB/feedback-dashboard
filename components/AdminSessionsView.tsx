@@ -50,7 +50,17 @@ export default function AdminSessionsView({
 
   async function updateStatus(id: string, status: string) {
     setUpdatingId(id);
-    await supabase.from("feedback_meetings").update({ status }).eq("id", id);
+    // Translate the simplified status into the canonical attendance value on
+    // feedback_attendees (feedback_meetings was retired). Scheduled = null,
+    // Completed = "Attended" (admin can refine on Feedback Progress),
+    // Cancelled = "Cancelled".
+    const attendance =
+      status === "Scheduled"
+        ? null
+        : status === "Completed"
+        ? "Attended"
+        : "Cancelled";
+    await supabase.from("feedback_attendees").update({ attendance }).eq("id", id);
     setSessions((prev) => prev.map((s) => s.id === id ? { ...s, status } : s));
     setUpdatingId(null);
   }

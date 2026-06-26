@@ -34,11 +34,34 @@ export default async function ReportsSessionsPage() {
     .select("id, report_id, note_text, status, created_at")
     .order("created_at", { ascending: false });
 
-  // Feedback meetings (RLS scopes automatically)
-  const { data: meetingRows } = await supabase
-    .from("feedback_meetings")
-    .select("id, session_date, mode, notes, status, meet_link, location")
-    .order("session_date", { ascending: false });
+  // Feedback sessions for this collector - read from the canonical source
+  // (feedback_meetings was retired in v41). RLS limits attendees to the
+  // caller's own rows, so no explicit hr_code filter is needed here.
+  const { data: attendeeRows } = await supabase
+    .from("feedback_attendees")
+    .select(
+      "id, attendance, comment, feedback_reservations(session_date, mode, meet_link, location)"
+    );
+  const meetingRows = (attendeeRows ?? [])
+    .map((a: any) => {
+      const r = a.feedback_reservations ?? {};
+      const status =
+        a.attendance == null
+          ? "Scheduled"
+          : a.attendance === "Attended" || a.attendance === "Attended Late"
+          ? "Completed"
+          : a.attendance;
+      return {
+        id: a.id,
+        session_date: r.session_date ?? null,
+        mode: r.mode ?? null,
+        notes: a.comment ?? null,
+        status,
+        meet_link: r.meet_link ?? null,
+        location: r.location ?? null,
+      };
+    })
+    .sort((a: any, b: any) => (b.session_date ?? "").localeCompare(a.session_date ?? ""));
 
   return (
     <ReportsSessionsView

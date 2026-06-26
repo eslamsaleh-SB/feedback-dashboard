@@ -91,7 +91,7 @@ export default async function AnalyticsPage({
       matchid: r.matchid,
       partid: r.partid,
       hr_code: r.hr_code,
-      collector_name: r.hr_code ? byHr.get(r.hr_code)?.name ?? r.hr_code : "—",
+      collector_name: r.hr_code ? byHr.get(r.hr_code)?.name ?? r.hr_code : "-",
       date: r.date,
       counts: numCounts(r),
       total: Number(r.total),
@@ -126,13 +126,26 @@ export default async function AnalyticsPage({
     if (to) rq = rq.lte("review_date", to);
     const { data: reportRows } = await rq;
 
-    let fq = supabase
-      .from("feedback_meetings")
-      .select("id, session_date, mode, notes")
-      .order("session_date", { ascending: false });
-    if (from) fq = fq.gte("session_date", from);
-    if (to) fq = fq.lte("session_date", to);
-    const { data: fsRows } = await fq;
+    // Sessions for this collector: read attendees joined to reservations
+    // (feedback_meetings was retired in v41).
+    const { data: feRows } = await supabase
+      .from("feedback_attendees")
+      .select("id, comment, feedback_reservations(session_date, mode)")
+      .eq("hr_code", profile?.hr_code ?? "");
+
+    const fsRows = (feRows ?? [])
+      .map((a: any) => ({
+        id: a.id,
+        session_date: a.feedback_reservations?.session_date ?? null,
+        mode: a.feedback_reservations?.mode ?? null,
+        notes: a.comment ?? null,
+      }))
+      .filter((r: any) => {
+        if (from && (!r.session_date || r.session_date < from)) return false;
+        if (to && (!r.session_date || r.session_date > to)) return false;
+        return true;
+      })
+      .sort((a: any, b: any) => (b.session_date ?? "").localeCompare(a.session_date ?? ""));
 
     return (
       <CollectorDashboard

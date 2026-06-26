@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Combobox, { type ComboOption } from "@/components/Combobox";
@@ -42,6 +42,13 @@ export default function FeedbackReservationForm({
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
+  // (createdBy was previously written into feedback_meetings; that table is
+  // retired in v41, so the state was removed.)
+  useEffect(() => {
+    // Touch the auth user once to keep RLS context populated.
+    supabase.auth.getUser().catch(() => {});
+  }, []);
+
   const collectorOptions: ComboOption[] = useMemo(
     () =>
       [...collectors]
@@ -67,7 +74,7 @@ export default function FeedbackReservationForm({
 
   function generateMeet() {
     window.open("https://meet.google.com/new", "_blank", "noopener,noreferrer");
-    setOk("A new Google Meet tab was opened — copy its link and paste it below.");
+    setOk("A new Google Meet tab was opened - copy its link and paste it below.");
   }
 
   async function pasteLink() {
@@ -75,7 +82,7 @@ export default function FeedbackReservationForm({
       const t = await navigator.clipboard.readText();
       if (t) setMeetLink(t.trim());
     } catch {
-      setErr("Couldn't read the clipboard — paste the link manually.");
+      setErr("Couldn't read the clipboard - paste the link manually.");
     }
   }
 
@@ -119,19 +126,10 @@ export default function FeedbackReservationForm({
       return setErr(e2.message);
     }
 
-    // Also create feedback_meetings rows so collectors can see their sessions
+    // (feedback_meetings was retired in v41 - collectors now read their
+    // sessions directly from feedback_attendees joined to feedback_reservations.)
     const meetLink_ = mode === "Online" ? meetLink.trim() || null : null;
     const location_ = mode === "Offline" ? location : null;
-    await supabase.from("feedback_meetings").insert(
-      chosen.map((hr) => ({
-        hr_code: hr,
-        session_date: sessionDate,
-        mode,
-        meet_link: meetLink_,
-        location: location_,
-        status: "Scheduled",
-      }))
-    );
 
     // Send email notifications (fire-and-forget; non-blocking)
     fetch("/api/feedback-notify", {
@@ -146,7 +144,7 @@ export default function FeedbackReservationForm({
         location: location_,
         shift,
       }),
-    }).catch(() => {}); // ignore errors — email is best-effort
+    }).catch(() => {}); // ignore errors - email is best-effort
 
     setBusy(false);
     setOk(
@@ -210,7 +208,7 @@ export default function FeedbackReservationForm({
                   className="rounded-lg border border-slate-300 px-3 py-2 text-slate-500 hover:bg-slate-50"
                   title="Remove"
                 >
-                  ✕
+                  x
                 </button>
               )}
             </div>
@@ -261,7 +259,7 @@ export default function FeedbackReservationForm({
               <input
                 value={meetLink}
                 onChange={(e) => setMeetLink(e.target.value)}
-                placeholder="https://meet.google.com/…"
+                placeholder="https://meet.google.com/..."
                 className={`${inputCls} flex-1 min-w-[220px]`}
               />
               <button
@@ -273,7 +271,7 @@ export default function FeedbackReservationForm({
               </button>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              The button opens Google Meet and creates a new meeting — copy that link and paste it here.
+              The button opens Google Meet and creates a new meeting - copy that link and paste it here.
             </p>
           </div>
         ) : (
@@ -284,7 +282,7 @@ export default function FeedbackReservationForm({
               onChange={(e) => setLocation(e.target.value)}
               className={inputCls}
             >
-              <option value="">Select office…</option>
+              <option value="">Select office...</option>
               {LOCATIONS.map((l) => (
                 <option key={l} value={l}>
                   {l}
@@ -323,7 +321,7 @@ export default function FeedbackReservationForm({
               onChange={(e) => setShift(e.target.value as Shift)}
               className={inputCls}
             >
-              <option value="">Select shift…</option>
+              <option value="">Select shift...</option>
               {SHIFTS.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -350,7 +348,7 @@ export default function FeedbackReservationForm({
         disabled={busy}
         className="rounded-lg bg-slate-900 text-white px-6 py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-slate-800"
       >
-        {busy ? "Booking…" : "Book session"}
+        {busy ? "Booking..." : "Book session"}
       </button>
     </form>
   );
