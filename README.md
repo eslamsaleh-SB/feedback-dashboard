@@ -1,66 +1,73 @@
-# v41 — Retire the legacy `feedback_meetings` table
+# v42 - Reports + Home + Feedback Progress + Quality batch
 
-## Why
-`feedback_meetings` was a parallel copy of feedback data so the collector
-"My Sessions" page had something to read. The canonical source is
-`feedback_reservations` + `feedback_attendees`. Keeping two tables in sync
-caused drift between what the admin set on **Feedback Progress** and what the
-collector saw on **My Sessions**.
+A single batch covering the requested updates across Reports, Notes, Home dashboard, Feedback Progress, Quality Upload, and Quality Score pages.
 
-This update repoints every screen at the canonical source and drops the
-duplicate table.
+## Deploy order
 
-## How "Feedback Reservation" maps after the change
+1. **Run SQL `sql/01_note_replies.sql`** in the Supabase SQL editor.
+   Adds `reply_text`, `replied_at`, `replied_by` columns to `session_notes` so admin replies can be stored.
+2. *(Optional, recommended)* **Run SQL `sql/02_session_videos_unique.sql`**.
+   Removes any duplicate `session_videos` rows that may have been inserted in the past, then adds a unique constraint on `(match_session_id, drive_file_id)` as a safety net behind the app-level dedupe.
+3. Copy the files in this package into the repo at the same relative paths and push to `main` (Vercel auto-deploys).
 
-| Screen | Data source (after v41) |
-| --- | --- |
-| Admin → Feedback → **Feedback Reservation** (book a session) | inserts into `feedback_reservations` + `feedback_attendees` only |
-| Admin → Feedback → **Feedback Progress** (set attendance) | reads/writes `feedback_attendees` only |
-| Admin → **Feedback Sessions** (`/admin-sessions`, status list) | reads `feedback_attendees` joined to `feedback_reservations`; status changes write `feedback_attendees.attendance` |
-| Admin home (`/dashboard` — "Scheduled Sessions" stat) | counts `feedback_attendees` rows with `attendance is null` |
-| Collector → **My Sessions** | reads `feedback_attendees` (joined to reservation) for their own `hr_code` |
-| Collector → **Reports & Sessions** | same canonical source, scoped by RLS |
-| Collector → **Home / Analytics** (sessions card) | same canonical source |
+No env-var changes. Existing `SUPABASE_SERVICE_ROLE_KEY`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `EMAIL_FROM` are used.
 
-The collector now sees *exactly* what the admin marks — no more "out of
-sync" rows.
+## What changed
 
-## Deploy order (important)
+### Reports
 
-1. **Run SQL `sql/01_rls_self_read.sql`** in the Supabase SQL editor.
-   This adds the additive SELECT policies so collectors can read their own
-   attendee/reservation rows. **Run this before pushing the code**, otherwise
-   collectors will see an empty My Sessions page during the gap.
-2. Copy these files into the repo at the same relative paths and push to
-   `main` (Vercel auto-deploys):
-   - `app/(app)/my-sessions/page.tsx`
-   - `app/(app)/dashboard/page.tsx`
-   - `app/(app)/analytics/page.tsx`
-   - `app/(app)/admin-sessions/page.tsx`
-   - `app/(app)/reports-sessions/page.tsx`
-   - `components/AdminSessionsView.tsx`
-   - `components/FeedbackProgress.tsx`
-   - `components/FeedbackReservationForm.tsx`
-3. **Verify on the live site:**
-   - Sign in as a Viewer/Collector → "My Sessions" still shows their sessions.
-   - Sign in as Admin → "Feedback Sessions" (`/admin-sessions`) lists every
-     attendee with the right status; dashboard "Scheduled Sessions" count is
-     non-zero (if there are pending sessions); booking a new session still
-     emails the attendees.
-   - Change a status on `/admin-sessions` — the collector's "My Sessions" view
-     should now reflect it.
-4. **Run SQL `sql/02_drop_feedback_meetings.sql`** in the Supabase SQL editor.
-   This drops the table for good. **Don't run step 4 until step 3 passes.**
+| # | Change | Files |
+| - | --- | --- |
+| 1 | Videos are now deduped when adding from the same folder (skipped duplicates are reported back to the admin). | `app/api/upload/route.ts`, `components/UploadForm.tsx` |
+| 2 | When adding a match that already has a report for the same collector, the new videos are appended to the existing report and the admin is told "this match already had a report - the videos were added to the existing one". | `app/api/upload/route.ts`, `components/UploadForm.tsx` |
+| 3 | Admin Reports: real **Collector** dropdown filter (case-insensitive selection by HR code), new **Acknowledgement** filter (All / Acknowledged / Not Acknowledged), existing Note Status filter kept. | `app/(app)/admin-reports/page.tsx`, `components/AdminReportsView.tsx` |
+| 4 | Admin Reports: 5 summary cards across the top - Total / Not Acknowledged / Acknowledged / Incomplete Notes / Completed Reports. | `components/AdminReportsView.tsx` |
+| 5 | Notes support replies. Admin types a reply on any open note - the note is marked **Complete** automatically and the collector is emailed with the original note + the reviewer reply quoted. The reply also appears on the collector's My Reports view. | `app/api/admin/note-reply/route.ts` *(new)*, `app/(app)/admin-reports/page.tsx`, `app/(app)/my-reports/page.tsx`, `components/AdminReportsView.tsx`, `components/MyReportsView.tsx`, `sql/01_note_replies.sql` |
+| 6 | Videos section inside a report is collapsible (collapsed by default; toggle with "Show / Hide"). Same on the collector view. | `components/AdminReportsView.tsx`, `components/MyReportsView.tsx` |
 
-## Rollback
-- The SQL in step 4 is destructive. Take a CSV export of `feedback_meetings`
-  from the SQL editor first (`select * from public.feedback_meetings;` → Download CSV).
-- If you need to revert the code, revert the v41 commit on GitHub; the
-  additive RLS policies from step 1 do no harm if the old code is back.
+### Feedback Progress (admin)
 
-## Notes for future cleanup
-- `created_by` state in `FeedbackReservationForm.tsx` is now unused (it was
-  only set on the dropped `feedback_meetings` insert). It's harmless and was
-  left in place to keep the diff small; remove it later if you do a tidy pass.
-- `sess` parameter on the `save()` function in `FeedbackProgress.tsx` is also
-  now unused but still passed by callers — same reasoning.
+- 8 summary cards across the top: Total / Completed / Not Completed / Attended / Late / Absent / Cancelled / Not Marked. *(`components/FeedbackProgress.tsx`)*
+
+### Quality Score Upload
+
+- Single Month dropdown replaced with **Year** + **Month** selectors. *(`app/(app)/quality-upload/page.tsx`)*
+
+### Home Page (admin)
+
+- "Send Report" card renamed to **Submitted Reports** (counts reports in the selected period).
+- Quick Actions section removed - every card now navigates on click.
+- **Scheduled Sessions card replaced** with a row of 5 feedback cards (Total / Completed / Incomplete / Cancelled / Absent) for the selected period.
+- New **Total Module Errors** card with a green/red trend arrow showing % change vs the previous period.
+- New **Average Quality Score** card with the same trend treatment.
+- New **Month / Quarter / Year** filter at the top of the page; everything on the page reflows to the chosen period.
+- *(`app/(app)/dashboard/page.tsx`, `components/DashboardView.tsx` (new))*
+
+### Quality Score page
+
+- New **Period** selector (Month / Quarter / Year) plus separate **Year** + **Month** (or **Quarter**) selectors.
+- New **Team** filter that narrows the Collector dropdown to that team.
+- Collector filter retained; existing line charts and summary still render for whatever range/scope is chosen.
+- *(`app/(app)/quality-score/page.tsx`, `components/QualityScoreDashboard.tsx`)*
+
+## SQL (run by you, in order)
+
+| File | Purpose | When |
+| --- | --- | --- |
+| `sql/01_note_replies.sql` | Adds `reply_text`, `replied_at`, `replied_by` to `session_notes`. | Run **before** deploy. The reply UI fails silently if these columns are missing. |
+| `sql/02_session_videos_unique.sql` | Removes existing duplicate `session_videos` rows and adds a unique `(match_session_id, drive_file_id)` constraint. | Optional but recommended. Safe to run any time. |
+
+## Verification checklist
+
+After running the SQL and deploying:
+
+- Reports: upload the same Drive folder twice in a row - the second upload should report "skipped N duplicate(s)" and not create extra videos.
+- Reports: submit a new report for a collector with an existing match name - the UI should say "this match already had a report... the new videos were added to the existing one".
+- Admin Reports: pick a collector from the new dropdown - the list filters to just their reports. Pick "Not acknowledged" - only pending reports remain.
+- Admin Reports: type a reply on an open note and hit Reply. The note flips to **Complete**, the reply shows in the blue panel underneath, and the collector receives an email.
+- My Reports (as collector): the reviewer reply appears in the blue panel under the original note.
+- Videos: click "Show" on a report's Videos block - iframes load; click "Hide" - they collapse.
+- Feedback Progress: 8 cards across the top show the right counts.
+- Quality Upload: pick Year + Month separately, upload as usual.
+- Home: switch Month / Quarter / Year - all cards reflow, trend arrows compare to the prior period.
+- Quality Score page: Team filter narrows the Collector dropdown; Quarter view shows 3 months of data; Year view shows 12.

@@ -58,7 +58,7 @@ export default function UploadForm({
   }));
   const sessionOptions: ComboOption[] = sessionsForCollector.map((s) => ({
     value: s.id,
-    label: `${s.match_name}${s.review_date ? ` — ${s.review_date}` : ""}`,
+    label: `${s.match_name}${s.review_date ? ` - ${s.review_date}` : ""}`,
   }));
 
   async function handleSubmit(e: React.FormEvent) {
@@ -96,11 +96,21 @@ export default function UploadForm({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Import failed");
 
-      setMsg({
-        type: "ok",
-        text: `Imported ${json.imported} video(s) from Drive. Redirecting…`,
-      });
-      setTimeout(() => router.push("/dashboard"), 1100);
+      // Build a friendly message that reflects whether the report was merged
+      // into an existing one, and whether duplicate videos were skipped.
+      const parts: string[] = [];
+      if (json.merged) {
+        parts.push(
+          "This match already had a report for this collector - the new videos were added to the existing report instead of creating a duplicate."
+        );
+      }
+      parts.push(`Imported ${json.imported ?? 0} new video(s).`);
+      if (json.skipped > 0) {
+        parts.push(`Skipped ${json.skipped} duplicate(s) already attached.`);
+      }
+      parts.push("Redirecting...");
+      setMsg({ type: "ok", text: parts.join(" ") });
+      setTimeout(() => router.push("/dashboard"), json.merged ? 2600 : 1100);
     } catch (err: any) {
       setMsg({ type: "err", text: err.message });
       setLoading(false);
@@ -113,9 +123,9 @@ export default function UploadForm({
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold mb-2">Report</h1>
       <p className="text-sm text-slate-500 mb-6">
-        Upload the videos to a Google Drive folder, set the folder’s sharing to
-        <span className="font-medium"> “Anyone with the link”</span>, then paste the
-        folder link below — we’ll pull in every video automatically.
+        Upload the videos to a Google Drive folder, set the folder sharing to{" "}
+        <span className="font-medium">"Anyone with the link"</span>, then paste the
+        folder link below - we will pull in every video automatically.
       </p>
 
       {/* Mode switch */}
@@ -138,7 +148,7 @@ export default function UploadForm({
         onSubmit={handleSubmit}
         className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5"
       >
-        {/* Collector — always shown, searchable (by code) */}
+        {/* Collector - always shown, searchable (by code) */}
         <div>
           <label className="block text-sm font-medium mb-1">Collector</label>
           <Combobox
@@ -148,8 +158,8 @@ export default function UploadForm({
               setCollectorId(v);
               setSessionId("");
             }}
-            placeholder="Select a collector (code)…"
-            searchPlaceholder="Search by code or name…"
+            placeholder="Select a collector (code)..."
+            searchPlaceholder="Search by code or name..."
           />
         </div>
 
@@ -184,7 +194,7 @@ export default function UploadForm({
                 rows={3}
                 value={overallNotes}
                 onChange={(e) => setOverallNotes(e.target.value)}
-                placeholder="Summary feedback for the whole match…"
+                placeholder="Summary feedback for the whole match..."
               />
             </div>
           </>
@@ -198,8 +208,8 @@ export default function UploadForm({
               value={sessionId}
               onChange={setSessionId}
               disabled={!collectorId}
-              placeholder={collectorId ? "Select a match…" : "Pick a collector first"}
-              searchPlaceholder="Search matches…"
+              placeholder={collectorId ? "Select a match..." : "Pick a collector first"}
+              searchPlaceholder="Search matches..."
             />
           </div>
         )}
@@ -211,13 +221,13 @@ export default function UploadForm({
           </label>
           <input
             className={inputCls}
-            placeholder="https://drive.google.com/drive/folders/…"
+            placeholder="https://drive.google.com/drive/folders/..."
             value={folderUrl}
             onChange={(e) => setFolderUrl(e.target.value)}
             required
           />
           <p className="text-xs text-slate-400 mt-1">
-            The folder must be shared as “Anyone with the link”.
+            The folder must be shared as "Anyone with the link".
           </p>
         </div>
 
@@ -230,7 +240,7 @@ export default function UploadForm({
             <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
           )}
           {loading
-            ? "Importing…"
+            ? "Importing..."
             : mode === "new"
             ? "Create session & import videos"
             : "Import videos to session"}

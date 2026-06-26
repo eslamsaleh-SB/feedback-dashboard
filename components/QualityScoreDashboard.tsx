@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { MODULES, type ModuleValue } from "@/lib/modules";
 import type { AppRole } from "@/components/Sidebar";
 
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
@@ -19,18 +18,12 @@ type FfScore = {
   match_count: number | null;
   upload_month: string;
 };
+type Period = "month" | "quarter" | "year";
 
-// Map module names from the CSV to MODULES values
-const MODULE_ALIASES: Record<string, ModuleValue | "base"> = {
-  base: "base" as any,
-  players: "players",
-  event: "event",
-  formation_tactical: "formation_tactical",
-  location: "location",
-  impact: "impact",
-  extras: "extras",
-  freeze_frame: "freeze_frame",
-};
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 function fmtMonth(iso: string) {
   const [y, m] = iso.split("-");
@@ -51,7 +44,6 @@ function TrendArrow({ prev, curr }: { prev: number | null; curr: number }) {
   );
 }
 
-// Simple SVG line chart
 function LineChart({
   data,
   color = "#0f172a",
@@ -60,31 +52,24 @@ function LineChart({
   color?: string;
 }) {
   if (data.length === 0) return <p className="text-xs text-slate-400">No data</p>;
-
   const W = 340;
   const H = 120;
   const PAD = { top: 12, right: 12, bottom: 28, left: 36 };
   const minV = Math.max(0, Math.min(...data.map((d) => d.value)) - 5);
   const maxV = Math.min(100, Math.max(...data.map((d) => d.value)) + 5);
-
   const xScale = (i: number) =>
     PAD.left + (i / Math.max(data.length - 1, 1)) * (W - PAD.left - PAD.right);
   const yScale = (v: number) =>
     PAD.top + ((maxV - v) / (maxV - minV || 1)) * (H - PAD.top - PAD.bottom);
-
   const points = data.map((d, i) => `${xScale(i)},${yScale(d.value)}`).join(" ");
   const area =
     `M ${xScale(0)},${yScale(minV)} ` +
     data.map((d, i) => `L ${xScale(i)},${yScale(d.value)}`).join(" ") +
     ` L ${xScale(data.length - 1)},${yScale(minV)} Z`;
-
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      {/* Area fill */}
       <path d={area} fill={color} fillOpacity={0.08} />
-      {/* Line */}
       <polyline points={points} fill="none" stroke={color} strokeWidth={1.8} />
-      {/* Dots + tooltips */}
       {data.map((d, i) => (
         <g key={i}>
           <circle cx={xScale(i)} cy={yScale(d.value)} r={3} fill={color} />
@@ -93,7 +78,6 @@ function LineChart({
           </title>
         </g>
       ))}
-      {/* X labels */}
       {data.map((d, i) => (
         <text
           key={i}
@@ -106,7 +90,6 @@ function LineChart({
           {d.label}
         </text>
       ))}
-      {/* Y axis labels */}
       {[minV, (minV + maxV) / 2, maxV].map((v, i) => (
         <text
           key={i}
@@ -127,55 +110,83 @@ export default function QualityScoreDashboard({
   role,
   myHr,
   collectors,
+  teams,
+  period,
+  year,
+  month,
+  quarter,
   moduleScores,
   freezeFrameScores,
   allMonths,
-  selectedMonth,
   selectedCollector,
+  selectedTeam,
 }: {
   role: AppRole;
   myHr: string | null;
   collectors: CollectorOpt[];
+  teams: string[];
+  period: Period;
+  year: number;
+  month: number;
+  quarter: number;
   moduleScores: ModuleScore[];
   freezeFrameScores: FfScore[];
   allMonths: string[];
-  selectedMonth: string;
   selectedCollector: string;
+  selectedTeam: string;
 }) {
   const router = useRouter();
   const isViewer = role === "Viewer";
 
-  function applyFilters(next: { month?: string; collector?: string }) {
-    const m = next.month ?? selectedMonth;
+  function applyFilters(next: Partial<{
+    period: Period;
+    year: number;
+    month: number;
+    quarter: number;
+    collector: string;
+    team: string;
+  }>) {
+    const p = next.period ?? period;
+    const y = next.year ?? year;
+    const m = next.month ?? month;
+    const q = next.quarter ?? quarter;
     const c = next.collector ?? selectedCollector;
+    const t = next.team ?? selectedTeam;
     const params = new URLSearchParams();
-    if (m) params.set("month", m);
+    if (p !== "month") params.set("period", p);
+    params.set("year", String(y));
+    if (p === "month") params.set("month", String(m));
+    if (p === "quarter") params.set("quarter", String(q));
     if (c && c !== "all") params.set("collector", c);
+    if (t && t !== "all") params.set("team", t);
     const qs = params.toString();
     router.push(`/quality-score${qs ? `?${qs}` : ""}`);
   }
 
-  // Convert YYYY-MM-DD → YYYY-MM for grouping
+  // Years to choose from: 4 previous + current + next.
+  const yearOptions = useMemo(() => {
+    const now = new Date().getFullYear();
+    const list: number[] = [];
+    for (let i = now + 1; i >= now - 4; i--) list.push(i);
+    return list;
+  }, []);
+
   const toYM = (d: string) => d.slice(0, 7);
 
-  // Group module scores by module → { YYYY-MM: score }
+  // Charts (only show months that match the filter)
   const moduleCharts = useMemo(() => {
     const map: Record<string, { label: string; value: number }[]> = {};
     for (const r of moduleScores) {
-      const ym = toYM(r.upload_month);
       if (!map[r.module]) map[r.module] = [];
-      // average if multiple collectors
-      const existing = map[r.module].find((e) => e.label === fmtMonth(r.upload_month));
-      if (existing) {
-        existing.value = (existing.value + r.score) / 2;
-      } else {
-        map[r.module].push({ label: fmtMonth(r.upload_month), value: r.score });
-      }
+      const existing = map[r.module].find(
+        (e) => e.label === fmtMonth(r.upload_month)
+      );
+      if (existing) existing.value = (existing.value + r.score) / 2;
+      else map[r.module].push({ label: fmtMonth(r.upload_month), value: r.score });
     }
     return map;
   }, [moduleScores]);
 
-  // Freeze frame chart data
   const ffChart = useMemo(() => {
     const agg: Record<string, { sum: number; count: number }> = {};
     for (const r of freezeFrameScores) {
@@ -189,66 +200,35 @@ export default function QualityScoreDashboard({
       .map(([label, v]) => ({ label, value: v.sum / v.count }));
   }, [freezeFrameScores]);
 
-  // Summary cards for the selected month (or latest month if none)
-  const effectiveMonth = selectedMonth
-    ? selectedMonth
-    : allMonths.length > 0
-    ? toYM(allMonths[0])
-    : null;
-
+  // Summary cards: avg per module + freeze-frame for the current filter range,
+  // compared to the previous month in the dataset (still useful as a trend).
   const summaryScores = useMemo(() => {
-    if (!effectiveMonth) return null;
-    const monthFilter = `${effectiveMonth}-01`;
+    if (moduleScores.length === 0 && freezeFrameScores.length === 0) return null;
     const mods: Record<string, number[]> = {};
     for (const r of moduleScores) {
-      if (toYM(r.upload_month) !== effectiveMonth) continue;
       if (!mods[r.module]) mods[r.module] = [];
       mods[r.module].push(r.score);
     }
-    const ffForMonth = freezeFrameScores.filter(
-      (r) => toYM(r.upload_month) === effectiveMonth
-    );
     const ffAvg =
-      ffForMonth.length > 0
-        ? ffForMonth.reduce((a, r) => a + r.score, 0) / ffForMonth.length
+      freezeFrameScores.length > 0
+        ? freezeFrameScores.reduce((a, r) => a + r.score, 0) /
+          freezeFrameScores.length
         : null;
     const modSummary = Object.entries(mods).map(([mod, scores]) => ({
       module: mod,
       avg: scores.reduce((a, b) => a + b, 0) / scores.length,
     }));
-    // Previous month
-    const prevIdx = allMonths.findIndex((m) => toYM(m) === effectiveMonth);
-    const prevMonth =
-      prevIdx >= 0 && prevIdx + 1 < allMonths.length
-        ? toYM(allMonths[prevIdx + 1])
-        : null;
-    const prevMods: Record<string, number[]> = {};
-    for (const r of moduleScores) {
-      if (!prevMonth || toYM(r.upload_month) !== prevMonth) continue;
-      if (!prevMods[r.module]) prevMods[r.module] = [];
-      prevMods[r.module].push(r.score);
-    }
-    const prevFf = prevMonth
-      ? freezeFrameScores.filter((r) => toYM(r.upload_month) === prevMonth)
-      : [];
-    const prevFfAvg =
-      prevFf.length > 0
-        ? prevFf.reduce((a, r) => a + r.score, 0) / prevFf.length
-        : null;
-    const prevModSummary = Object.fromEntries(
-      Object.entries(prevMods).map(([mod, scores]) => [
-        mod,
-        scores.reduce((a, b) => a + b, 0) / scores.length,
-      ])
-    );
-    return { modSummary, ffAvg, prevModSummary, prevFfAvg };
-  }, [moduleScores, freezeFrameScores, effectiveMonth, allMonths]);
+    return { modSummary, ffAvg };
+  }, [moduleScores, freezeFrameScores]);
 
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
+  const allModules = Array.from(new Set(moduleScores.map((r) => r.module))).sort();
 
-  const allModules = Array.from(
-    new Set(moduleScores.map((r) => r.module))
-  ).sort();
+  // Collectors shown in the dropdown — narrowed by selected team.
+  const collectorOptions =
+    selectedTeam !== "all"
+      ? collectors.filter((c) => c.team === selectedTeam)
+      : collectors;
 
   return (
     <div className="space-y-6">
@@ -258,7 +238,84 @@ export default function QualityScoreDashboard({
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3">
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
+        <div className="w-40">
+          <label className="block text-xs text-slate-500 mb-1">Period</label>
+          <select
+            value={period}
+            onChange={(e) => applyFilters({ period: e.target.value as Period })}
+            className={`${inputCls} w-full`}
+          >
+            <option value="month">Month</option>
+            <option value="quarter">Quarter</option>
+            <option value="year">Year</option>
+          </select>
+        </div>
+        <div className="w-28">
+          <label className="block text-xs text-slate-500 mb-1">Year</label>
+          <select
+            value={year}
+            onChange={(e) => applyFilters({ year: Number(e.target.value) })}
+            className={`${inputCls} w-full`}
+          >
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
+        {period === "month" && (
+          <div className="w-40">
+            <label className="block text-xs text-slate-500 mb-1">Month</label>
+            <select
+              value={month}
+              onChange={(e) => applyFilters({ month: Number(e.target.value) })}
+              className={`${inputCls} w-full`}
+            >
+              {MONTH_NAMES.map((name, idx) => (
+                <option key={name} value={idx + 1}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {period === "quarter" && (
+          <div className="w-32">
+            <label className="block text-xs text-slate-500 mb-1">Quarter</label>
+            <select
+              value={quarter}
+              onChange={(e) => applyFilters({ quarter: Number(e.target.value) })}
+              className={`${inputCls} w-full`}
+            >
+              {[1, 2, 3, 4].map((q) => (
+                <option key={q} value={q}>
+                  Q{q}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {!isViewer && (
+          <div className="w-44">
+            <label className="block text-xs text-slate-500 mb-1">Team</label>
+            <select
+              value={selectedTeam}
+              onChange={(e) => applyFilters({ team: e.target.value, collector: "all" })}
+              className={`${inputCls} w-full`}
+            >
+              <option value="all">All teams</option>
+              {teams.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {!isViewer && (
           <div className="w-56">
             <label className="block text-xs text-slate-500 mb-1">Collector</label>
@@ -267,40 +324,28 @@ export default function QualityScoreDashboard({
               onChange={(e) => applyFilters({ collector: e.target.value })}
               className={`${inputCls} w-full`}
             >
-              <option value="all">All collectors</option>
-              {collectors.map((c) => (
+              <option value="all">
+                {selectedTeam !== "all"
+                  ? `All on ${selectedTeam}`
+                  : "All collectors"}
+              </option>
+              {collectorOptions.map((c) => (
                 <option key={c.hr_code} value={c.hr_code}>
-                  {c.hr_code} — {c.name}
+                  {c.hr_code} - {c.name}
                 </option>
               ))}
             </select>
           </div>
         )}
-        <div className="w-44">
-          <label className="block text-xs text-slate-500 mb-1">Month</label>
-          <select
-            value={selectedMonth}
-            onChange={(e) => applyFilters({ month: e.target.value })}
-            className={`${inputCls} w-full`}
+
+        {(selectedCollector !== "all" || selectedTeam !== "all" || period !== "month") && (
+          <button
+            type="button"
+            onClick={() => router.push("/quality-score")}
+            className={`${inputCls} text-slate-600 hover:bg-slate-50`}
           >
-            <option value="">All months</option>
-            {allMonths.map((m) => (
-              <option key={m} value={toYM(m)}>
-                {fmtMonth(m)}
-              </option>
-            ))}
-          </select>
-        </div>
-        {(selectedMonth || selectedCollector !== "all") && (
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={() => router.push("/quality-score")}
-              className={`${inputCls} text-slate-600 hover:bg-slate-50`}
-            >
-              Clear
-            </button>
-          </div>
+            Reset
+          </button>
         )}
       </div>
 
@@ -308,36 +353,26 @@ export default function QualityScoreDashboard({
       {summaryScores && (
         <div>
           <h2 className="text-sm font-semibold text-slate-500 mb-3">
-            {effectiveMonth
-              ? `Scores for ${fmtMonth(effectiveMonth + "-01")}`
-              : "Latest scores"}
+            Average for the selected period
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {summaryScores.modSummary.map(({ module, avg }) => {
-              const prev = summaryScores.prevModSummary[module] ?? null;
-              return (
-                <div
-                  key={module}
-                  className="bg-white rounded-2xl border border-slate-200 p-4"
-                >
-                  <p className="text-xs text-slate-500 truncate capitalize">
-                    {module.replace(/_/g, " ")}
-                  </p>
-                  <p className="text-2xl font-bold mt-1">{avg.toFixed(1)}%</p>
-                  <TrendArrow prev={prev} curr={avg} />
-                </div>
-              );
-            })}
+            {summaryScores.modSummary.map(({ module, avg }) => (
+              <div
+                key={module}
+                className="bg-white rounded-2xl border border-slate-200 p-4"
+              >
+                <p className="text-xs text-slate-500 truncate capitalize">
+                  {module.replace(/_/g, " ")}
+                </p>
+                <p className="text-2xl font-bold mt-1">{avg.toFixed(1)}%</p>
+              </div>
+            ))}
             {summaryScores.ffAvg !== null && (
               <div className="bg-white rounded-2xl border border-slate-200 p-4">
                 <p className="text-xs text-slate-500">Freeze Frame</p>
                 <p className="text-2xl font-bold mt-1">
                   {summaryScores.ffAvg.toFixed(1)}%
                 </p>
-                <TrendArrow
-                  prev={summaryScores.prevFfAvg}
-                  curr={summaryScores.ffAvg}
-                />
               </div>
             )}
           </div>
@@ -369,7 +404,6 @@ export default function QualityScoreDashboard({
         </div>
       )}
 
-      {/* Freeze frame line chart */}
       {ffChart.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3">Freeze Frame score over time</h2>
@@ -381,10 +415,10 @@ export default function QualityScoreDashboard({
 
       {allModules.length === 0 && ffChart.length === 0 && (
         <p className="text-slate-500">
-          No quality scores uploaded yet.{" "}
+          No quality scores uploaded for this filter.{" "}
           {(role === "Admin" || role === "QualityLeader") && (
             <a href="/quality-upload" className="text-slate-900 underline">
-              Upload scores →
+              Upload scores
             </a>
           )}
         </p>

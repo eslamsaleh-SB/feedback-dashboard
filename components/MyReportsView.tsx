@@ -4,7 +4,14 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type VideoItem = { id: string; drive_file_id: string; file_name: string };
-type NoteItem  = { id: string; note_text: string; status: string; created_at: string };
+type NoteItem = {
+  id: string;
+  note_text: string;
+  status: string;
+  created_at: string;
+  reply_text: string | null;
+  replied_at: string | null;
+};
 type SessionReport = {
   id: string;
   match_name: string;
@@ -18,27 +25,39 @@ type SessionReport = {
 const statusBadge: Record<string, string> = {
   "Not Started": "bg-slate-100 text-slate-600",
   "In Progress": "bg-amber-100 text-amber-700",
-  Complete:      "bg-emerald-100 text-emerald-700",
+  Complete: "bg-emerald-100 text-emerald-700",
 };
 
-export default function MyReportsView({ sessions, hrCode }: { sessions: SessionReport[]; hrCode: string }) {
+export default function MyReportsView({
+  sessions,
+  hrCode,
+}: {
+  sessions: SessionReport[];
+  hrCode: string;
+}) {
   const supabase = createClient();
   const [items, setItems] = useState(sessions);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showVideos, setShowVideos] = useState<Record<string, boolean>>({});
   const [noteText, setNoteText] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [filter, setFilter] = useState<"All" | "Acknowledged" | "Pending">("All");
 
   const filtered = items.filter((s) => {
     if (filter === "Acknowledged") return s.acknowledged;
-    if (filter === "Pending")      return !s.acknowledged;
+    if (filter === "Pending") return !s.acknowledged;
     return true;
   });
 
   async function acknowledge(sessionId: string) {
     setSaving(sessionId);
-    const { error } = await supabase.from("session_acknowledgments").insert({ session_id: sessionId, hr_code: hrCode });
-    if (!error) setItems((prev) => prev.map((s) => s.id === sessionId ? { ...s, acknowledged: true } : s));
+    const { error } = await supabase
+      .from("session_acknowledgments")
+      .insert({ session_id: sessionId, hr_code: hrCode });
+    if (!error)
+      setItems((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, acknowledged: true } : s))
+      );
     setSaving(null);
   }
 
@@ -49,28 +68,42 @@ export default function MyReportsView({ sessions, hrCode }: { sessions: SessionR
     const { data, error } = await supabase
       .from("session_notes")
       .insert({ session_id: sessionId, hr_code: hrCode, note_text: text })
-      .select("id, note_text, status, created_at")
+      .select("id, note_text, status, created_at, reply_text, replied_at")
       .single();
     if (!error && data) {
-      setItems((prev) => prev.map((s) => s.id === sessionId ? { ...s, notes: [...s.notes, data as NoteItem] } : s));
+      setItems((prev) =>
+        prev.map((s) =>
+          s.id === sessionId
+            ? { ...s, notes: [...s.notes, data as NoteItem] }
+            : s
+        )
+      );
       setNoteText((prev) => ({ ...prev, [sessionId]: "" }));
     }
     setSaving(null);
   }
 
   const btnCls = (f: typeof filter) =>
-    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${filter === f ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50"}`;
+    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+      filter === f
+        ? "bg-slate-900 text-white"
+        : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+    }`;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">My Reports</h1>
-        <p className="text-slate-500 text-sm mt-1">Your match session reports. Acknowledge each one and add notes if needed.</p>
+        <p className="text-slate-500 text-sm mt-1">
+          Your match session reports. Acknowledge each one and add notes if needed.
+        </p>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-4 flex gap-2">
-        {(["All","Acknowledged","Pending"] as const).map((f) => (
-          <button key={f} className={btnCls(f)} onClick={() => setFilter(f)}>{f}</button>
+        {(["All", "Acknowledged", "Pending"] as const).map((f) => (
+          <button key={f} className={btnCls(f)} onClick={() => setFilter(f)}>
+            {f}
+          </button>
         ))}
       </div>
 
@@ -82,25 +115,42 @@ export default function MyReportsView({ sessions, hrCode }: { sessions: SessionR
         <div className="space-y-3">
           {filtered.map((s) => {
             const isExp = expandedId === s.id;
+            const videosOpen = showVideos[s.id] ?? false;
             return (
-              <div key={s.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div
+                key={s.id}
+                className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+              >
                 <button
                   type="button"
                   onClick={() => setExpandedId(isExp ? null : s.id)}
                   className="w-full text-left px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-50"
                 >
                   <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
-                    <span className="font-semibold text-slate-800">{s.match_name}</span>
-                    {s.review_date && <span className="text-xs text-slate-400">{s.review_date}</span>}
-                    {s.acknowledged
-                      ? <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">Acknowledged</span>
-                      : <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium">Pending</span>
-                    }
+                    <span className="font-semibold text-slate-800">
+                      {s.match_name}
+                    </span>
+                    {s.review_date && (
+                      <span className="text-xs text-slate-400">{s.review_date}</span>
+                    )}
+                    {s.acknowledged ? (
+                      <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">
+                        Acknowledged
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium">
+                        Pending
+                      </span>
+                    )}
                     {s.videos.length > 0 && (
-                      <span className="text-xs text-slate-500">{s.videos.length} video(s)</span>
+                      <span className="text-xs text-slate-500">
+                        {s.videos.length} video(s)
+                      </span>
                     )}
                     {s.notes.length > 0 && (
-                      <span className="text-xs text-slate-500">{s.notes.length} note(s)</span>
+                      <span className="text-xs text-slate-500">
+                        {s.notes.length} note(s)
+                      </span>
                     )}
                   </div>
                   <span className="text-slate-400 text-sm">{isExp ? "▲" : "▼"}</span>
@@ -109,27 +159,50 @@ export default function MyReportsView({ sessions, hrCode }: { sessions: SessionR
                 {isExp && (
                   <div className="border-t border-slate-100 px-5 pb-5 pt-4 space-y-5">
                     {s.overall_notes && (
-                      <p className="text-sm text-slate-600 whitespace-pre-wrap">{s.overall_notes}</p>
+                      <p className="text-sm text-slate-600 whitespace-pre-wrap">
+                        {s.overall_notes}
+                      </p>
                     )}
 
-                    {/* Videos — embedded inline */}
+                    {/* Collapsible Videos */}
                     {s.videos.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium text-slate-700 mb-3">Videos ({s.videos.length})</p>
-                        <div className="space-y-4">
-                          {s.videos.map((v) => (
-                            <div key={v.id} className="rounded-xl overflow-hidden border border-slate-200 bg-black">
-                              <p className="text-xs text-slate-400 px-3 py-1.5 bg-slate-900 truncate">{v.file_name}</p>
-                              <iframe
-                                src={`https://drive.google.com/file/d/${v.drive_file_id}/preview`}
-                                className="w-full"
-                                style={{ height: "360px" }}
-                                allow="autoplay; fullscreen"
-                                allowFullScreen
-                              />
-                            </div>
-                          ))}
-                        </div>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowVideos((prev) => ({
+                              ...prev,
+                              [s.id]: !videosOpen,
+                            }))
+                          }
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-sm font-medium text-slate-700"
+                        >
+                          <span>Videos ({s.videos.length})</span>
+                          <span className="text-slate-500 text-xs">
+                            {videosOpen ? "Hide ▲" : "Show ▼"}
+                          </span>
+                        </button>
+                        {videosOpen && (
+                          <div className="p-4 space-y-4 bg-white">
+                            {s.videos.map((v) => (
+                              <div
+                                key={v.id}
+                                className="rounded-xl overflow-hidden border border-slate-200 bg-black"
+                              >
+                                <p className="text-xs text-slate-400 px-3 py-1.5 bg-slate-900 truncate">
+                                  {v.file_name}
+                                </p>
+                                <iframe
+                                  src={`https://drive.google.com/file/d/${v.drive_file_id}/preview`}
+                                  className="w-full"
+                                  style={{ height: "360px" }}
+                                  allow="autoplay; fullscreen"
+                                  allowFullScreen
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -141,18 +214,44 @@ export default function MyReportsView({ sessions, hrCode }: { sessions: SessionR
                         onClick={() => acknowledge(s.id)}
                         className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
                       >
-                        {saving === s.id ? "Saving…" : "Acknowledge Report"}
+                        {saving === s.id ? "Saving..." : "Acknowledge Report"}
                       </button>
                     )}
 
-                    {/* Existing notes */}
+                    {/* Existing notes (with reviewer replies) */}
                     {s.notes.length > 0 && (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <p className="text-sm font-medium text-slate-700">Your Notes</p>
                         {s.notes.map((n) => (
-                          <div key={n.id} className="bg-slate-50 rounded-lg px-4 py-3 flex items-start justify-between gap-3">
-                            <p className="text-sm text-slate-700">{n.note_text}</p>
-                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[n.status] ?? ""}`}>{n.status}</span>
+                          <div
+                            key={n.id}
+                            className="border border-slate-200 rounded-xl p-3 space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap flex-1">
+                                {n.note_text}
+                              </p>
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  statusBadge[n.status] ?? ""
+                                }`}
+                              >
+                                {n.status}
+                              </span>
+                            </div>
+                            {n.reply_text && (
+                              <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2">
+                                <p className="text-xs text-sky-700 font-medium">
+                                  Reviewer reply
+                                  {n.replied_at
+                                    ? ` · ${n.replied_at.slice(0, 10)}`
+                                    : ""}
+                                </p>
+                                <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">
+                                  {n.reply_text}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -165,18 +264,25 @@ export default function MyReportsView({ sessions, hrCode }: { sessions: SessionR
                         <input
                           type="text"
                           value={noteText[s.id] ?? ""}
-                          onChange={(e) => setNoteText((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                          placeholder="Ask a question or leave a comment…"
+                          onChange={(e) =>
+                            setNoteText((prev) => ({ ...prev, [s.id]: e.target.value }))
+                          }
+                          placeholder="Ask a question or leave a comment..."
                           className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                          onKeyDown={(e) => { if (e.key === "Enter") addNote(s.id); }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") addNote(s.id);
+                          }}
                         />
                         <button
                           type="button"
-                          disabled={saving === "note-" + s.id || !(noteText[s.id] ?? "").trim()}
+                          disabled={
+                            saving === "note-" + s.id ||
+                            !(noteText[s.id] ?? "").trim()
+                          }
                           onClick={() => addNote(s.id)}
                           className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-50"
                         >
-                          {saving === "note-" + s.id ? "…" : "Send"}
+                          {saving === "note-" + s.id ? "..." : "Send"}
                         </button>
                       </div>
                     </div>

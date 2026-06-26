@@ -75,11 +75,44 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
       setSavingId(null);
       return setMsg(error.message);
     }
-    // (feedback_meetings was retired; collectors read feedback_attendees directly.)
     setSavingId(null);
     setSavedId(a.id);
     setTimeout(() => setSavedId((s) => (s === a.id ? null : s)), 1500);
   }
+
+  // Summary stats (attendee-level across the whole dataset).
+  const stats = useMemo(() => {
+    let total = 0;
+    let attended = 0;
+    let late = 0;
+    let absent = 0;
+    let cancelled = 0;
+    let notMarked = 0;
+    for (const s of sessions) {
+      for (const a of s.attendees) {
+        total++;
+        switch (a.attendance) {
+          case "Attended":
+            attended++;
+            break;
+          case "Attended Late":
+            late++;
+            break;
+          case "Absent":
+            absent++;
+            break;
+          case "Cancelled":
+            cancelled++;
+            break;
+          default:
+            notMarked++;
+        }
+      }
+    }
+    const completed = attended + late;
+    const notCompleted = total - completed;
+    return { total, completed, notCompleted, attended, late, absent, cancelled, notMarked };
+  }, [sessions]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -105,11 +138,32 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
 
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
 
+  const cards = [
+    { label: "Total sessions", value: stats.total, color: "text-slate-800" },
+    { label: "Completed", value: stats.completed, color: "text-emerald-600" },
+    { label: "Not completed", value: stats.notCompleted, color: stats.notCompleted ? "text-amber-600" : "text-slate-800" },
+    { label: "Attended", value: stats.attended, color: "text-emerald-600" },
+    { label: "Late attendance", value: stats.late, color: stats.late ? "text-amber-600" : "text-slate-800" },
+    { label: "Absent", value: stats.absent, color: stats.absent ? "text-red-600" : "text-slate-800" },
+    { label: "Cancelled", value: stats.cancelled, color: "text-slate-500" },
+    { label: "Not marked", value: stats.notMarked, color: stats.notMarked ? "text-amber-600" : "text-slate-800" },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Feedback Progress</h1>
         <p className="text-slate-500">Track attendance for every scheduled feedback session.</p>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        {cards.map((c) => (
+          <div key={c.label} className="bg-white rounded-2xl border border-slate-200 p-3">
+            <p className="text-xs text-slate-500 truncate">{c.label}</p>
+            <p className={`text-2xl font-bold mt-1 ${c.color}`}>{c.value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Filters */}

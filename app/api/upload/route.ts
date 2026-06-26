@@ -40,10 +40,7 @@ async function listDriveVideos(folderId: string) {
   return (json.files || []) as { id: string; name: string; mimeType: string }[];
 }
 
-// Notify the collector inline (server-side, awaited) — NOT via an internal
-// fetch, because the app middleware 307-redirects any /api/* request with no
-// auth cookies (which a server-to-server call has none), so the old fetch to
-// /api/session-notify never ran and report emails were silently dropped.
+// Notify the collector inline (server-side, awaited).
 async function notifyCollectorReport(opts: {
   collectorId: string;
   matchName: string;
@@ -56,11 +53,11 @@ async function notifyCollectorReport(opts: {
   const gmailUser = process.env.GMAIL_USER;
   const gmailPass = process.env.GMAIL_APP_PASSWORD;
   if (!serviceKey) {
-    console.warn("[upload-notify] SUPABASE_SERVICE_ROLE_KEY not set — email skipped");
+    console.warn("[upload-notify] SUPABASE_SERVICE_ROLE_KEY not set - email skipped");
     return;
   }
   if (!gmailUser || !gmailPass) {
-    console.warn("[upload-notify] GMAIL_USER or GMAIL_APP_PASSWORD not set — email skipped");
+    console.warn("[upload-notify] GMAIL_USER or GMAIL_APP_PASSWORD not set - email skipped");
     return;
   }
 
@@ -76,7 +73,7 @@ async function notifyCollectorReport(opts: {
     .eq("id", collectorId)
     .single();
   if (!collector?.hr_code) {
-    console.warn(`[upload-notify] no hr_code for collector ${collectorId} — email skipped`);
+    console.warn(`[upload-notify] no hr_code for collector ${collectorId} - email skipped`);
     return;
   }
 
@@ -86,7 +83,7 @@ async function notifyCollectorReport(opts: {
     .eq("hr_code", collector.hr_code)
     .single();
   if (!profile?.id) {
-    console.warn(`[upload-notify] no profile for hr_code ${collector.hr_code} — email skipped`);
+    console.warn(`[upload-notify] no profile for hr_code ${collector.hr_code} - email skipped`);
     return;
   }
 
@@ -95,7 +92,7 @@ async function notifyCollectorReport(opts: {
   } = await admin.auth.admin.getUserById(profile.id);
   const email = targetUser?.email;
   if (!email) {
-    console.warn(`[upload-notify] no email for profile ${profile.id} — email skipped`);
+    console.warn(`[upload-notify] no email for profile ${profile.id} - email skipped`);
     return;
   }
 
@@ -166,7 +163,10 @@ export async function POST(req: NextRequest) {
   }
 
   let matchSessionId: string;
-  // Only set for a brand-new session — used to email the collector at the end.
+  // "merged" tells the UI we appended to an existing report instead of creating
+  // a new one (when an admin re-submits the same match for the same collector).
+  let merged = false;
+  // Only set for a brand-new session - used to email the collector at the end.
   let notify: {
     collectorId: string;
     matchName: string;
@@ -208,27 +208,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: created, error } = await supabase
+    // Look for an existing report for this collector + match (case-insensitive).
+    // If one exists we merge into it instead of creating a duplicate.
+    const { data: existingSessions } = await supabase
       .from("match_sessions")
-      .insert({
-        collector_id: collectorId,
-        uploader_id: user.id,
-        match_name: matchName,
-        review_date: reviewDate,
-        quality_score: score,
-        overall_notes: notes,
-      })
-      .select("id")
-      .single();
+      .select("id, match_name")
+      .eq("collector_id", collectorId)
+      .ilike("match_name", matchName);
 
-    if (error || !created) {
-      return NextResponse.json(
-        { error: error?.message || "Could not create match session" },
-        { status: 400 }
-      );
+    const existing =
+      (existingSessions ?? []).find(
+        (s: any) =>
+          (s.match_name ?? "").trim().toLowerCase() === matchName.toLowerCase()
+      ) ?? null;
+
+    if (existing) {
+      matchSessionId = existing.id;
+      merged = true;
+    } else {
+      const { data: created, error } = await supabase
+        .from("match_sessions")
+        .insert({
+          collector_id: collectorId,
+          uploader_id: user.id,
+          match_name: matchName,
+          review_date: reviewDate,
+          quality_score: score,
+          overall_notes: notes,
+        })
+        .select("id")
+        .single();
+
+      if (error || !created) {
+        return NextResponse.json(
+          { error: error?.message || "Could not create match session" },
+          { status: 400 }
+        );
+      }
+      matchSessionId = created.id;
+      notify = { collectorId, matchName, reviewDate, notes: notes || null };
     }
-    matchSessionId = created.id;
-    notify = { collectorId, matchName, reviewDate, notes: notes || null };
   }
 
   let files: { id: string; name: string }[];
@@ -248,20 +267,35 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const rows = files.map((f) => ({
-    match_session_id: matchSessionId,
-    drive_file_id: f.id,
-    file_name: f.name,
-  }));
-
-  const { error: insertError } = await supabase
+  // Dedupe: skip any drive_file_id that's already attached to this session.
+  const { data: existingVideos } = await supabase
     .from("session_videos")
-    .insert(rows);
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 400 });
+    .select("drive_file_id")
+    .eq("match_session_id", matchSessionId);
+  const existingIds = new Set(
+    (existingVideos ?? []).map((v: any) => v.drive_file_id as string)
+  );
+
+  const newFiles = files.filter((f) => !existingIds.has(f.id));
+  const skipped = files.length - newFiles.length;
+
+  let inserted = 0;
+  if (newFiles.length > 0) {
+    const rows = newFiles.map((f) => ({
+      match_session_id: matchSessionId,
+      drive_file_id: f.id,
+      file_name: f.name,
+    }));
+    const { error: insertError } = await supabase
+      .from("session_videos")
+      .insert(rows);
+    if (insertError) {
+      return NextResponse.json({ error: insertError.message }, { status: 400 });
+    }
+    inserted = rows.length;
   }
 
-  // Email the collector (new sessions only). Never let this fail the upload.
+  // Email the collector (only on brand-new sessions). Never fail the upload.
   if (notify) {
     try {
       await notifyCollectorReport(notify);
@@ -273,6 +307,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     match_session_id: matchSessionId,
-    imported: rows.length,
+    imported: inserted,
+    skipped,
+    merged,
   });
 }

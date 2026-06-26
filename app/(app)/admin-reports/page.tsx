@@ -19,6 +19,7 @@ export default async function AdminReportsPage() {
     { data: noteRows },
     { data: ackRows },
     { data: videoRows },
+    { data: collectorRows },
   ] = await Promise.all([
     supabase
       .from("match_sessions")
@@ -26,7 +27,9 @@ export default async function AdminReportsPage() {
       .order("review_date", { ascending: false }),
     supabase
       .from("session_notes")
-      .select("id, session_id, hr_code, note_text, status, created_at")
+      .select(
+        "id, session_id, hr_code, note_text, status, created_at, reply_text, replied_at"
+      )
       .order("created_at", { ascending: false }),
     supabase
       .from("session_acknowledgments")
@@ -34,6 +37,11 @@ export default async function AdminReportsPage() {
     supabase
       .from("session_videos")
       .select("id, match_session_id, drive_file_id, file_name"),
+    supabase
+      .from("collectors")
+      .select("hr_code, name, team")
+      .not("hr_code", "is", null)
+      .order("name"),
   ]);
 
   const ackedIds = new Set((ackRows ?? []).map((a: any) => a.session_id as string));
@@ -42,18 +50,35 @@ export default async function AdminReportsPage() {
   for (const n of noteRows ?? []) {
     const k = n.session_id as string;
     if (!notesBySession[k]) notesBySession[k] = [];
-    notesBySession[k].push({ id: n.id, hr_code: n.hr_code, note_text: n.note_text, status: n.status, created_at: n.created_at });
+    notesBySession[k].push({
+      id: n.id,
+      hr_code: n.hr_code,
+      note_text: n.note_text,
+      status: n.status,
+      created_at: n.created_at,
+      reply_text: n.reply_text ?? null,
+      replied_at: n.replied_at ?? null,
+    });
   }
 
   const videosBySession: Record<string, any[]> = {};
   for (const v of videoRows ?? []) {
     const k = v.match_session_id as string;
     if (!videosBySession[k]) videosBySession[k] = [];
-    videosBySession[k].push({ id: v.id, drive_file_id: v.drive_file_id, file_name: v.file_name });
+    videosBySession[k].push({
+      id: v.id,
+      drive_file_id: v.drive_file_id,
+      file_name: v.file_name,
+    });
   }
 
   return (
     <AdminReportsView
+      collectors={(collectorRows ?? []).map((c: any) => ({
+        hr_code: c.hr_code as string,
+        name: (c.name ?? c.hr_code) as string,
+        team: (c.team ?? null) as string | null,
+      }))}
       sessions={(sessions ?? []).map((s: any) => {
         const c = Array.isArray(s.collectors) ? s.collectors[0] : s.collectors;
         return {

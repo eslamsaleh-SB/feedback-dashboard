@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type FileType = "module" | "freeze_frame";
 
@@ -8,24 +8,16 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function monthOptions() {
-  const opts: { value: string; label: string }[] = [];
-  const now = new Date();
-  for (let i = 0; i < 24; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const val = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-    const label = d.toLocaleString("default", { month: "long", year: "numeric" });
-    opts.push({ value: val, label });
-  }
-  return opts;
-}
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 export default function QualityUploadPage() {
+  const now = new Date();
   const [type, setType] = useState<FileType>("module");
-  const [month, setMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
-  });
+  const [year, setYear] = useState<number>(now.getFullYear());
+  const [month, setMonth] = useState<number>(now.getMonth() + 1); // 1-12
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<{
@@ -35,6 +27,17 @@ export default function QualityUploadPage() {
     error?: string;
   } | null>(null);
 
+  // Year list: this year + 4 previous, plus next year so admins can prep.
+  const years = useMemo(() => {
+    const y = now.getFullYear();
+    const list: number[] = [];
+    for (let i = y + 1; i >= y - 4; i--) list.push(i);
+    return list;
+  }, []);
+
+  const monthValue = `${year}-${pad(month)}`;
+  const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
@@ -43,7 +46,7 @@ export default function QualityUploadPage() {
 
     const fd = new FormData();
     fd.append("type", type);
-    fd.append("month", month);
+    fd.append("month", monthValue);
     fd.append("file", file);
 
     const res = await fetch("/api/quality-upload", { method: "POST", body: fd });
@@ -53,7 +56,8 @@ export default function QualityUploadPage() {
     if (data.ok) setFile(null);
   }
 
-  const months = monthOptions();
+  const inputCls =
+    "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
 
   return (
     <div className="space-y-6 max-w-xl">
@@ -76,26 +80,46 @@ export default function QualityUploadPage() {
           <select
             value={type}
             onChange={(e) => setType(e.target.value as FileType)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white"
+            className={inputCls}
           >
             <option value="module">Collector Module Score</option>
             <option value="freeze_frame">Freeze Frame Score</option>
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Month</label>
-          <select
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white"
-          >
-            {months.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Year
+            </label>
+            <select
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className={inputCls}
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Month
+            </label>
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className={inputCls}
+            >
+              {MONTH_NAMES.map((name, idx) => (
+                <option key={name} value={idx + 1}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div>
@@ -116,7 +140,7 @@ export default function QualityUploadPage() {
           disabled={!file || uploading}
           className="w-full rounded-lg bg-slate-900 text-white py-2 font-medium disabled:opacity-50"
         >
-          {uploading ? "Uploading…" : "Upload"}
+          {uploading ? "Uploading..." : `Upload for ${monthLabel}`}
         </button>
 
         {result && (
@@ -130,8 +154,7 @@ export default function QualityUploadPage() {
             {result.ok ? (
               <>
                 <p className="font-semibold">
-                  Uploaded {result.upserted} rows for{" "}
-                  {months.find((m) => m.value === month)?.label}.
+                  Uploaded {result.upserted} rows for {monthLabel}.
                 </p>
                 {result.warnings && result.warnings.length > 0 && (
                   <ul className="mt-2 space-y-1 text-xs text-amber-700">

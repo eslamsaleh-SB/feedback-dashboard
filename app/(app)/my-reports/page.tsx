@@ -40,7 +40,7 @@ export default async function MyReportsPage() {
       ? supabase.from("session_acknowledgments").select("session_id").in("session_id", sessionIds).eq("hr_code", hrCode)
       : Promise.resolve({ data: [] }),
     sessionIds.length
-      ? supabase.from("session_notes").select("id, session_id, note_text, status, created_at").in("session_id", sessionIds).eq("hr_code", hrCode).order("created_at")
+      ? supabase.from("session_notes").select("id, session_id, note_text, status, created_at, reply_text, replied_at").in("session_id", sessionIds).eq("hr_code", hrCode).order("created_at")
       : Promise.resolve({ data: [] }),
     sessionIds.length
       ? supabase.from("session_videos").select("id, match_session_id, drive_file_id, file_name").in("match_session_id", sessionIds)
@@ -53,14 +53,25 @@ export default async function MyReportsPage() {
   for (const n of noteRows ?? []) {
     const k = n.session_id as string;
     if (!notesBySession[k]) notesBySession[k] = [];
-    notesBySession[k].push({ id: n.id, note_text: n.note_text, status: n.status, created_at: n.created_at });
+    notesBySession[k].push({
+      id: n.id,
+      note_text: n.note_text,
+      status: n.status,
+      created_at: n.created_at,
+      reply_text: n.reply_text ?? null,
+      replied_at: n.replied_at ?? null,
+    });
   }
 
   const videosBySession: Record<string, any[]> = {};
   for (const v of videoRows ?? []) {
     const k = v.match_session_id as string;
     if (!videosBySession[k]) videosBySession[k] = [];
-    videosBySession[k].push({ id: v.id, drive_file_id: v.drive_file_id, file_name: v.file_name });
+    videosBySession[k].push({
+      id: v.id,
+      drive_file_id: v.drive_file_id,
+      file_name: v.file_name,
+    });
   }
 
   return (
