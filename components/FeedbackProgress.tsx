@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import Combobox from "@/components/Combobox";
 
 type Attendance = "Attended" | "Attended Late" | "Absent" | "Cancelled";
 const STATUSES: Attendance[] = ["Attended", "Attended Late", "Absent", "Cancelled"];
+type Period = "month" | "quarter" | "year";
 
 export type Attendee = {
   id: string;
@@ -36,19 +38,44 @@ const statusStyle: Record<string, string> = {
 
 const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
 
-function clabel(hr: string, name: string | null, team: string | null) {
-  const parts = [hr];
-  if (name && name !== hr) parts.push(first3(name));
-  if (team) parts.push(team);
-  return parts.join(" - ");
+function pad(n: number) { return String(n).padStart(2, "0"); }
+function isoDate(d: Date) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function periodRange(period: Period, now: Date = new Date()) {
+  if (period === "month") {
+    const y = now.getFullYear(), m = now.getMonth();
+    return {
+      from: isoDate(new Date(y, m, 1)),
+      to: isoDate(new Date(y, m + 1, 0)),
+      label: now.toLocaleString("default", { month: "long", year: "numeric" }),
+    };
+  }
+  if (period === "quarter") {
+    const y = now.getFullYear();
+    const q = Math.floor(now.getMonth() / 3);
+    return {
+      from: isoDate(new Date(y, q * 3, 1)),
+      to: isoDate(new Date(y, q * 3 + 3, 0)),
+      label: `Q${q + 1} ${y}`,
+    };
+  }
+  const y = now.getFullYear();
+  return {
+    from: isoDate(new Date(y, 0, 1)),
+    to: isoDate(new Date(y, 11, 31)),
+    label: String(y),
+  };
 }
 
 export default function FeedbackProgress({ initial }: { initial: Session[] }) {
   const supabase = createClient();
   const [sessions, setSessions] = useState<Session[]>(initial);
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [search, setSearch] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
+  const [teamFilter, setTeamFilter] = useState<string>("all");
+  const [collectorFilter, setCollectorFilter] = useState<string>("all");
+  const [period, setPeriod] = useState<Period>("year");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -80,63 +107,75 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     setTimeout(() => setSavedId((s) => (s === a.id ? null : s)), 1500);
   }
 
-  // Summary stats (attendee-level across the whole dataset).
-  const stats = useMemo(() => {
-    let total = 0;
-    let attended = 0;
-    let late = 0;
-    let absent = 0;
-    let cancelled = 0;
-    let notMarked = 0;
+  // Build team + collector option lists from the data.
+  const teamOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of sessions) for (const a of s.attendees) if (a.team) set.add(a.team);
+    return Array.from(set).sort();
+  }, [sessions]);
+
+  const collectorOptions = useMemo(() => {
+    const map = new Map<string, { hr_code: string; name: string | null; team: string | null }>();
     for (const s of sessions) {
       for (const a of s.attendees) {
-        total++;
-        switch (a.attendance) {
-          case "Attended":
-            attended++;
-            break;
-          case "Attended Late":
-            late++;
-            break;
-          case "Absent":
-            absent++;
-            break;
-          case "Cancelled":
-            cancelled++;
-            break;
-          default:
-            notMarked++;
+        if (!a.hr_code) continue;
+        if (!map.has(a.hr_code)) {
+          map.set(a.hr_code, { hr_code: a.hr_code, name: a.name, team: a.team });
         }
       }
     }
-    const completed = attended + late;
-    const notCompleted = total - completed;
-    return { total, completed, notCompleted, attended, late, absent, cancelled, notMarked };
-  }, [sessions]);
+    return Array.from(map.values())
+      .filter((c) => teamFilter === "all" || c.team === teamFilter)
+      .sort((a, b) =>
+        (a.name ?? a.hr_code).localeCompare(b.name ?? b.hr_code)
+      );
+  }, [sessions, teamFilter]);
+
+  // Filter sessions by period + team + collector + status.
+  const { from, to, label: periodLabel } = useMemo(
+    () => periodRange(period),
+    [period]
+  );
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return sessions
       .map((s) => {
         const attendees = s.attendees.filter((a) => {
           if (statusFilter === "__none__") {
             if (a.attendance) return false;
           } else if (statusFilter && a.attendance !== statusFilter) return false;
-          if (q) {
-            const hay = `${a.hr_code} ${a.name ?? ""} ${a.team ?? ""}`.toLowerCase();
-            if (!hay.includes(q)) return false;
-          }
+          if (teamFilter !== "all" && a.team !== teamFilter) return false;
+          if (collectorFilter !== "all" && a.hr_code !== collectorFilter) return false;
           return true;
         });
         return { ...s, attendees };
       })
       .filter((s) => {
-        if (dateFilter && s.session_date !== dateFilter) return false;
+        if (!s.session_date) return false;
+        if (s.session_date < from || s.session_date > to) return false;
         return s.attendees.length > 0;
       });
-  }, [sessions, statusFilter, search, dateFilter]);
+  }, [sessions, statusFilter, teamFilter, collectorFilter, from, to]);
 
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
+  // Summary stats: same period + filter scope as the list below.
+  const stats = useMemo(() => {
+    let total = 0, attended = 0, late = 0, absent = 0, cancelled = 0, notMarked = 0;
+    for (const s of visible) {
+      for (const a of s.attendees) {
+        total++;
+        switch (a.attendance) {
+          case "Attended": attended++; break;
+          case "Attended Late": late++; break;
+          case "Absent": absent++; break;
+          case "Cancelled": cancelled++; break;
+          default: notMarked++;
+        }
+      }
+    }
+    const completed = attended + late;
+    const notCompleted = total - completed;
+    return { total, completed, notCompleted, attended, late, absent, cancelled, notMarked };
+  }, [visible]);
 
   const cards = [
     { label: "Total sessions", value: stats.total, color: "text-slate-800" },
@@ -149,11 +188,36 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     { label: "Not marked", value: stats.notMarked, color: stats.notMarked ? "text-amber-600" : "text-slate-800" },
   ];
 
+  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
+
+  const periodBtn = (p: Period) =>
+    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+      period === p
+        ? "bg-slate-900 text-white"
+        : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+    }`;
+
+  const anyFilter =
+    statusFilter ||
+    teamFilter !== "all" ||
+    collectorFilter !== "all" ||
+    period !== "year";
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Feedback Progress</h1>
-        <p className="text-slate-500">Track attendance for every scheduled feedback session.</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Feedback Progress</h1>
+          <p className="text-slate-500">
+            Track attendance for every scheduled feedback session.
+          </p>
+        </div>
+        <div className="flex items-end gap-2">
+          <span className="text-xs text-slate-500 mr-1 self-center">{periodLabel}</span>
+          <button onClick={() => setPeriod("month")} className={periodBtn("month")}>Month</button>
+          <button onClick={() => setPeriod("quarter")} className={periodBtn("quarter")}>Quarter</button>
+          <button onClick={() => setPeriod("year")} className={periodBtn("year")}>Year</button>
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -167,40 +231,65 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3">
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Status</label>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputCls}>
             <option value="">All statuses</option>
             <option value="__none__">Not marked</option>
             {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
         </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Date</label>
-          <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className={inputCls} />
-        </div>
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs text-slate-500 mb-1">Search collector</label>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Code / name / team..."
-            className={`${inputCls} w-full`}
+
+        <div className="w-44">
+          <label className="block text-xs text-slate-500 mb-1">Team</label>
+          <Combobox
+            options={[
+              { value: "all", label: "All teams" },
+              ...teamOptions.map((t) => ({ value: t, label: t })),
+            ]}
+            value={teamFilter}
+            onChange={(v) => {
+              setTeamFilter(v || "all");
+              setCollectorFilter("all");
+            }}
+            placeholder="All teams"
+            searchPlaceholder="Search teams..."
           />
         </div>
-        {(statusFilter || dateFilter || search) && (
+
+        <div className="w-64">
+          <label className="block text-xs text-slate-500 mb-1">Collector</label>
+          <Combobox
+            options={[
+              {
+                value: "all",
+                label:
+                  teamFilter !== "all" ? `All on ${teamFilter}` : "All collectors",
+              },
+              ...collectorOptions.map((c) => ({
+                value: c.hr_code,
+                label: `${c.hr_code}${c.name && c.name !== c.hr_code ? ` - ${first3(c.name)}` : ""}${c.team ? ` - ${c.team}` : ""}`,
+              })),
+            ]}
+            value={collectorFilter}
+            onChange={(v) => setCollectorFilter(v || "all")}
+            placeholder="All collectors"
+            searchPlaceholder="Search by code or name..."
+          />
+        </div>
+
+        {anyFilter && (
           <div className="flex items-end">
             <button
               type="button"
               onClick={() => {
                 setStatusFilter("");
-                setDateFilter("");
-                setSearch("");
+                setTeamFilter("all");
+                setCollectorFilter("all");
+                setPeriod("year");
               }}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
             >
@@ -212,7 +301,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
 
-      <div className="text-sm text-slate-500">{visible.length} session(s)</div>
+      <div className="text-sm text-slate-500">{visible.length} session(s) in {periodLabel}</div>
 
       {visible.length === 0 ? (
         <p className="text-slate-500">No sessions match these filters.</p>
@@ -287,9 +376,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                           >
                             <option value="">-- not marked --</option>
                             {STATUSES.map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
+                              <option key={st} value={st}>{st}</option>
                             ))}
                           </select>
                         </td>

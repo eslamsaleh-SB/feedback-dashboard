@@ -5,14 +5,34 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 type Period = "month" | "quarter" | "year";
 
-function formatTrend(curr: number | null, prev: number | null, opts: { lowerIsBetter?: boolean; suffix?: string } = {}) {
+const MODULE_KEYS = [
+  "players",
+  "event",
+  "formation_tactical",
+  "location",
+  "impact",
+  "extras",
+  "freeze_frame",
+] as const;
+type ModuleKey = (typeof MODULE_KEYS)[number];
+
+const MODULE_LABEL: Record<ModuleKey, string> = {
+  players: "Players",
+  event: "Event",
+  formation_tactical: "Formation / Tactical",
+  location: "Location",
+  impact: "Impact",
+  extras: "Extras",
+  freeze_frame: "Freeze Frame",
+};
+
+function trendInfo(curr: number | null, prev: number | null, opts: { lowerIsBetter?: boolean } = {}) {
   if (curr == null || prev == null) {
-    return { text: null as string | null, color: "text-slate-400", arrow: "" };
+    return { text: null as string | null, color: "text-slate-400" };
   }
   const lowerIsBetter = opts.lowerIsBetter ?? false;
-  const suffix = opts.suffix ?? "";
   if (prev === 0 && curr === 0) {
-    return { text: "no change", color: "text-slate-400", arrow: "→" };
+    return { text: "no change", color: "text-slate-400" };
   }
   const diff = curr - prev;
   const pct = prev === 0 ? 100 : (diff / Math.abs(prev)) * 100;
@@ -21,9 +41,8 @@ function formatTrend(curr: number | null, prev: number | null, opts: { lowerIsBe
   const good = isFlat ? null : lowerIsBetter ? !isUp : isUp;
   const color = good === null ? "text-slate-400" : good ? "text-emerald-600" : "text-red-500";
   const arrow = isFlat ? "→" : isUp ? "↑" : "↓";
-  const sign = diff > 0 ? "+" : "";
-  const text = `${arrow} ${sign}${Math.abs(pct).toFixed(1)}%${suffix ? ` ${suffix}` : ""}`;
-  return { text, color, arrow };
+  const text = `${arrow} ${Math.abs(pct).toFixed(1)}%`;
+  return { text, color };
 }
 
 export default function DashboardView({
@@ -36,8 +55,12 @@ export default function DashboardView({
   feedback,
   moduleErrorsCur,
   moduleErrorsPrev,
-  qualityCur,
-  qualityPrev,
+  modulesCur,
+  modulesPrev,
+  qualityCurByModule,
+  qualityPrevByModule,
+  freezeFrameQualityCur,
+  freezeFrameQualityPrev,
 }: {
   period: Period;
   curLabel: string;
@@ -54,8 +77,12 @@ export default function DashboardView({
   };
   moduleErrorsCur: number;
   moduleErrorsPrev: number;
-  qualityCur: number | null;
-  qualityPrev: number | null;
+  modulesCur: Record<string, number>;
+  modulesPrev: Record<string, number>;
+  qualityCurByModule: Record<string, number>;
+  qualityPrevByModule: Record<string, number>;
+  freezeFrameQualityCur: number | null;
+  freezeFrameQualityPrev: number | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,32 +95,20 @@ export default function DashboardView({
 
   function setPeriod(p: Period) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
-    if (p === "month") params.delete("period");
+    if (p === "year") params.delete("period");
     else params.set("period", p);
     const qs = params.toString();
     router.push(`/dashboard${qs ? `?${qs}` : ""}`);
   }
 
-  const periodBtn = (p: Period, label: string) =>
+  const periodBtn = (p: Period) =>
     `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
       period === p
         ? "bg-slate-900 text-white"
         : "border border-slate-300 text-slate-600 hover:bg-slate-50"
     }`;
 
-  // Top stat cards (5 + extras).
-  const moduleTrend = formatTrend(moduleErrorsCur, moduleErrorsPrev, {
-    lowerIsBetter: true,
-  });
-  const qualityTrend = formatTrend(qualityCur, qualityPrev);
-
-  const topCards: {
-    label: string;
-    value: number | string;
-    href: string;
-    color: string;
-    sub?: string;
-  }[] = [
+  const topCards = [
     {
       label: "Submitted Reports",
       value: submittedReports,
@@ -115,11 +130,7 @@ export default function DashboardView({
     },
   ];
 
-  const feedbackCards: {
-    label: string;
-    value: number;
-    color: string;
-  }[] = [
+  const feedbackCards: { label: string; value: number; color: string }[] = [
     { label: "Total sessions", value: feedback.total, color: "text-slate-800" },
     { label: "Completed", value: feedback.completed, color: "text-emerald-600" },
     {
@@ -127,15 +138,49 @@ export default function DashboardView({
       value: feedback.incomplete,
       color: feedback.incomplete ? "text-amber-600" : "text-slate-800",
     },
-    {
-      label: "Cancelled",
-      value: feedback.cancelled,
-      color: "text-slate-500",
-    },
+    { label: "Cancelled", value: feedback.cancelled, color: "text-slate-500" },
     {
       label: "Absent",
       value: feedback.absent,
       color: feedback.absent ? "text-red-600" : "text-slate-800",
+    },
+  ];
+
+  // Module-error cards: 7 + a Total
+  const moduleErrorCards = [
+    {
+      key: "total",
+      label: "Total errors",
+      curr: moduleErrorsCur,
+      prev: moduleErrorsPrev,
+    },
+    ...MODULE_KEYS.map((m) => ({
+      key: m,
+      label: MODULE_LABEL[m],
+      curr: modulesCur[m] ?? 0,
+      prev: modulesPrev[m] ?? 0,
+    })),
+  ];
+
+  // Quality cards: one per module that has data, plus freeze-frame as its own card
+  const qualityModuleKeys = Array.from(
+    new Set([
+      ...Object.keys(qualityCurByModule),
+      ...Object.keys(qualityPrevByModule),
+    ])
+  ).sort();
+  const qualityCards = [
+    ...qualityModuleKeys.map((m) => ({
+      key: `q-${m}`,
+      label: MODULE_LABEL[m as ModuleKey] ?? m.replace(/_/g, " "),
+      curr: qualityCurByModule[m] ?? null,
+      prev: qualityPrevByModule[m] ?? null,
+    })),
+    {
+      key: "q-freeze_frame",
+      label: "Freeze Frame",
+      curr: freezeFrameQualityCur,
+      prev: freezeFrameQualityPrev,
     },
   ];
 
@@ -152,13 +197,13 @@ export default function DashboardView({
             <span className="text-slate-300">vs</span>{" "}
             {prevLabel}
           </span>
-          <button onClick={() => setPeriod("month")} className={periodBtn("month", "Month")}>
+          <button onClick={() => setPeriod("month")} className={periodBtn("month")}>
             Month
           </button>
-          <button onClick={() => setPeriod("quarter")} className={periodBtn("quarter", "Quarter")}>
+          <button onClick={() => setPeriod("quarter")} className={periodBtn("quarter")}>
             Quarter
           </button>
-          <button onClick={() => setPeriod("year")} className={periodBtn("year", "Year")}>
+          <button onClick={() => setPeriod("year")} className={periodBtn("year")}>
             Year
           </button>
         </div>
@@ -181,46 +226,73 @@ export default function DashboardView({
         ))}
       </div>
 
-      {/* Trend cards: Module Errors & Quality Score */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Link
-          href="/match-totals"
-          className="bg-white rounded-2xl border border-slate-200 p-5 hover:bg-slate-50 transition"
-        >
-          <p className="text-sm text-slate-500">Total module errors</p>
-          <div className="flex items-baseline gap-3 mt-1">
-            <p className="text-3xl font-bold text-slate-800">{moduleErrorsCur.toLocaleString()}</p>
-            {moduleTrend.text && (
-              <span className={`text-sm font-semibold ${moduleTrend.color}`}>
-                {moduleTrend.text}
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            {prevLabel}: {moduleErrorsPrev.toLocaleString()} errors
-          </p>
-        </Link>
+      {/* Module errors per module (7 modules + total) */}
+      <div>
+        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
+          Module errors ({curLabel})
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {moduleErrorCards.map((c) => {
+            const t = trendInfo(c.curr, c.prev, { lowerIsBetter: true });
+            const href =
+              c.key === "total"
+                ? "/match-totals"
+                : `/match-totals?module=${c.key}`;
+            return (
+              <Link
+                key={c.key}
+                href={href}
+                className="bg-white rounded-2xl border border-slate-200 p-4 hover:bg-slate-50 transition"
+              >
+                <p className="text-xs text-slate-500 truncate">{c.label}</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <p className="text-2xl font-bold text-slate-800">
+                    {Number(c.curr).toLocaleString()}
+                  </p>
+                  {t.text && (
+                    <span className={`text-xs font-semibold ${t.color}`}>{t.text}</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {prevLabel}: {Number(c.prev).toLocaleString()}
+                </p>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
 
-        <Link
-          href="/quality-score"
-          className="bg-white rounded-2xl border border-slate-200 p-5 hover:bg-slate-50 transition"
-        >
-          <p className="text-sm text-slate-500">Average quality score</p>
-          <div className="flex items-baseline gap-3 mt-1">
-            <p className="text-3xl font-bold text-slate-800">
-              {qualityCur == null ? "-" : `${qualityCur.toFixed(1)}%`}
-            </p>
-            {qualityTrend.text && (
-              <span className={`text-sm font-semibold ${qualityTrend.color}`}>
-                {qualityTrend.text}
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            {prevLabel}:{" "}
-            {qualityPrev == null ? "no data" : `${qualityPrev.toFixed(1)}%`}
-          </p>
-        </Link>
+      {/* Quality scores per module + freeze frame */}
+      <div>
+        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
+          Quality scores ({curLabel})
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {qualityCards.map((c) => {
+            const t = trendInfo(c.curr, c.prev, { lowerIsBetter: false });
+            return (
+              <Link
+                key={c.key}
+                href="/quality-score"
+                className="bg-white rounded-2xl border border-slate-200 p-4 hover:bg-slate-50 transition"
+              >
+                <p className="text-xs text-slate-500 truncate">{c.label}</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <p className="text-2xl font-bold text-slate-800">
+                    {c.curr == null ? "-" : `${c.curr.toFixed(1)}%`}
+                  </p>
+                  {t.text && (
+                    <span className={`text-xs font-semibold ${t.color}`}>{t.text}</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {prevLabel}:{" "}
+                  {c.prev == null ? "no data" : `${c.prev.toFixed(1)}%`}
+                </p>
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
       {/* Feedback session cards */}

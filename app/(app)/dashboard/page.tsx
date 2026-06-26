@@ -54,6 +54,44 @@ function getPeriodRange(period: Period, now: Date = new Date()) {
   return { curFrom, curTo, prevFrom, prevTo, curLabel: String(y), prevLabel: String(y - 1) };
 }
 
+const MODULE_KEYS = [
+  "players",
+  "event",
+  "formation_tactical",
+  "location",
+  "impact",
+  "extras",
+  "freeze_frame",
+] as const;
+
+function sumByModule(rows: any[] | null | undefined) {
+  const out: Record<string, number> = {};
+  for (const m of MODULE_KEYS) out[m] = 0;
+  for (const r of rows ?? []) {
+    for (const m of MODULE_KEYS) out[m] += Number((r as any)[m] ?? 0);
+  }
+  return out;
+}
+
+function avgByModule(rows: any[] | null | undefined) {
+  const groups: Record<string, number[]> = {};
+  for (const r of rows ?? []) {
+    const mod = (r as any).module as string;
+    if (!groups[mod]) groups[mod] = [];
+    groups[mod].push(Number((r as any).score ?? 0));
+  }
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(groups)) {
+    out[k] = v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+  }
+  return out;
+}
+
+function avgScores(rows: any[] | null | undefined): number | null {
+  if (!rows || rows.length === 0) return null;
+  return rows.reduce((a, r: any) => a + Number(r.score ?? 0), 0) / rows.length;
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -70,12 +108,13 @@ export default async function DashboardPage({
   const role = (profile?.role ?? "Viewer") as AppRole;
   if (role === "Viewer") redirect("/analytics");
 
+  // Default = Year so the page surfaces all data unless the admin narrows it.
   const period: Period =
-    searchParams.period === "quarter"
+    searchParams.period === "month"
+      ? "month"
+      : searchParams.period === "quarter"
       ? "quarter"
-      : searchParams.period === "year"
-      ? "year"
-      : "month";
+      : "year";
   const { curFrom, curTo, prevFrom, prevTo, curLabel, prevLabel } = getPeriodRange(period);
   const curFromIso = isoDate(curFrom);
   const curToIso = isoDate(curTo);
@@ -83,7 +122,6 @@ export default async function DashboardPage({
   const prevToIso = isoDate(prevTo);
 
   // ---- Feedback attendance stats for the CURRENT period ----------------------
-  // We pull rows joined to reservations so we can filter by session_date.
   const { data: attendeeRows } = await supabase
     .from("feedback_attendees")
     .select("attendance, feedback_reservations(session_date)");
@@ -112,47 +150,57 @@ export default async function DashboardPage({
     .gte("review_date", curFromIso)
     .lte("review_date", curToIso);
 
-  // ---- Open notes (still global - not period-scoped, same as before) --------
+  // ---- Open notes ------------------------------------------------------------
   const { count: openNotes } = await supabase
     .from("session_notes")
     .select("id", { count: "exact", head: true })
     .neq("status", "Complete");
 
-  // ---- Module errors: current vs previous period -----------------------------
-  // We use the existing RPC collector_module_totals(p_from, p_to) which returns
-  // one row per collector with .total of all errors. Summing gives the period
-  // total.
+  // ---- Module errors per module: current vs previous period ------------------
   const [{ data: curMt }, { data: prevMt }] = await Promise.all([
     supabase.rpc("collector_module_totals", { p_from: curFromIso, p_to: curToIso }),
     supabase.rpc("collector_module_totals", { p_from: prevFromIso, p_to: prevToIso }),
   ]);
-  const sumTotal = (rows: any[] | null) =>
-    (rows ?? []).reduce((acc, r: any) => acc + Number(r.total ?? 0), 0);
-  const moduleErrorsCur = sumTotal(curMt);
-  const moduleErrorsPrev = sumTotal(prevMt);
+  const modulesCur = sumByModule(curMt);
+  const modulesPrev = sumByModule(prevMt);
+  const moduleErrorsCur = MODULE_KEYS.reduce((acc, m) => acc + modulesCur[m], 0);
+  const moduleErrorsPrev = MODULE_KEYS.reduce((acc, m) => acc + modulesPrev[m], 0);
 
-  // ---- Quality scores: current vs previous month (we use month boundaries
-  // for upload_month directly).
+  // ---- Quality scores per module: current vs previous (month boundaries)
   const monthFirstIso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-  const { data: qsRows } = await supabase
-    .from("quality_scores")
-    .select("score, upload_month")
-    .gte("upload_month", monthFirstIso(curFrom))
-    .lte("upload_month", monthFirstIso(curTo));
-  const { data: qsPrevRows } = await supabase
-    .from("quality_scores")
-    .select("score, upload_month")
-    .gte("upload_month", monthFirstIso(prevFrom))
-    .lte("upload_month", monthFirstIso(prevTo));
-  const avg = (rows: any[] | null) =>
-    rows && rows.length > 0
-      ? rows.reduce((acc, r: any) => acc + Number(r.score ?? 0), 0) / rows.length
-      : null;
-  const qualityCur = avg(qsRows ?? []);
-  const qualityPrev = avg(qsPrevRows ?? []);
+  const [{ data: qsRows }, { data: qsPrevRows }] = await Promise.all([
+    supabase
+      .from("quality_scores")
+      .select("module, score, upload_month")
+      .gte("upload_month", monthFirstIso(curFrom))
+      .lte("upload_month", monthFirstIso(curTo)),
+    supabase
+      .from("quality_scores")
+      .select("module, score, upload_month")
+      .gte("upload_month", monthFirstIso(prevFrom))
+      .lte("upload_month", monthFirstIso(prevTo)),
+  ]);
+  const qualityCurByModule = avgByModule(qsRows);
+  const qualityPrevByModule = avgByModule(qsPrevRows);
 
-  // ---- Collector + Open Notes counts shown alongside ------------------------
+  // Freeze frame quality score (separate table).
+  const [{ data: ffRows }, { data: ffPrevRows }] = await Promise.all([
+    supabase
+      .from("freeze_frame_scores")
+      .select("score, upload_month")
+      .gte("upload_month", monthFirstIso(curFrom))
+      .lte("upload_month", monthFirstIso(curTo)),
+    supabase
+      .from("freeze_frame_scores")
+      .select("score, upload_month")
+      .gte("upload_month", monthFirstIso(prevFrom))
+      .lte("upload_month", monthFirstIso(prevTo)),
+  ]);
+  const freezeFrameQualityCur = avgScores(ffRows);
+  const freezeFrameQualityPrev = avgScores(ffPrevRows);
+
+  // ---- Collector count -------------------------------------------------------
   const { count: collectorCount } = await supabase
     .from("collectors")
     .select("id", { count: "exact", head: true });
@@ -168,8 +216,12 @@ export default async function DashboardPage({
       feedback={feedback}
       moduleErrorsCur={moduleErrorsCur}
       moduleErrorsPrev={moduleErrorsPrev}
-      qualityCur={qualityCur}
-      qualityPrev={qualityPrev}
+      modulesCur={modulesCur}
+      modulesPrev={modulesPrev}
+      qualityCurByModule={qualityCurByModule}
+      qualityPrevByModule={qualityPrevByModule}
+      freezeFrameQualityCur={freezeFrameQualityCur}
+      freezeFrameQualityPrev={freezeFrameQualityPrev}
     />
   );
 }

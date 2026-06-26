@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import Combobox from "@/components/Combobox";
 
 type VideoItem = { id: string; drive_file_id: string; file_name: string };
 type NoteItem = {
@@ -180,10 +181,7 @@ export default function AdminReportsView({
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {cards.map((c) => (
-          <div
-            key={c.label}
-            className="bg-white rounded-2xl border border-slate-200 p-4"
-          >
+          <div key={c.label} className="bg-white rounded-2xl border border-slate-200 p-4">
             <p className="text-xs text-slate-500">{c.label}</p>
             <p className={`text-2xl font-bold mt-1 ${c.color}`}>{c.value}</p>
           </div>
@@ -193,9 +191,7 @@ export default function AdminReportsView({
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-4 items-end">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs text-slate-500 mb-1">
-            Search collector / match
-          </label>
+          <label className="block text-xs text-slate-500 mb-1">Search collector / match</label>
           <input
             type="text"
             value={search}
@@ -204,25 +200,24 @@ export default function AdminReportsView({
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
-        <div className="w-56">
+        <div className="w-64">
           <label className="block text-xs text-slate-500 mb-1">Collector</label>
-          <select
+          <Combobox
+            options={[
+              { value: "all", label: "All collectors" },
+              ...collectors.map((c) => ({
+                value: c.hr_code,
+                label: `${c.hr_code} - ${c.name}`,
+              })),
+            ]}
             value={collectorFilter}
-            onChange={(e) => setCollectorFilter(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm"
-          >
-            <option value="all">All collectors</option>
-            {collectors.map((c) => (
-              <option key={c.hr_code} value={c.hr_code}>
-                {c.hr_code} - {c.name}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setCollectorFilter(v || "all")}
+            placeholder="All collectors"
+            searchPlaceholder="Search by code or name..."
+          />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
-            Acknowledgement
-          </label>
+          <label className="block text-xs text-slate-500 mb-1">Acknowledgement</label>
           <select
             value={ackFilter}
             onChange={(e) => setAckFilter(e.target.value as AckFilter)}
@@ -234,9 +229,7 @@ export default function AdminReportsView({
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
-            Filter notes by status
-          </label>
+          <label className="block text-xs text-slate-500 mb-1">Filter notes by status</label>
           <select
             value={noteFilter}
             onChange={(e) => setNoteFilter(e.target.value)}
@@ -244,16 +237,11 @@ export default function AdminReportsView({
           >
             <option value="">All statuses</option>
             {NOTE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
         </div>
-        {(search ||
-          noteFilter ||
-          collectorFilter !== "all" ||
-          ackFilter !== "all") && (
+        {(search || noteFilter || collectorFilter !== "all" || ackFilter !== "all") && (
           <button
             type="button"
             onClick={() => {
@@ -274,9 +262,7 @@ export default function AdminReportsView({
       {visible.length === 0 ? (
         <p className="text-slate-500">
           No reports match these filters.{" "}
-          <Link href="/upload" className="text-blue-600 underline">
-            Upload one.
-          </Link>
+          <Link href="/upload" className="text-blue-600 underline">Upload one.</Link>
         </p>
       ) : (
         <div className="space-y-2">
@@ -287,19 +273,14 @@ export default function AdminReportsView({
               noteFilter ? n.status === noteFilter : true
             );
             return (
-              <div
-                key={s.id}
-                className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
-              >
+              <div key={s.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setExpandedId(isExp ? null : s.id)}
                   className="w-full text-left px-5 py-4 flex items-center justify-between gap-4 hover:bg-slate-50"
                 >
                   <div className="flex-1 min-w-0 flex flex-wrap items-center gap-3">
-                    <span className="font-semibold text-slate-800">
-                      {s.match_name}
-                    </span>
+                    <span className="font-semibold text-slate-800">{s.match_name}</span>
                     {s.review_date && (
                       <span className="text-xs text-slate-400">{s.review_date}</span>
                     )}
@@ -317,14 +298,10 @@ export default function AdminReportsView({
                       </span>
                     )}
                     {s.videos.length > 0 && (
-                      <span className="text-xs text-slate-500">
-                        {s.videos.length} video(s)
-                      </span>
+                      <span className="text-xs text-slate-500">{s.videos.length} video(s)</span>
                     )}
                     {s.notes.length > 0 && (
-                      <span className="text-xs text-amber-600 font-medium">
-                        {s.notes.length} note(s)
-                      </span>
+                      <span className="text-xs text-amber-600 font-medium">{s.notes.length} note(s)</span>
                     )}
                   </div>
                   <span className="text-slate-400 text-sm">{isExp ? "▲" : "▼"}</span>
@@ -333,9 +310,7 @@ export default function AdminReportsView({
                 {isExp && (
                   <div className="border-t border-slate-100 px-5 pb-5 pt-4 space-y-5">
                     {s.overall_notes && (
-                      <p className="text-sm text-slate-600 whitespace-pre-wrap">
-                        {s.overall_notes}
-                      </p>
+                      <p className="text-sm text-slate-600 whitespace-pre-wrap">{s.overall_notes}</p>
                     )}
 
                     {/* Collapsible Videos */}
@@ -359,13 +334,8 @@ export default function AdminReportsView({
                         {videosOpen && (
                           <div className="p-4 space-y-4 bg-white">
                             {s.videos.map((v) => (
-                              <div
-                                key={v.id}
-                                className="rounded-xl overflow-hidden border border-slate-200 bg-black"
-                              >
-                                <p className="text-xs text-slate-400 px-3 py-1.5 bg-slate-900 truncate">
-                                  {v.file_name}
-                                </p>
+                              <div key={v.id} className="rounded-xl overflow-hidden border border-slate-200 bg-black">
+                                <p className="text-xs text-slate-400 px-3 py-1.5 bg-slate-900 truncate">{v.file_name}</p>
                                 <iframe
                                   src={`https://drive.google.com/file/d/${v.drive_file_id}/preview`}
                                   className="w-full"
@@ -382,67 +352,46 @@ export default function AdminReportsView({
 
                     {/* Notes + reply UI */}
                     <div>
-                      <p className="text-sm font-medium text-slate-700 mb-2">
-                        Collector Notes
-                      </p>
+                      <p className="text-sm font-medium text-slate-700 mb-2">Collector Notes</p>
                       {visibleNotes.length === 0 ? (
                         <p className="text-slate-500 text-sm">
-                          {noteFilter
-                            ? "No notes matching this status."
-                            : "No notes yet."}
+                          {noteFilter ? "No notes matching this status." : "No notes yet."}
                         </p>
                       ) : (
                         <div className="space-y-3">
                           {visibleNotes.map((n) => (
-                            <div
-                              key={n.id}
-                              className="border border-slate-200 rounded-xl p-3 space-y-2"
-                            >
+                            <div key={n.id} className="border border-slate-200 rounded-xl p-3 space-y-2">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs text-slate-500">
                                     {n.hr_code}{" "}
-                                    <span className="text-slate-300">·</span>{" "}
+                                    <span className="text-slate-300">.</span>{" "}
                                     {n.created_at.slice(0, 10)}
                                   </p>
-                                  <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">
-                                    {n.note_text}
-                                  </p>
+                                  <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{n.note_text}</p>
                                 </div>
                                 <select
                                   value={n.status}
                                   disabled={savingNoteId === n.id}
-                                  onChange={(e) =>
-                                    updateNoteStatus(n.id, e.target.value, s.id)
-                                  }
-                                  className={`rounded-full border-0 px-3 py-1 text-xs font-medium cursor-pointer ${
-                                    statusBadge[n.status] ?? ""
-                                  }`}
+                                  onChange={(e) => updateNoteStatus(n.id, e.target.value, s.id)}
+                                  className={`rounded-full border-0 px-3 py-1 text-xs font-medium cursor-pointer ${statusBadge[n.status] ?? ""}`}
                                 >
                                   {NOTE_STATUSES.map((st) => (
-                                    <option key={st} value={st}>
-                                      {st}
-                                    </option>
+                                    <option key={st} value={st}>{st}</option>
                                   ))}
                                 </select>
                               </div>
 
-                              {/* Existing reply (read-only) */}
                               {n.reply_text && (
                                 <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2">
                                   <p className="text-xs text-sky-700 font-medium">
                                     Your reply
-                                    {n.replied_at
-                                      ? ` · ${n.replied_at.slice(0, 10)}`
-                                      : ""}
+                                    {n.replied_at ? ` - ${n.replied_at.slice(0, 10)}` : ""}
                                   </p>
-                                  <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">
-                                    {n.reply_text}
-                                  </p>
+                                  <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{n.reply_text}</p>
                                 </div>
                               )}
 
-                              {/* Reply input (only when not yet replied) */}
                               {!n.reply_text && (
                                 <div className="flex gap-2">
                                   <input

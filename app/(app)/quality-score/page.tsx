@@ -11,25 +11,22 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
-// Returns the inclusive [from, to] range (YYYY-MM-DD strings) of the first
-// upload_month value to include based on the period filter.
 function rangeForFilter(
   period: Period,
   year: number,
-  month: number, // 1-12
-  quarter: number // 1-4
+  month: number,
+  quarter: number
 ): { from: string; to: string } {
   if (period === "year") {
     return { from: `${year}-01-01`, to: `${year}-12-01` };
   }
   if (period === "quarter") {
-    const startMonth = (quarter - 1) * 3 + 1; // 1,4,7,10
+    const startMonth = (quarter - 1) * 3 + 1;
     return {
       from: `${year}-${pad(startMonth)}-01`,
       to: `${year}-${pad(startMonth + 2)}-01`,
     };
   }
-  // month
   return { from: `${year}-${pad(month)}-01`, to: `${year}-${pad(month)}-01` };
 }
 
@@ -53,14 +50,15 @@ export default async function QualityScorePage({
   const role = (profile?.role ?? "Viewer") as AppRole;
   const myHr = profile?.hr_code ?? null;
 
-  // Period defaults to month + current year/month.
+  // Period defaults to year so the page surfaces every uploaded month unless
+  // the admin narrows it.
   const now = new Date();
   const period: Period =
-    searchParams.period === "quarter"
+    searchParams.period === "month"
+      ? "month"
+      : searchParams.period === "quarter"
       ? "quarter"
-      : searchParams.period === "year"
-      ? "year"
-      : "month";
+      : "year";
   const year = Number(searchParams.year) || now.getFullYear();
   const month = Math.min(12, Math.max(1, Number(searchParams.month) || now.getMonth() + 1));
   const quarter = Math.min(
@@ -70,10 +68,8 @@ export default async function QualityScorePage({
 
   const { from, to } = rangeForFilter(period, year, month, quarter);
 
-  // Team filter
   const teamParam = searchParams.team && searchParams.team !== "all" ? searchParams.team : null;
 
-  // Collector filter (Viewers always see only themselves)
   const collectorParam =
     role === "Viewer"
       ? myHr
@@ -81,7 +77,6 @@ export default async function QualityScorePage({
       ? searchParams.collector
       : null;
 
-  // Roster + teams
   const { data: collectors } = await supabase
     .from("collectors")
     .select("hr_code, name, team")
@@ -93,7 +88,6 @@ export default async function QualityScorePage({
     ? (collectors ?? []).filter((c: any) => c.team === teamParam)
     : (collectors ?? []);
 
-  // If a team is selected and the chosen collector isn't on that team, clear it.
   const effectiveCollector =
     collectorParam &&
     teamParam &&
@@ -101,13 +95,10 @@ export default async function QualityScorePage({
       ? null
       : collectorParam;
 
-  // Build the hr_code list (used to scope the score queries when a team is set
-  // but no specific collector is chosen).
   const teamHrCodes = teamParam
     ? (filteredCollectors ?? []).map((c: any) => c.hr_code as string)
     : null;
 
-  // ---- Module quality scores -----------------------------------------------
   let qsQuery = supabase
     .from("quality_scores")
     .select("hr_code, module, score, match_count, upload_month")
@@ -119,7 +110,6 @@ export default async function QualityScorePage({
     qsQuery = qsQuery.in("hr_code", teamHrCodes);
   const { data: qsRows } = await qsQuery;
 
-  // ---- Freeze frame scores --------------------------------------------------
   let ffQuery = supabase
     .from("freeze_frame_scores")
     .select("hr_code, score, match_count, upload_month")
@@ -131,7 +121,6 @@ export default async function QualityScorePage({
     ffQuery = ffQuery.in("hr_code", teamHrCodes);
   const { data: ffRows } = await ffQuery;
 
-  // ---- Available months (for the legacy dropdown / charts) ------------------
   const { data: qsMonths } = await supabase
     .from("quality_scores")
     .select("upload_month")

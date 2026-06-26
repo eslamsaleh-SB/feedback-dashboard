@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { AppRole } from "@/components/Sidebar";
+import Combobox from "@/components/Combobox";
 
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
 type ModuleScore = {
@@ -10,7 +11,7 @@ type ModuleScore = {
   module: string;
   score: number;
   match_count: number | null;
-  upload_month: string; // YYYY-MM-DD
+  upload_month: string;
 };
 type FfScore = {
   hr_code: string;
@@ -31,17 +32,6 @@ function fmtMonth(iso: string) {
     month: "short",
     year: "numeric",
   });
-}
-
-function TrendArrow({ prev, curr }: { prev: number | null; curr: number }) {
-  if (prev === null) return null;
-  const diff = curr - prev;
-  if (Math.abs(diff) < 0.01) return <span className="text-slate-400 text-xs">→</span>;
-  return diff > 0 ? (
-    <span className="text-emerald-600 text-xs font-semibold">↑ +{diff.toFixed(2)}%</span>
-  ) : (
-    <span className="text-red-500 text-xs font-semibold">↓ {diff.toFixed(2)}%</span>
-  );
 }
 
 function LineChart({
@@ -79,26 +69,12 @@ function LineChart({
         </g>
       ))}
       {data.map((d, i) => (
-        <text
-          key={i}
-          x={xScale(i)}
-          y={H - 4}
-          textAnchor="middle"
-          fontSize={8}
-          fill="#94a3b8"
-        >
+        <text key={i} x={xScale(i)} y={H - 4} textAnchor="middle" fontSize={8} fill="#94a3b8">
           {d.label}
         </text>
       ))}
       {[minV, (minV + maxV) / 2, maxV].map((v, i) => (
-        <text
-          key={i}
-          x={PAD.left - 4}
-          y={yScale(v) + 3}
-          textAnchor="end"
-          fontSize={7}
-          fill="#94a3b8"
-        >
+        <text key={i} x={PAD.left - 4} y={yScale(v) + 3} textAnchor="end" fontSize={7} fill="#94a3b8">
           {Math.round(v)}%
         </text>
       ))}
@@ -153,7 +129,7 @@ export default function QualityScoreDashboard({
     const c = next.collector ?? selectedCollector;
     const t = next.team ?? selectedTeam;
     const params = new URLSearchParams();
-    if (p !== "month") params.set("period", p);
+    if (p !== "year") params.set("period", p);
     params.set("year", String(y));
     if (p === "month") params.set("month", String(m));
     if (p === "quarter") params.set("quarter", String(q));
@@ -163,7 +139,6 @@ export default function QualityScoreDashboard({
     router.push(`/quality-score${qs ? `?${qs}` : ""}`);
   }
 
-  // Years to choose from: 4 previous + current + next.
   const yearOptions = useMemo(() => {
     const now = new Date().getFullYear();
     const list: number[] = [];
@@ -171,16 +146,11 @@ export default function QualityScoreDashboard({
     return list;
   }, []);
 
-  const toYM = (d: string) => d.slice(0, 7);
-
-  // Charts (only show months that match the filter)
   const moduleCharts = useMemo(() => {
     const map: Record<string, { label: string; value: number }[]> = {};
     for (const r of moduleScores) {
       if (!map[r.module]) map[r.module] = [];
-      const existing = map[r.module].find(
-        (e) => e.label === fmtMonth(r.upload_month)
-      );
+      const existing = map[r.module].find((e) => e.label === fmtMonth(r.upload_month));
       if (existing) existing.value = (existing.value + r.score) / 2;
       else map[r.module].push({ label: fmtMonth(r.upload_month), value: r.score });
     }
@@ -200,8 +170,6 @@ export default function QualityScoreDashboard({
       .map(([label, v]) => ({ label, value: v.sum / v.count }));
   }, [freezeFrameScores]);
 
-  // Summary cards: avg per module + freeze-frame for the current filter range,
-  // compared to the previous month in the dataset (still useful as a trend).
   const summaryScores = useMemo(() => {
     if (moduleScores.length === 0 && freezeFrameScores.length === 0) return null;
     const mods: Record<string, number[]> = {};
@@ -211,8 +179,7 @@ export default function QualityScoreDashboard({
     }
     const ffAvg =
       freezeFrameScores.length > 0
-        ? freezeFrameScores.reduce((a, r) => a + r.score, 0) /
-          freezeFrameScores.length
+        ? freezeFrameScores.reduce((a, r) => a + r.score, 0) / freezeFrameScores.length
         : null;
     const modSummary = Object.entries(mods).map(([mod, scores]) => ({
       module: mod,
@@ -224,7 +191,6 @@ export default function QualityScoreDashboard({
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
   const allModules = Array.from(new Set(moduleScores.map((r) => r.module))).sort();
 
-  // Collectors shown in the dropdown — narrowed by selected team.
   const collectorOptions =
     selectedTeam !== "all"
       ? collectors.filter((c) => c.team === selectedTeam)
@@ -259,9 +225,7 @@ export default function QualityScoreDashboard({
             className={`${inputCls} w-full`}
           >
             {yearOptions.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
+              <option key={y} value={y}>{y}</option>
             ))}
           </select>
         </div>
@@ -274,9 +238,7 @@ export default function QualityScoreDashboard({
               className={`${inputCls} w-full`}
             >
               {MONTH_NAMES.map((name, idx) => (
-                <option key={name} value={idx + 1}>
-                  {name}
-                </option>
+                <option key={name} value={idx + 1}>{name}</option>
               ))}
             </select>
           </div>
@@ -290,9 +252,7 @@ export default function QualityScoreDashboard({
               className={`${inputCls} w-full`}
             >
               {[1, 2, 3, 4].map((q) => (
-                <option key={q} value={q}>
-                  Q{q}
-                </option>
+                <option key={q} value={q}>Q{q}</option>
               ))}
             </select>
           </div>
@@ -301,44 +261,45 @@ export default function QualityScoreDashboard({
         {!isViewer && (
           <div className="w-44">
             <label className="block text-xs text-slate-500 mb-1">Team</label>
-            <select
+            <Combobox
+              options={[
+                { value: "all", label: "All teams" },
+                ...teams.map((t) => ({ value: t, label: t })),
+              ]}
               value={selectedTeam}
-              onChange={(e) => applyFilters({ team: e.target.value, collector: "all" })}
-              className={`${inputCls} w-full`}
-            >
-              <option value="all">All teams</option>
-              {teams.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => applyFilters({ team: v || "all", collector: "all" })}
+              placeholder="All teams"
+              searchPlaceholder="Search teams..."
+            />
           </div>
         )}
 
         {!isViewer && (
-          <div className="w-56">
+          <div className="w-64">
             <label className="block text-xs text-slate-500 mb-1">Collector</label>
-            <select
+            <Combobox
+              options={[
+                {
+                  value: "all",
+                  label:
+                    selectedTeam !== "all"
+                      ? `All on ${selectedTeam}`
+                      : "All collectors",
+                },
+                ...collectorOptions.map((c) => ({
+                  value: c.hr_code,
+                  label: `${c.hr_code} - ${c.name}`,
+                })),
+              ]}
               value={selectedCollector}
-              onChange={(e) => applyFilters({ collector: e.target.value })}
-              className={`${inputCls} w-full`}
-            >
-              <option value="all">
-                {selectedTeam !== "all"
-                  ? `All on ${selectedTeam}`
-                  : "All collectors"}
-              </option>
-              {collectorOptions.map((c) => (
-                <option key={c.hr_code} value={c.hr_code}>
-                  {c.hr_code} - {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => applyFilters({ collector: v || "all" })}
+              placeholder="All collectors"
+              searchPlaceholder="Search by code or name..."
+            />
           </div>
         )}
 
-        {(selectedCollector !== "all" || selectedTeam !== "all" || period !== "month") && (
+        {(selectedCollector !== "all" || selectedTeam !== "all" || period !== "year") && (
           <button
             type="button"
             onClick={() => router.push("/quality-score")}
@@ -349,7 +310,6 @@ export default function QualityScoreDashboard({
         )}
       </div>
 
-      {/* Summary cards */}
       {summaryScores && (
         <div>
           <h2 className="text-sm font-semibold text-slate-500 mb-3">
@@ -357,10 +317,7 @@ export default function QualityScoreDashboard({
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {summaryScores.modSummary.map(({ module, avg }) => (
-              <div
-                key={module}
-                className="bg-white rounded-2xl border border-slate-200 p-4"
-              >
+              <div key={module} className="bg-white rounded-2xl border border-slate-200 p-4">
                 <p className="text-xs text-slate-500 truncate capitalize">
                   {module.replace(/_/g, " ")}
                 </p>
@@ -370,29 +327,21 @@ export default function QualityScoreDashboard({
             {summaryScores.ffAvg !== null && (
               <div className="bg-white rounded-2xl border border-slate-200 p-4">
                 <p className="text-xs text-slate-500">Freeze Frame</p>
-                <p className="text-2xl font-bold mt-1">
-                  {summaryScores.ffAvg.toFixed(1)}%
-                </p>
+                <p className="text-2xl font-bold mt-1">{summaryScores.ffAvg.toFixed(1)}%</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Module line charts */}
       {allModules.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3">Module scores over time</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {allModules.map((mod) => {
-              const data = (moduleCharts[mod] ?? []).sort((a, b) =>
-                a.label.localeCompare(b.label)
-              );
+              const data = (moduleCharts[mod] ?? []).sort((a, b) => a.label.localeCompare(b.label));
               return (
-                <div
-                  key={mod}
-                  className="bg-white rounded-2xl border border-slate-200 p-4"
-                >
+                <div key={mod} className="bg-white rounded-2xl border border-slate-200 p-4">
                   <h3 className="text-sm font-semibold text-slate-700 mb-2 capitalize">
                     {mod.replace(/_/g, " ")}
                   </h3>
