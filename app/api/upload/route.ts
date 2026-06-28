@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isViewingAs } from "@/lib/effective";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import nodemailer from "nodemailer";
+import { sendEmail, renderEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
 const DRIVE_API_KEY = process.env.GOOGLE_DRIVE_API_KEY!;
+const DASHBOARD_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://feedback-dashboard-7i8h.vercel.app";
 
 function extractFolderId(input: string): string | null {
   const url = input.trim();
@@ -14,7 +16,7 @@ function extractFolderId(input: string): string | null {
   if (folders) return folders[1];
   const idParam = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (idParam) return idParam[1];
-  if (/^[a-zA-Z0-9_-]{15,}$/.test(url)) return url; // pasted a raw id
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(url)) return url;
   return null;
 }
 
@@ -28,7 +30,6 @@ async function listDriveVideos(folderId: string) {
     `&fields=files(id,name,mimeType)` +
     `&pageSize=1000` +
     `&supportsAllDrives=true&includeItemsFromAllDrives=true`;
-
   const res = await fetch(url);
   const json = await res.json();
   if (!res.ok) {
@@ -40,7 +41,6 @@ async function listDriveVideos(folderId: string) {
   return (json.files || []) as { id: string; name: string; mimeType: string }[];
 }
 
-// Notify the collector inline (server-side, awaited).
 async function notifyCollectorReport(opts: {
   collectorId: string;
   matchName: string;
@@ -48,16 +48,9 @@ async function notifyCollectorReport(opts: {
   notes: string | null;
 }) {
   const { collectorId, matchName, reviewDate, notes } = opts;
-
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const gmailUser = process.env.GMAIL_USER;
-  const gmailPass = process.env.GMAIL_APP_PASSWORD;
   if (!serviceKey) {
     console.warn("[upload-notify] SUPABASE_SERVICE_ROLE_KEY not set - email skipped");
-    return;
-  }
-  if (!gmailUser || !gmailPass) {
-    console.warn("[upload-notify] GMAIL_USER or GMAIL_APP_PASSWORD not set - email skipped");
     return;
   }
 
@@ -72,54 +65,47 @@ async function notifyCollectorReport(opts: {
     .select("hr_code")
     .eq("id", collectorId)
     .single();
-  if (!collector?.hr_code) {
-    console.warn(`[upload-notify] no hr_code for collector ${collectorId} - email skipped`);
-    return;
-  }
+  if (!collector?.hr_code) return;
 
   const { data: profile } = await admin
     .from("profiles")
     .select("id")
     .eq("hr_code", collector.hr_code)
     .single();
-  if (!profile?.id) {
-    console.warn(`[upload-notify] no profile for hr_code ${collector.hr_code} - email skipped`);
-    return;
-  }
+  if (!profile?.id) return;
 
-  const {
-    data: { user: targetUser },
-  } = await admin.auth.admin.getUserById(profile.id);
+  const { data: { user: targetUser } } = await admin.auth.admin.getUserById(profile.id);
   const email = targetUser?.email;
-  if (!email) {
-    console.warn(`[upload-notify] no email for profile ${profile.id} - email skipped`);
-    return;
-  }
+  if (!email) return;
 
   const dateStr = reviewDate ? ` for ${reviewDate}` : "";
-  const bodySection = notes
-    ? `<p style="color:#374151;">${notes.replace(/\n/g, "<br>")}</p>`
+  const bodyHtml = notes
+    ? `<p style="margin:0 0 12px;color:#374151;white-space:pre-wrap;">${escapeText(notes)}</p>`
     : "";
-  const html = `
-    <p>Hello,</p>
-    <p>A new match session report has been uploaded for you${dateStr}:</p>
-    <h3 style="margin:12px 0 4px;">${matchName}</h3>
-    ${bodySection}
-    <p>Please log in to the Collector Performance Dashboard to view your report, acknowledge it, and add any notes.</p>
-  `;
-
-  const from = process.env.EMAIL_FROM ?? `Hudl Feedback <${gmailUser}>`;
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user: gmailUser, pass: gmailPass },
+  const { html, text } = renderEmail({
+    heading: `New report: ${matchName}`,
+    intro: `A new match session report has been uploaded for you${dateStr}.`,
+    bodyHtml,
+    bodyText: notes ?? "",
+    cta: { label: "View Report", url: `${DASHBOARD_URL}/my-reports` },
+    closing:
+      "Open the dashboard to acknowledge the report and add any notes for your reviewer.",
   });
-  await transporter.sendMail({
-    from,
+
+  await sendEmail({
     to: email,
     subject: `New Report: ${matchName}`,
     html,
+    text,
   });
-  console.log(`[upload-notify] Email sent to ${email}`);
+}
+
+function escapeText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 export async function POST(req: NextRequest) {
@@ -131,9 +117,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -163,10 +147,7 @@ export async function POST(req: NextRequest) {
   }
 
   let matchSessionId: string;
-  // "merged" tells the UI we appended to an existing report instead of creating
-  // a new one (when an admin re-submits the same match for the same collector).
   let merged = false;
-  // Only set for a brand-new session - used to email the collector at the end.
   let notify: {
     collectorId: string;
     matchName: string;
@@ -198,8 +179,7 @@ export async function POST(req: NextRequest) {
     const matchName = String(body.match_name || "").trim();
     const reviewDate = String(body.review_date || "") || null;
     const notes = String(body.overall_notes || "");
-    const score =
-      body.quality_score != null ? parseInt(String(body.quality_score), 10) : null;
+    const score = body.quality_score != null ? parseInt(String(body.quality_score), 10) : null;
 
     if (!collectorId || !matchName) {
       return NextResponse.json(
@@ -208,8 +188,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Look for an existing report for this collector + match (case-insensitive).
-    // If one exists we merge into it instead of creating a duplicate.
     const { data: existingSessions } = await supabase
       .from("match_sessions")
       .select("id, match_name")
@@ -218,8 +196,7 @@ export async function POST(req: NextRequest) {
 
     const existing =
       (existingSessions ?? []).find(
-        (s: any) =>
-          (s.match_name ?? "").trim().toLowerCase() === matchName.toLowerCase()
+        (s: any) => (s.match_name ?? "").trim().toLowerCase() === matchName.toLowerCase()
       ) ?? null;
 
     if (existing) {
@@ -267,7 +244,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Dedupe: skip any drive_file_id that's already attached to this session.
   const { data: existingVideos } = await supabase
     .from("session_videos")
     .select("drive_file_id")
@@ -275,7 +251,6 @@ export async function POST(req: NextRequest) {
   const existingIds = new Set(
     (existingVideos ?? []).map((v: any) => v.drive_file_id as string)
   );
-
   const newFiles = files.filter((f) => !existingIds.has(f.id));
   const skipped = files.length - newFiles.length;
 
@@ -295,12 +270,11 @@ export async function POST(req: NextRequest) {
     inserted = rows.length;
   }
 
-  // Email the collector (only on brand-new sessions). Never fail the upload.
   if (notify) {
     try {
       await notifyCollectorReport(notify);
     } catch (e: any) {
-      console.error(`[upload-notify] Gmail send failed: ${e?.message ?? e}`);
+      console.error(`[upload-notify] sendEmail failed: ${e?.message ?? e}`);
     }
   }
 

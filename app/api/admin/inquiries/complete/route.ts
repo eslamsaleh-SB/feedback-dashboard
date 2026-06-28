@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isViewingAs } from "@/lib/effective";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import nodemailer from "nodemailer";
+import { sendEmail, renderEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
+
+const DASHBOARD_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://feedback-dashboard-7i8h.vercel.app";
 
 function adminClient() {
   return createAdminClient(
@@ -12,27 +15,6 @@ function adminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   );
-}
-
-async function sendEmail(to: string, subject: string, html: string) {
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD;
-  const from = process.env.EMAIL_FROM ?? `Hudl Feedback <${user}>`;
-  if (!user || !pass) {
-    console.warn("[inquiry-complete] GMAIL creds not set - email skipped");
-    return false;
-  }
-  try {
-    const t = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user, pass },
-    });
-    await t.sendMail({ from, to, subject, html });
-    return true;
-  } catch (e: any) {
-    console.error(`[inquiry-complete] Gmail send failed: ${e?.message ?? e}`);
-    return false;
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -45,9 +27,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const { data: me } = await supabase
@@ -76,7 +56,6 @@ export async function POST(req: NextRequest) {
 
   const a = adminClient();
 
-  // Pull the inquiry + every video so we can verify all are replied.
   const { data: inquiry, error: qErr } = await a
     .from("match_inquiries")
     .select(
@@ -108,7 +87,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Mark the inquiry complete.
   const { error: updateErr } = await a
     .from("match_inquiries")
     .update({
@@ -120,7 +98,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: updateErr.message }, { status: 400 });
   }
 
-  // Look up the collector's email and notify them.
   let emailSent = false;
   const { data: profile } = await a
     .from("profiles")
@@ -128,24 +105,21 @@ export async function POST(req: NextRequest) {
     .eq("hr_code", inquiry.hr_code)
     .single();
   if (profile?.id) {
-    const {
-      data: { user: targetUser },
-    } = await a.auth.admin.getUserById(profile.id);
+    const { data: { user: targetUser } } = await a.auth.admin.getUserById(profile.id);
     const email = targetUser?.email;
     if (email) {
-      const html = `
-        <p>Hello,</p>
-        <p>Your reviewer has answered every video question you submitted for
-        <strong>Match ${inquiry.match_id}</strong>.</p>
-        <p>Please log in to the Collector Performance Dashboard and open
-        <em>Ask a Question</em> &rarr; <strong>Match ${inquiry.match_id}</strong>
-        to read each reply.</p>
-      `;
-      emailSent = await sendEmail(
-        email,
-        `All inquiries answered - Match ${inquiry.match_id}`,
-        html
-      );
+      const { html, text } = renderEmail({
+        heading: `All inquiries answered - Match ${inquiry.match_id}`,
+        intro: `Your reviewer has answered every video question you submitted for Match ${inquiry.match_id}.`,
+        cta: { label: "Open my inquiries", url: `${DASHBOARD_URL}/my-inquiries` },
+        closing: "Sign in to the dashboard to read each reply.",
+      });
+      emailSent = await sendEmail({
+        to: email,
+        subject: `All inquiries answered - Match ${inquiry.match_id}`,
+        html,
+        text,
+      });
     }
   }
 

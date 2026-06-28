@@ -1,37 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import nodemailer from "nodemailer";
+import { sendEmail, renderEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD;
-  const from = process.env.EMAIL_FROM ?? `Hudl Feedback <${user}>`;
+const DASHBOARD_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://feedback-dashboard-7i8h.vercel.app";
 
-  if (!user || !pass) {
-    console.warn("[session-notify] GMAIL_USER or GMAIL_APP_PASSWORD not set — email skipped");
-    return false;
-  }
-
-  try {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user, pass },
-    });
-    await transporter.sendMail({ from, to, subject, html });
-    console.log(`[session-notify] Email sent to ${to}`);
-    return true;
-  } catch (e: any) {
-    console.error(`[session-notify] Gmail send failed for ${to}: ${e?.message ?? e}`);
-    return false;
-  }
+function escapeText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 export async function POST(req: NextRequest) {
-  // Internal route — called server-side from upload/route.ts, no user session available
-
-  const { collector_id, match_name, review_date, overall_notes } = await req.json() as {
+  const { collector_id, match_name, review_date, overall_notes } = (await req.json()) as {
     collector_id: string;
     match_name: string;
     review_date: string | null;
@@ -55,7 +40,6 @@ export async function POST(req: NextRequest) {
     .select("hr_code")
     .eq("id", collector_id)
     .single();
-
   if (!collector?.hr_code) return NextResponse.json({ ok: true, sent: 0 });
 
   const { data: profile } = await admin
@@ -63,7 +47,6 @@ export async function POST(req: NextRequest) {
     .select("id")
     .eq("hr_code", collector.hr_code)
     .single();
-
   if (!profile?.id) return NextResponse.json({ ok: true, sent: 0 });
 
   const { data: { user: targetUser } } = await admin.auth.admin.getUserById(profile.id);
@@ -71,18 +54,24 @@ export async function POST(req: NextRequest) {
   if (!email) return NextResponse.json({ ok: true, sent: 0 });
 
   const dateStr = review_date ? ` for ${review_date}` : "";
-  const bodySection = overall_notes
-    ? `<p style="color:#374151;">${overall_notes.replace(/\n/g, "<br>")}</p>`
+  const bodyHtml = overall_notes
+    ? `<p style="margin:0 0 12px;color:#374151;white-space:pre-wrap;">${escapeText(overall_notes)}</p>`
     : "";
+  const { html, text } = renderEmail({
+    heading: `New report: ${match_name}`,
+    intro: `A new match session report has been uploaded for you${dateStr}.`,
+    bodyHtml,
+    bodyText: overall_notes ?? "",
+    cta: { label: "View Report", url: `${DASHBOARD_URL}/my-reports` },
+    closing:
+      "Please open the dashboard to acknowledge the report and add any notes for your reviewer.",
+  });
 
-  const html = `
-    <p>Hello,</p>
-    <p>A new match session report has been uploaded for you${dateStr}:</p>
-    <h3 style="margin:12px 0 4px;">${match_name}</h3>
-    ${bodySection}
-    <p>Please log in to the Collector Performance Dashboard to view your report, acknowledge it, and add any notes.</p>
-  `;
-
-  await sendEmail(email, `New Report: ${match_name}`, html);
+  await sendEmail({
+    to: email,
+    subject: `New Report: ${match_name}`,
+    html,
+    text,
+  });
   return NextResponse.json({ ok: true, sent: 1 });
 }

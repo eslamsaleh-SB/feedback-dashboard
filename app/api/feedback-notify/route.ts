@@ -1,36 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import nodemailer from "nodemailer";
+import { sendEmail, renderEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD;
-  const from = process.env.EMAIL_FROM ?? `Hudl Feedback <${user}>`;
+const DASHBOARD_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://feedback-dashboard-7i8h.vercel.app";
 
-  if (!user || !pass) {
-    console.warn("[feedback-notify] GMAIL_USER or GMAIL_APP_PASSWORD not set — email skipped");
-    return false;
-  }
-
-  try {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user, pass },
-    });
-    await transporter.sendMail({ from, to, subject, html });
-    console.log(`[feedback-notify] Email sent to ${to}`);
-    return true;
-  } catch (e: any) {
-    console.error(`[feedback-notify] Gmail send failed for ${to}: ${e?.message ?? e}`);
-    return false;
-  }
+function escapeText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 export async function POST(req: NextRequest) {
-  // Internal route — called client-side from FeedbackReservationForm; no auth check needed
-
   const body = await req.json();
   const {
     hr_codes,
@@ -50,13 +35,11 @@ export async function POST(req: NextRequest) {
     shift: string;
   };
 
-  if (!hr_codes?.length) {
-    return NextResponse.json({ ok: true, sent: 0 });
-  }
+  if (!hr_codes?.length) return NextResponse.json({ ok: true, sent: 0 });
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
-    console.warn("[feedback-notify] SUPABASE_SERVICE_ROLE_KEY not set — email skipped");
+    console.warn("[feedback-notify] SUPABASE_SERVICE_ROLE_KEY not set - email skipped");
     return NextResponse.json({ ok: true, sent: 0, warning: "Service key not configured" });
   }
 
@@ -80,26 +63,42 @@ export async function POST(req: NextRequest) {
 
     const timeStr = session_time ? ` at ${session_time}` : "";
     const shiftStr = shift ? ` (${shift} shift)` : "";
-    const locationStr =
-      mode === "Online" && meet_link
-        ? `<br>Meeting link: <a href="${meet_link}">${meet_link}</a>`
-        : mode === "Offline" && location
-        ? `<br>Location: ${location}`
-        : "";
-
-    const subject = `Feedback session scheduled — ${session_date}`;
-    const html = `
-      <p>Hello,</p>
-      <p>A feedback session has been scheduled for you:</p>
-      <ul>
-        <li><strong>Date:</strong> ${session_date}${timeStr}${shiftStr}</li>
-        <li><strong>Mode:</strong> ${mode}</li>
-        ${locationStr}
+    const bodyHtml = `
+      <ul style="margin:0 0 12px 18px;padding:0;color:#374151;">
+        <li><strong>Date:</strong> ${escapeText(session_date)}${timeStr}${shiftStr}</li>
+        <li><strong>Mode:</strong> ${escapeText(mode)}</li>
+        ${
+          mode === "Offline" && location
+            ? `<li><strong>Location:</strong> ${escapeText(location)}</li>`
+            : ""
+        }
       </ul>
-      <p>Please log in to the Collector Performance Dashboard to view details.</p>
     `;
+    const bodyText =
+      `Date: ${session_date}${timeStr}${shiftStr}\n` +
+      `Mode: ${mode}` +
+      (mode === "Offline" && location ? `\nLocation: ${location}` : "");
 
-    await sendEmail(email, subject, html);
+    const cta =
+      mode === "Online" && meet_link
+        ? { label: "Join the meeting", url: meet_link }
+        : { label: "Open My Sessions", url: `${DASHBOARD_URL}/my-sessions` };
+
+    const { html, text } = renderEmail({
+      heading: "Feedback session scheduled",
+      intro: "A feedback session has been scheduled for you.",
+      bodyHtml,
+      bodyText,
+      cta,
+      closing: "Please log in to the dashboard for full details.",
+    });
+
+    await sendEmail({
+      to: email,
+      subject: `Feedback session scheduled - ${session_date}`,
+      html,
+      text,
+    });
   });
 
   await Promise.allSettled(emailPromises);
