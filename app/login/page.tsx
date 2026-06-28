@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 
 type Mode = "signin" | "signup" | "forgot";
 
+// Predefined titles. Replace this list with the exact titles you send me;
+// teams come from /api/teams (your managed roster list).
+const TITLES = ["DC", "Resolution", "Team Leader", "Quality", "Live Quality", "Reviewer"];
+
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -14,12 +18,12 @@ export default function LoginPage() {
   const [fullName, setFullName] = useState("");
   const [hrCode, setHrCode] = useState("");
   const [team, setTeam] = useState("");
+  const [title, setTitle] = useState("");
   const [teams, setTeams] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "ok"|"err"; text: string }|null>(null);
 
   useEffect(() => {
-    // Load the team list once on mount (works in any mode, avoids stale cache).
     fetch("/api/teams", { cache: "no-store" })
       .then((r) => r.json())
       .then(({ teams }: { teams: string[] }) => setTeams(Array.isArray(teams) ? teams : []))
@@ -28,7 +32,7 @@ export default function LoginPage() {
 
   function switchMode(next: Mode) {
     setMode(next); setMessage(null); setEmail(""); setPassword("");
-    setFullName(""); setHrCode(""); setTeam("");
+    setFullName(""); setHrCode(""); setTeam(""); setTitle("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -53,8 +57,8 @@ export default function LoginPage() {
       setLoading(false);
       return setMessage({ type: "err", text: "HR code must be A-1234 or I-1234 (letter A or I, a dash, then numbers). Don't enter your name." });
     }
-    // Sign up through our server route (admin createUser with email_confirm:true).
-    // This avoids Supabase's built-in email rate limit that blocks normal signUp().
+    if (!team || team === "") { setLoading(false); return setMessage({ type: "err", text: "Please select your team." }); }
+    if (!title) { setLoading(false); return setMessage({ type: "err", text: "Please select your title." }); }
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -64,7 +68,8 @@ export default function LoginPage() {
         password,
         full_name: fullName,
         hr_code: code,
-        team: team === "__none__" ? null : team || null,
+        team: team === "__none__" ? null : team,
+        title,
       }),
     });
     const out = await res.json().catch(() => ({} as { error?: string }));
@@ -74,12 +79,12 @@ export default function LoginPage() {
     switchMode("signin");
   }
 
-  const title = mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Reset password";
+  const heading = mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Reset password";
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-8 space-y-4">
-        <h1 className="text-2xl font-bold text-center">{title}</h1>
+        <h1 className="text-2xl font-bold text-center">{heading}</h1>
         {mode === "signup" && (
           <>
             <input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
@@ -89,10 +94,17 @@ export default function LoginPage() {
             </div>
             <div>
               <label className="block text-sm text-slate-600 mb-1">Team</label>
-              <select value={team} onChange={(e) => setTeam(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white">
+              <select value={team} onChange={(e) => setTeam(e.target.value)} required className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white">
                 <option value="">-- select your team --</option>
                 <option value="__none__">Team Not Listed</option>
                 {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-slate-600 mb-1">Title</label>
+              <select value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white">
+                <option value="">-- select your title --</option>
+                {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </>

@@ -216,12 +216,26 @@ export async function POST(req: NextRequest) {
       });
   }
 
+  // Resolve hr_code -> actor_id (collectors.id) so new rows carry the stable key
+  // while hr_code is kept for CSV/Tableau compatibility.
+  const idByHr = new Map<string, string>();
+  if (hrCodes.length) {
+    const { data: cols } = await supabase
+      .from("collectors")
+      .select("id, hr_code")
+      .in("hr_code", hrCodes);
+    (cols ?? []).forEach((c: any) => {
+      if (c.hr_code) idByHr.set(String(c.hr_code).trim().toUpperCase(), c.id as string);
+    });
+  }
+
   // Upsert the per-part totals for this module (replace on conflict).
   const payload = aggregated.map((a) => ({
     matchid: a.matchid,
     partid: a.partid,
     module,
     hr_code: a.hr_code,
+    actor_id: a.hr_code ? idByHr.get(a.hr_code.trim().toUpperCase()) ?? null : null,
     review_date: a.review_date,
     total_mistakes: a.total,
   }));

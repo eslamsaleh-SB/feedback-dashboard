@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
   const full_name = String(body.full_name || "").trim();
   const hr_code = String(body.hr_code || "").trim().toUpperCase();
   const team = body.team ? String(body.team).trim() : null;
+  const title = body.title ? String(body.title).trim() : null;
 
   if (!email || !password) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name, hr_code, team },
+    user_metadata: { full_name, hr_code, team, title },
   });
   if (error || !created.user) {
     return NextResponse.json(
