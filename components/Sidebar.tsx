@@ -26,8 +26,9 @@ const roleLabel = (role: AppRole): string => {
 };
 
 type NavItem = { href: string; label: string };
-type NavGroup = { key: string; label: string; items: NavItem[] };
-type NavEntry = { type: "link"; href: string; label: string } | { type: "group"; key: string; label: string; items: NavItem[] };
+type NavEntry =
+  | { type: "link"; href: string; label: string }
+  | { type: "group"; key: string; label: string; items: NavItem[] };
 
 function buildNav(role: AppRole): NavEntry[] {
   if (role === "Viewer") {
@@ -36,6 +37,7 @@ function buildNav(role: AppRole): NavEntry[] {
       { type: "link", href: "/my-reports", label: "My Reports" },
       { type: "link", href: "/my-sessions", label: "My Sessions" },
       { type: "link", href: "/my-matches", label: "My Match Details" },
+      { type: "link", href: "/my-inquiries", label: "Ask a Question" },
       { type: "link", href: "/quality-score", label: "Quality Score" },
     ];
   }
@@ -54,7 +56,6 @@ function buildNav(role: AppRole): NavEntry[] {
     },
   ];
 
-  // Upload Data group
   const uploadItems: NavItem[] = [];
   if (role === "Admin" || role === "Uploader") {
     uploadItems.push({ href: "/module-upload", label: "Module Data" });
@@ -65,16 +66,12 @@ function buildNav(role: AppRole): NavEntry[] {
   if (role === "Admin" || role === "Uploader") {
     uploadItems.push({ href: "/upload", label: "Send Report" });
   }
-  // Send Report is now merged into /admin-reports (Reports page)
   if (uploadItems.length > 0) {
     entries.push({ type: "group", key: "upload", label: "Upload Data", items: uploadItems });
   }
 
-  // Feedback group
   if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
     const feedbackItems: NavItem[] = [];
-    // Feedback Progress lives under Administration for Admins (moved there).
-    // Other feedback roles still reach it from here.
     if (role !== "Admin") {
       feedbackItems.push({ href: "/feedback-progress", label: "Feedback Progress" });
     }
@@ -87,7 +84,6 @@ function buildNav(role: AppRole): NavEntry[] {
     });
   }
 
-  // Administration group (Admin only)
   if (role === "Admin") {
     entries.push({
       type: "group",
@@ -95,6 +91,7 @@ function buildNav(role: AppRole): NavEntry[] {
       label: "Administration",
       items: [
         { href: "/admin-reports", label: "Reports" },
+        { href: "/admin-inquiries", label: "Inquiries" },
         { href: "/feedback-progress", label: "Feedback Progress" },
         { href: "/users", label: "Users" },
       ],
@@ -120,7 +117,6 @@ export default function Sidebar({
   const supabase = createClient();
   const navEntries = buildNav(role);
 
-  // Initialize open groups: open if the current path lives in that group
   const initialOpen = new Set<string>();
   for (const entry of navEntries) {
     if (entry.type === "group" && groupContainsPath(entry.items, pathname ?? "")) {
@@ -169,7 +165,6 @@ export default function Sidebar({
             );
           }
 
-          // Group
           const isOpen = openGroups.has(entry.key);
           const groupActive = groupContainsPath(entry.items, pathname ?? "");
 
