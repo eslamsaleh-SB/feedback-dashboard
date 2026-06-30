@@ -52,6 +52,7 @@ function buildNav(role: AppRole): NavEntry[] {
         { href: "/analytics", label: "Collectors Performance" },
         { href: "/match-totals", label: "Match Total Per Module" },
         { href: "/quality-score", label: "Quality Score" },
+        { href: "/performance-thresholds", label: "Performance Thresholds" },
       ],
     },
   ];
