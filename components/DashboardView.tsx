@@ -106,41 +106,17 @@ export default function DashboardView({
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
 
   const topCards = [
-    {
-      label: "Submitted Reports",
-      value: submittedReports,
-      href: "/admin-reports",
-      color: "text-blue-600",
-      sub: curLabel,
-    },
-    {
-      label: "Collectors",
-      value: collectorCount,
-      href: "/collectors",
-      color: "text-slate-800",
-    },
-    {
-      label: "Open Notes",
-      value: openNotes,
-      href: "/admin-reports",
-      color: openNotes ? "text-amber-600" : "text-slate-800",
-    },
+    { label: "Submitted Reports", value: submittedReports, href: "/admin-reports", color: "text-blue-600", sub: curLabel },
+    { label: "Collectors", value: collectorCount, href: "/collectors", color: "text-slate-800" },
+    { label: "Open Notes", value: openNotes, href: "/admin-reports", color: openNotes ? "text-amber-600" : "text-slate-800" },
   ];
 
   const feedbackCards: { label: string; value: number; color: string }[] = [
     { label: "Total sessions", value: feedback.total, color: "text-slate-800" },
     { label: "Completed", value: feedback.completed, color: "text-emerald-600" },
-    {
-      label: "Incomplete",
-      value: feedback.incomplete,
-      color: feedback.incomplete ? "text-amber-600" : "text-slate-800",
-    },
+    { label: "Incomplete", value: feedback.incomplete, color: feedback.incomplete ? "text-amber-600" : "text-slate-800" },
     { label: "Cancelled", value: feedback.cancelled, color: "text-slate-500" },
-    {
-      label: "Absent",
-      value: feedback.absent,
-      color: feedback.absent ? "text-red-600" : "text-slate-800",
-    },
+    { label: "Absent", value: feedback.absent, color: feedback.absent ? "text-red-600" : "text-slate-800" },
   ];
 
   const moduleErrorCards = [
@@ -184,21 +160,11 @@ export default function DashboardView({
         <div className="flex flex-wrap items-end gap-2">
           <div>
             <label className="block text-xs text-slate-500 mb-1">From</label>
-            <input
-              type="date"
-              value={fromInput}
-              onChange={(e) => setFromInput(e.target.value)}
-              className={inputCls}
-            />
+            <input type="date" value={fromInput} onChange={(e) => setFromInput(e.target.value)} className={inputCls} />
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">To</label>
-            <input
-              type="date"
-              value={toInput}
-              onChange={(e) => setToInput(e.target.value)}
-              className={inputCls}
-            />
+            <input type="date" value={toInput} onChange={(e) => setToInput(e.target.value)} className={inputCls} />
           </div>
           <button
             type="button"
@@ -207,13 +173,10 @@ export default function DashboardView({
           >
             Apply
           </button>
-          <span className="text-xs text-slate-500 self-center">
-            vs {prevLabel}
-          </span>
+          <span className="text-xs text-slate-500 self-center">vs {prevLabel}</span>
         </div>
       </div>
 
-      {/* Headline cards (clickable) */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         {topCards.map((card) => (
           <Link
@@ -223,14 +186,11 @@ export default function DashboardView({
           >
             <p className="text-sm text-slate-500">{card.label}</p>
             <p className={`text-3xl font-bold mt-1 ${card.color}`}>{card.value}</p>
-            {card.sub && (
-              <p className="text-xs text-slate-400 mt-1">{card.sub}</p>
-            )}
+            {card.sub && <p className="text-xs text-slate-400 mt-1">{card.sub}</p>}
           </Link>
         ))}
       </div>
 
-      {/* Module errors per module */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
           Module errors ({curLabel})
@@ -248,20 +208,15 @@ export default function DashboardView({
                 <p className="text-xs text-slate-500 truncate">{c.label}</p>
                 <div className="flex items-baseline gap-2 mt-1">
                   <p className="text-2xl font-bold text-slate-800">{Number(c.curr).toLocaleString()}</p>
-                  {t.text && (
-                    <span className={`text-xs font-semibold ${t.color}`}>{t.text}</span>
-                  )}
+                  {t.text && <span className={`text-xs font-semibold ${t.color}`}>{t.text}</span>}
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Previous: {Number(c.prev).toLocaleString()}
-                </p>
+                <p className="text-[11px] text-slate-400 mt-1">Previous: {Number(c.prev).toLocaleString()}</p>
               </Link>
             );
           })}
         </div>
       </div>
 
-      {/* Quality scores per module + freeze frame */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
           Quality scores ({curLabel})
@@ -280,9 +235,7 @@ export default function DashboardView({
                   <p className="text-2xl font-bold text-slate-800">
                     {c.curr == null ? "-" : `${c.curr.toFixed(1)}%`}
                   </p>
-                  {t.text && (
-                    <span className={`text-xs font-semibold ${t.color}`}>{t.text}</span>
-                  )}
+                  {t.text && <span className={`text-xs font-semibold ${t.color}`}>{t.text}</span>}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
                   Previous: {c.prev == null ? "no data" : `${c.prev.toFixed(1)}%`}
@@ -293,7 +246,6 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* Feedback session cards */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
           Feedback sessions ({curLabel})
@@ -302,7 +254,7 @@ export default function DashboardView({
           {feedbackCards.map((c) => (
             <Link
               key={c.label}
-              href="/admin-sessions"
+              href="/feedback-progress"
               className="bg-white rounded-2xl border border-slate-200 p-4 hover:bg-slate-50 transition"
             >
               <p className="text-xs text-slate-500 truncate">{c.label}</p>

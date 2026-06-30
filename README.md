@@ -1,82 +1,44 @@
-# v47 - CSV export + uniform From/To date filters
+# v48 - Unify Feedback Sessions filters + repoint Dashboard cards
 
-Two changes:
+Two fixes:
 
-1. **CSV export** on the Performance Thresholds page. Each result table
-   (Module Errors / Quality Scores) now has an "Export CSV" button that
-   downloads the currently visible rows + columns with the threshold
-   annotations included in the header.
-2. **Uniform date filtering.** Every page with a date filter is now a
-   plain `From` / `To` date-range pair. Pages that previously used
-   Month / Quarter / Year buttons (Dashboard, Quality Score, Feedback
-   Progress) have been converted. Performance Thresholds and Match
-   Total Per Module already used `from` / `to` and are unchanged.
+1. **`/admin-sessions` (Feedback Sessions) now has the same filter UI as
+   `/feedback-progress`.** Searchable Team + Collector Comboboxes, From/To
+   date inputs (default Jan 1 -> today), Status quick-buttons. Each row
+   now shows the collector's Name + Team next to the HR Code so the
+   table is self-explanatory.
+2. **Dashboard "Feedback sessions" cards now link to
+   `/feedback-progress`** instead of `/admin-sessions`.
+   `/feedback-progress` is the richer analysis view (cards + sessions
+   grouped, per-attendee comment editor); `/admin-sessions` is the flat
+   row-per-attendee table for quick status flips. Clicking a stat card
+   should land on the analysis view by default.
 
-No SQL. No env-var changes.
+## The two pages, explained
 
-## Files to push
+| Page | Purpose | When to use |
+| --- | --- | --- |
+| `/feedback-progress` | Session-grouped cards. Per-attendee attendance + comment editor. Summary cards at the top. | Mark attendance, leave comments, analyze a session. |
+| `/admin-sessions` | Flat one-row-per-attendee table. Inline 3-state status select (Scheduled / Completed / Cancelled). | Quick status flip across many attendees. |
 
-- `app/(app)/dashboard/page.tsx`
-- `app/(app)/quality-score/page.tsx`
+Both read the same source (`feedback_attendees` joined to
+`feedback_reservations`). Same filters now apply on both pages so users
+move between them without losing context.
+
+## Deploy
+
+Push these files (no SQL, no env-var change):
+
+- `app/(app)/admin-sessions/page.tsx`
+- `components/AdminSessionsView.tsx`
 - `components/DashboardView.tsx`
-- `components/QualityScoreDashboard.tsx`
-- `components/FeedbackProgress.tsx`
-- `components/PerformanceThresholdsView.tsx`
 
-## Per-page behavior
+## Verify
 
-### Dashboard (`/dashboard`)
-
-- Replaces the Month / Quarter / Year buttons with **From** + **To** inputs +
-  an **Apply** button. Default range = Jan 1 of the current year through
-  today.
-- The "previous period" used for the green/red trend arrows is now computed
-  as the **same-length window immediately before From**. Example: From
-  2026-04-01 to 2026-06-30 (91 days) compares against 2026-01-01 to
-  2026-03-31. The header shows `vs <prev range>` so it's explicit.
-
-### Quality Score (`/quality-score`)
-
-- Replaces Period + Year + Month / Quarter selectors with **From** + **To**
-  inputs + Apply. Team + Collector filters unchanged. Default range = Jan 1
-  to today.
-- `upload_month` rows are filtered to those that fall in the chosen window
-  (month boundaries inclusive).
-
-### Feedback Progress (`/feedback-progress`)
-
-- Replaces the Month / Quarter / Year buttons with **From** + **To** inputs.
-  Default range = Jan 1 to today. Team + Collector + Status filters kept.
-- Session list and summary cards both scope to the date range.
-
-### Performance Thresholds (`/performance-thresholds`)
-
-- Already had From / To from v46. v47 adds an **Export CSV** button next to
-  each table title.
-- The Module Errors CSV columns: `HR Code, Name, Team, <Module> (>= N)...`
-  with one column per selected module. Each row is one matched collector
-  and the raw error count for that module in the chosen window.
-- The Quality Scores CSV columns: `HR Code, Name, Team, <Module> (<= N%)...`
-  with the collector's average score (two decimal places) in the chosen
-  window per selected module. Missing data renders as an empty cell.
-- File names embed the date range, e.g.
-  `module-errors_2026-01-01_to_2026-06-30.csv`.
-- The button is disabled when no collectors match.
-- The CSV uses a UTF-8 BOM so Excel opens it with correct encoding without
-  any prompts.
-
-## Verify after deploy
-
-1. Open `/dashboard` - confirm From / To inputs are shown and changing them
-   refreshes the page. Trend arrows are computed vs the previous
-   same-length window (e.g. set From/To to one month, trend compares to the
-   prior month).
-2. Open `/quality-score` - confirm From / To inputs replace the old period
-   dropdowns. Team + Collector still work and combine with the range.
-3. Open `/feedback-progress` - confirm From / To inputs are present. Status,
-   Team and Collector filters all combine with the range.
-4. Open `/performance-thresholds`, set a Module Errors threshold (e.g.
-   Players >= 100), click **Export CSV** on the Module Errors table. The
-   file downloads, opens cleanly in Excel, and contains the same rows the
-   table shows.
-5. Repeat with Quality Scores filter enabled (e.g. Base <= 90%).
+- Open `/admin-sessions`. Filter bar matches `/feedback-progress`:
+  From/To + Status + Team (searchable) + Collector (searchable). Table
+  rows show HR Code, Name, Team, Date, Mode, Status, Link/Location,
+  Notes.
+- Open `/dashboard`. Click any "Feedback sessions" card (Total /
+  Completed / Incomplete / Cancelled / Absent). Lands on
+  `/feedback-progress` (not `/admin-sessions`).
