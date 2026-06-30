@@ -1,79 +1,82 @@
-# v46 - Performance Thresholds page
+# v47 - CSV export + uniform From/To date filters
 
-A new admin/reviewer view that filters collectors by per-module thresholds
-on either Module Errors, Quality Scores, or both, scoped to a date range.
+Two changes:
 
-No SQL.
+1. **CSV export** on the Performance Thresholds page. Each result table
+   (Module Errors / Quality Scores) now has an "Export CSV" button that
+   downloads the currently visible rows + columns with the threshold
+   annotations included in the header.
+2. **Uniform date filtering.** Every page with a date filter is now a
+   plain `From` / `To` date-range pair. Pages that previously used
+   Month / Quarter / Year buttons (Dashboard, Quality Score, Feedback
+   Progress) have been converted. Performance Thresholds and Match
+   Total Per Module already used `from` / `to` and are unchanged.
 
-## Deploy
+No SQL. No env-var changes.
 
-Copy these files into the repo at the same relative paths and push to `main`:
+## Files to push
 
-- `app/(app)/performance-thresholds/page.tsx` *(new)*
-- `components/PerformanceThresholdsView.tsx` *(new)*
-- `components/Sidebar.tsx` *(adds "Performance Thresholds" entry under Performance)*
+- `app/(app)/dashboard/page.tsx`
+- `app/(app)/quality-score/page.tsx`
+- `components/DashboardView.tsx`
+- `components/QualityScoreDashboard.tsx`
+- `components/FeedbackProgress.tsx`
+- `components/PerformanceThresholdsView.tsx`
 
-## How it works
+## Per-page behavior
 
-Sidebar -> **Performance -> Performance Thresholds** -> `/performance-thresholds`
-(visible to Admin / Uploader / Supervisor).
+### Dashboard (`/dashboard`)
 
-### Filters
+- Replaces the Month / Quarter / Year buttons with **From** + **To** inputs +
+  an **Apply** button. Default range = Jan 1 of the current year through
+  today.
+- The "previous period" used for the green/red trend arrows is now computed
+  as the **same-length window immediately before From**. Example: From
+  2026-04-01 to 2026-06-30 (91 days) compares against 2026-01-01 to
+  2026-03-31. The header shows `vs <prev range>` so it's explicit.
 
-1. **Date range** - From / To inputs at the top. Defaults to **Jan 1 of the
-   current year -> today**. Clicking *Apply date range* re-renders the page
-   server-side (the underlying SQL queries use this range).
-2. **Match logic** - dropdown: *Any selected criterion* (default) or *All
-   selected criteria*. Determines whether a collector must trip at least one
-   threshold or every threshold to appear in the result.
-3. **Module Errors filter** *(toggle checkbox)* - one row per module
-   (Players / Event / Formation-Tactical / Location / Impact / Extras /
-   Freeze Frame). Each row has its own checkbox plus a numeric input.
-   A criterion is "active" when both the master toggle is on, the module
-   row is checked, and a value is entered. The criterion fires when the
-   collector's error count in that module is **at or above** the threshold.
-4. **Quality Scores filter** *(toggle checkbox)* - one row per scored
-   module (Base / Players / Event / Formation-Tactical / Location / Impact
-   / Extras / Freeze Frame). Same checkbox + numeric input pattern (0-100,
-   step 0.1). The criterion fires when the collector's **average** quality
-   score across the date range is **at or below** the threshold.
+### Quality Score (`/quality-score`)
 
-### Result tables
+- Replaces Period + Year + Month / Quarter selectors with **From** + **To**
+  inputs + Apply. Team + Collector filters unchanged. Default range = Jan 1
+  to today.
+- `upload_month` rows are filtered to those that fall in the chosen window
+  (month boundaries inclusive).
 
-- The **Module Errors** table renders only when at least one Module Errors
-  criterion is active. Columns: HR Code, Name, Team, then one column per
-  selected module showing the collector's error count. Values that meet or
-  exceed the threshold are bolded red.
-- The **Quality Scores** table renders only when at least one Quality
-  Scores criterion is active. Columns: HR Code, Name, Team, then one column
-  per selected module showing the collector's average score. Values at or
-  below the threshold are bolded red.
-- If both filters are active, both tables render. If only one is active,
-  only that one renders. If none are active, the page shows
-  "Pick at least one module and enter a threshold to see results."
+### Feedback Progress (`/feedback-progress`)
 
-### Data sources
+- Replaces the Month / Quarter / Year buttons with **From** + **To** inputs.
+  Default range = Jan 1 to today. Team + Collector + Status filters kept.
+- Session list and summary cards both scope to the date range.
 
-- Module Errors comes from the existing `collector_module_totals(p_from, p_to)`
-  RPC (one row per collector with each module column as a sum across matches
-  in the date range).
-- Quality Scores comes from `public.quality_scores` (one row per collector
-  per module per `upload_month`) filtered to months that overlap the date
-  range, plus `public.freeze_frame_scores` for the synthetic Freeze Frame
-  card. Multiple monthly rows are averaged per (hr_code, module).
+### Performance Thresholds (`/performance-thresholds`)
+
+- Already had From / To from v46. v47 adds an **Export CSV** button next to
+  each table title.
+- The Module Errors CSV columns: `HR Code, Name, Team, <Module> (>= N)...`
+  with one column per selected module. Each row is one matched collector
+  and the raw error count for that module in the chosen window.
+- The Quality Scores CSV columns: `HR Code, Name, Team, <Module> (<= N%)...`
+  with the collector's average score (two decimal places) in the chosen
+  window per selected module. Missing data renders as an empty cell.
+- File names embed the date range, e.g.
+  `module-errors_2026-01-01_to_2026-06-30.csv`.
+- The button is disabled when no collectors match.
+- The CSV uses a UTF-8 BOM so Excel opens it with correct encoding without
+  any prompts.
 
 ## Verify after deploy
 
-- Open the page. Default date range is this year -> today; default filter is
-  Module Errors **on**, Quality Scores **off**.
-- Check the **Players** module box and enter e.g. `100`. The Module Errors
-  table renders with HR Code / Name / Team / Players. Anyone with >= 100
-  Players errors in the date range shows up.
-- Check additionally **Event** with `50`. Match logic = Any -> a collector
-  needs >= 100 Players OR >= 50 Event errors to appear. Switch to All ->
-  the collector must hit both.
-- Toggle Quality Scores on, check **Base** with `90`. Now both tables
-  render. The Quality Scores table lists each matched collector's Base
-  score in red if it's at or below 90%.
-- Set From and To to a different window and click *Apply date range*.
-  The underlying numbers refresh.
+1. Open `/dashboard` - confirm From / To inputs are shown and changing them
+   refreshes the page. Trend arrows are computed vs the previous
+   same-length window (e.g. set From/To to one month, trend compares to the
+   prior month).
+2. Open `/quality-score` - confirm From / To inputs replace the old period
+   dropdowns. Team + Collector still work and combine with the range.
+3. Open `/feedback-progress` - confirm From / To inputs are present. Status,
+   Team and Collector filters all combine with the range.
+4. Open `/performance-thresholds`, set a Module Errors threshold (e.g.
+   Players >= 100), click **Export CSV** on the Module Errors table. The
+   file downloads, opens cleanly in Excel, and contains the same rows the
+   table shows.
+5. Repeat with Quality Scores filter enabled (e.g. Base <= 90%).

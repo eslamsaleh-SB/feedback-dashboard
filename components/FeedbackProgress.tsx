@@ -6,7 +6,6 @@ import Combobox from "@/components/Combobox";
 
 type Attendance = "Attended" | "Attended Late" | "Absent" | "Cancelled";
 const STATUSES: Attendance[] = ["Attended", "Attended Late", "Absent", "Cancelled"];
-type Period = "month" | "quarter" | "year";
 
 export type Attendee = {
   id: string;
@@ -43,39 +42,18 @@ function isoDate(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function periodRange(period: Period, now: Date = new Date()) {
-  if (period === "month") {
-    const y = now.getFullYear(), m = now.getMonth();
-    return {
-      from: isoDate(new Date(y, m, 1)),
-      to: isoDate(new Date(y, m + 1, 0)),
-      label: now.toLocaleString("default", { month: "long", year: "numeric" }),
-    };
-  }
-  if (period === "quarter") {
-    const y = now.getFullYear();
-    const q = Math.floor(now.getMonth() / 3);
-    return {
-      from: isoDate(new Date(y, q * 3, 1)),
-      to: isoDate(new Date(y, q * 3 + 3, 0)),
-      label: `Q${q + 1} ${y}`,
-    };
-  }
-  const y = now.getFullYear();
-  return {
-    from: isoDate(new Date(y, 0, 1)),
-    to: isoDate(new Date(y, 11, 31)),
-    label: String(y),
-  };
-}
-
 export default function FeedbackProgress({ initial }: { initial: Session[] }) {
   const supabase = createClient();
   const [sessions, setSessions] = useState<Session[]>(initial);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [collectorFilter, setCollectorFilter] = useState<string>("all");
-  const [period, setPeriod] = useState<Period>("year");
+
+  // Default range: Jan 1 of the current year through today.
+  const now = new Date();
+  const [fromDate, setFromDate] = useState<string>(`${now.getFullYear()}-01-01`);
+  const [toDate, setToDate] = useState<string>(isoDate(now));
+
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -107,7 +85,6 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     setTimeout(() => setSavedId((s) => (s === a.id ? null : s)), 1500);
   }
 
-  // Build team + collector option lists from the data.
   const teamOptions = useMemo(() => {
     const set = new Set<string>();
     for (const s of sessions) for (const a of s.attendees) if (a.team) set.add(a.team);
@@ -126,16 +103,8 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     }
     return Array.from(map.values())
       .filter((c) => teamFilter === "all" || c.team === teamFilter)
-      .sort((a, b) =>
-        (a.name ?? a.hr_code).localeCompare(b.name ?? b.hr_code)
-      );
+      .sort((a, b) => (a.name ?? a.hr_code).localeCompare(b.name ?? b.hr_code));
   }, [sessions, teamFilter]);
-
-  // Filter sessions by period + team + collector + status.
-  const { from, to, label: periodLabel } = useMemo(
-    () => periodRange(period),
-    [period]
-  );
 
   const visible = useMemo(() => {
     return sessions
@@ -152,12 +121,12 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
       })
       .filter((s) => {
         if (!s.session_date) return false;
-        if (s.session_date < from || s.session_date > to) return false;
+        if (fromDate && s.session_date < fromDate) return false;
+        if (toDate && s.session_date > toDate) return false;
         return s.attendees.length > 0;
       });
-  }, [sessions, statusFilter, teamFilter, collectorFilter, from, to]);
+  }, [sessions, statusFilter, teamFilter, collectorFilter, fromDate, toDate]);
 
-  // Summary stats: same period + filter scope as the list below.
   const stats = useMemo(() => {
     let total = 0, attended = 0, late = 0, absent = 0, cancelled = 0, notMarked = 0;
     for (const s of visible) {
@@ -190,34 +159,18 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
 
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
 
-  const periodBtn = (p: Period) =>
-    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-      period === p
-        ? "bg-slate-900 text-white"
-        : "border border-slate-300 text-slate-600 hover:bg-slate-50"
-    }`;
-
   const anyFilter =
     statusFilter ||
     teamFilter !== "all" ||
     collectorFilter !== "all" ||
-    period !== "year";
+    fromDate !== `${now.getFullYear()}-01-01` ||
+    toDate !== isoDate(now);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Feedback Progress</h1>
-          <p className="text-slate-500">
-            Track attendance for every scheduled feedback session.
-          </p>
-        </div>
-        <div className="flex items-end gap-2">
-          <span className="text-xs text-slate-500 mr-1 self-center">{periodLabel}</span>
-          <button onClick={() => setPeriod("month")} className={periodBtn("month")}>Month</button>
-          <button onClick={() => setPeriod("quarter")} className={periodBtn("quarter")}>Quarter</button>
-          <button onClick={() => setPeriod("year")} className={periodBtn("year")}>Year</button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold">Feedback Progress</h1>
+        <p className="text-slate-500">Track attendance for every scheduled feedback session.</p>
       </div>
 
       {/* Summary cards */}
@@ -232,6 +185,25 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
 
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">From</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">To</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className={inputCls}
+          />
+        </div>
+
         <div>
           <label className="block text-xs text-slate-500 mb-1">Status</label>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputCls}>
@@ -266,8 +238,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
             options={[
               {
                 value: "all",
-                label:
-                  teamFilter !== "all" ? `All on ${teamFilter}` : "All collectors",
+                label: teamFilter !== "all" ? `All on ${teamFilter}` : "All collectors",
               },
               ...collectorOptions.map((c) => ({
                 value: c.hr_code,
@@ -289,7 +260,8 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                 setStatusFilter("");
                 setTeamFilter("all");
                 setCollectorFilter("all");
-                setPeriod("year");
+                setFromDate(`${now.getFullYear()}-01-01`);
+                setToDate(isoDate(now));
               }}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
             >
@@ -301,7 +273,9 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
 
-      <div className="text-sm text-slate-500">{visible.length} session(s) in {periodLabel}</div>
+      <div className="text-sm text-slate-500">
+        {visible.length} session(s) between {fromDate} and {toDate}
+      </div>
 
       {visible.length === 0 ? (
         <p className="text-slate-500">No sessions match these filters.</p>

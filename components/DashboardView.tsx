@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-
-type Period = "month" | "quarter" | "year";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 const MODULE_KEYS = [
   "players",
@@ -40,13 +39,14 @@ function trendInfo(curr: number | null, prev: number | null, opts: { lowerIsBett
   const isFlat = Math.abs(pct) < 0.5;
   const good = isFlat ? null : lowerIsBetter ? !isUp : isUp;
   const color = good === null ? "text-slate-400" : good ? "text-emerald-600" : "text-red-500";
-  const arrow = isFlat ? "→" : isUp ? "↑" : "↓";
+  const arrow = isFlat ? "↑" : isUp ? "↑" : "↓";
   const text = `${arrow} ${Math.abs(pct).toFixed(1)}%`;
   return { text, color };
 }
 
 export default function DashboardView({
-  period,
+  from,
+  to,
   curLabel,
   prevLabel,
   submittedReports,
@@ -62,7 +62,8 @@ export default function DashboardView({
   freezeFrameQualityCur,
   freezeFrameQualityPrev,
 }: {
-  period: Period;
+  from: string;
+  to: string;
   curLabel: string;
   prevLabel: string;
   submittedReports: number;
@@ -85,7 +86,9 @@ export default function DashboardView({
   freezeFrameQualityPrev: number | null;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [fromInput, setFromInput] = useState(from);
+  const [toInput, setToInput] = useState(to);
+
   const dateStr = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
     year: "numeric",
@@ -93,20 +96,14 @@ export default function DashboardView({
     day: "numeric",
   });
 
-  function setPeriod(p: Period) {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    if (p === "year") params.delete("period");
-    else params.set("period", p);
-    const qs = params.toString();
-    router.push(`/dashboard${qs ? `?${qs}` : ""}`);
+  function applyRange() {
+    const params = new URLSearchParams();
+    params.set("from", fromInput);
+    params.set("to", toInput);
+    router.push(`/dashboard?${params.toString()}`);
   }
 
-  const periodBtn = (p: Period) =>
-    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-      period === p
-        ? "bg-slate-900 text-white"
-        : "border border-slate-300 text-slate-600 hover:bg-slate-50"
-    }`;
+  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
 
   const topCards = [
     {
@@ -146,14 +143,8 @@ export default function DashboardView({
     },
   ];
 
-  // Module-error cards: 7 + a Total
   const moduleErrorCards = [
-    {
-      key: "total",
-      label: "Total errors",
-      curr: moduleErrorsCur,
-      prev: moduleErrorsPrev,
-    },
+    { key: "total", label: "Total errors", curr: moduleErrorsCur, prev: moduleErrorsPrev },
     ...MODULE_KEYS.map((m) => ({
       key: m,
       label: MODULE_LABEL[m],
@@ -162,7 +153,6 @@ export default function DashboardView({
     })),
   ];
 
-  // Quality cards: one per module that has data, plus freeze-frame as its own card
   const qualityModuleKeys = Array.from(
     new Set([
       ...Object.keys(qualityCurByModule),
@@ -192,20 +182,34 @@ export default function DashboardView({
           <p className="text-slate-500 text-sm mt-1">{dateStr}</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <span className="text-xs text-slate-500 mr-1 self-center">
-            {curLabel}{" "}
-            <span className="text-slate-300">vs</span>{" "}
-            {prevLabel}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">From</label>
+            <input
+              type="date"
+              value={fromInput}
+              onChange={(e) => setFromInput(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">To</label>
+            <input
+              type="date"
+              value={toInput}
+              onChange={(e) => setToInput(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={applyRange}
+            className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-slate-800"
+          >
+            Apply
+          </button>
+          <span className="text-xs text-slate-500 self-center">
+            vs {prevLabel}
           </span>
-          <button onClick={() => setPeriod("month")} className={periodBtn("month")}>
-            Month
-          </button>
-          <button onClick={() => setPeriod("quarter")} className={periodBtn("quarter")}>
-            Quarter
-          </button>
-          <button onClick={() => setPeriod("year")} className={periodBtn("year")}>
-            Year
-          </button>
         </div>
       </div>
 
@@ -226,7 +230,7 @@ export default function DashboardView({
         ))}
       </div>
 
-      {/* Module errors per module (7 modules + total) */}
+      {/* Module errors per module */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
           Module errors ({curLabel})
@@ -234,10 +238,7 @@ export default function DashboardView({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {moduleErrorCards.map((c) => {
             const t = trendInfo(c.curr, c.prev, { lowerIsBetter: true });
-            const href =
-              c.key === "total"
-                ? "/match-totals"
-                : `/match-totals?module=${c.key}`;
+            const href = c.key === "total" ? "/match-totals" : `/match-totals?module=${c.key}`;
             return (
               <Link
                 key={c.key}
@@ -246,15 +247,13 @@ export default function DashboardView({
               >
                 <p className="text-xs text-slate-500 truncate">{c.label}</p>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <p className="text-2xl font-bold text-slate-800">
-                    {Number(c.curr).toLocaleString()}
-                  </p>
+                  <p className="text-2xl font-bold text-slate-800">{Number(c.curr).toLocaleString()}</p>
                   {t.text && (
                     <span className={`text-xs font-semibold ${t.color}`}>{t.text}</span>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  {prevLabel}: {Number(c.prev).toLocaleString()}
+                  Previous: {Number(c.prev).toLocaleString()}
                 </p>
               </Link>
             );
@@ -286,8 +285,7 @@ export default function DashboardView({
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  {prevLabel}:{" "}
-                  {c.prev == null ? "no data" : `${c.prev.toFixed(1)}%`}
+                  Previous: {c.prev == null ? "no data" : `${c.prev.toFixed(1)}%`}
                 </p>
               </Link>
             );

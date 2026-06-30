@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AppRole } from "@/components/Sidebar";
 import Combobox from "@/components/Combobox";
@@ -19,12 +19,6 @@ type FfScore = {
   match_count: number | null;
   upload_month: string;
 };
-type Period = "month" | "quarter" | "year";
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 function fmtMonth(iso: string) {
   const [y, m] = iso.split("-");
@@ -63,9 +57,7 @@ function LineChart({
       {data.map((d, i) => (
         <g key={i}>
           <circle cx={xScale(i)} cy={yScale(d.value)} r={3} fill={color} />
-          <title>
-            {d.label}: {d.value.toFixed(2)}%
-          </title>
+          <title>{d.label}: {d.value.toFixed(2)}%</title>
         </g>
       ))}
       {data.map((d, i) => (
@@ -87,13 +79,10 @@ export default function QualityScoreDashboard({
   myHr,
   collectors,
   teams,
-  period,
-  year,
-  month,
-  quarter,
+  from,
+  to,
   moduleScores,
   freezeFrameScores,
-  allMonths,
   selectedCollector,
   selectedTeam,
 }: {
@@ -101,50 +90,31 @@ export default function QualityScoreDashboard({
   myHr: string | null;
   collectors: CollectorOpt[];
   teams: string[];
-  period: Period;
-  year: number;
-  month: number;
-  quarter: number;
+  from: string;
+  to: string;
   moduleScores: ModuleScore[];
   freezeFrameScores: FfScore[];
-  allMonths: string[];
   selectedCollector: string;
   selectedTeam: string;
 }) {
   const router = useRouter();
   const isViewer = role === "Viewer";
 
-  function applyFilters(next: Partial<{
-    period: Period;
-    year: number;
-    month: number;
-    quarter: number;
-    collector: string;
-    team: string;
-  }>) {
-    const p = next.period ?? period;
-    const y = next.year ?? year;
-    const m = next.month ?? month;
-    const q = next.quarter ?? quarter;
-    const c = next.collector ?? selectedCollector;
-    const t = next.team ?? selectedTeam;
-    const params = new URLSearchParams();
-    if (p !== "year") params.set("period", p);
-    params.set("year", String(y));
-    if (p === "month") params.set("month", String(m));
-    if (p === "quarter") params.set("quarter", String(q));
-    if (c && c !== "all") params.set("collector", c);
-    if (t && t !== "all") params.set("team", t);
-    const qs = params.toString();
-    router.push(`/quality-score${qs ? `?${qs}` : ""}`);
-  }
+  const [fromInput, setFromInput] = useState(from);
+  const [toInput, setToInput] = useState(to);
 
-  const yearOptions = useMemo(() => {
-    const now = new Date().getFullYear();
-    const list: number[] = [];
-    for (let i = now + 1; i >= now - 4; i--) list.push(i);
-    return list;
-  }, []);
+  function applyFilters(next: { from?: string; to?: string; collector?: string; team?: string }) {
+    const f = next.from ?? fromInput;
+    const t = next.to ?? toInput;
+    const c = next.collector ?? selectedCollector;
+    const tm = next.team ?? selectedTeam;
+    const params = new URLSearchParams();
+    params.set("from", f);
+    params.set("to", t);
+    if (c && c !== "all") params.set("collector", c);
+    if (tm && tm !== "all") params.set("team", tm);
+    router.push(`/quality-score?${params.toString()}`);
+  }
 
   const moduleCharts = useMemo(() => {
     const map: Record<string, { label: string; value: number }[]> = {};
@@ -205,58 +175,31 @@ export default function QualityScoreDashboard({
 
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
-        <div className="w-40">
-          <label className="block text-xs text-slate-500 mb-1">Period</label>
-          <select
-            value={period}
-            onChange={(e) => applyFilters({ period: e.target.value as Period })}
-            className={`${inputCls} w-full`}
-          >
-            <option value="month">Month</option>
-            <option value="quarter">Quarter</option>
-            <option value="year">Year</option>
-          </select>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">From</label>
+          <input
+            type="date"
+            value={fromInput}
+            onChange={(e) => setFromInput(e.target.value)}
+            className={inputCls}
+          />
         </div>
-        <div className="w-28">
-          <label className="block text-xs text-slate-500 mb-1">Year</label>
-          <select
-            value={year}
-            onChange={(e) => applyFilters({ year: Number(e.target.value) })}
-            className={`${inputCls} w-full`}
-          >
-            {yearOptions.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">To</label>
+          <input
+            type="date"
+            value={toInput}
+            onChange={(e) => setToInput(e.target.value)}
+            className={inputCls}
+          />
         </div>
-        {period === "month" && (
-          <div className="w-40">
-            <label className="block text-xs text-slate-500 mb-1">Month</label>
-            <select
-              value={month}
-              onChange={(e) => applyFilters({ month: Number(e.target.value) })}
-              className={`${inputCls} w-full`}
-            >
-              {MONTH_NAMES.map((name, idx) => (
-                <option key={name} value={idx + 1}>{name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        {period === "quarter" && (
-          <div className="w-32">
-            <label className="block text-xs text-slate-500 mb-1">Quarter</label>
-            <select
-              value={quarter}
-              onChange={(e) => applyFilters({ quarter: Number(e.target.value) })}
-              className={`${inputCls} w-full`}
-            >
-              {[1, 2, 3, 4].map((q) => (
-                <option key={q} value={q}>Q{q}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => applyFilters({})}
+          className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-slate-800"
+        >
+          Apply
+        </button>
 
         {!isViewer && (
           <div className="w-44">
@@ -282,9 +225,7 @@ export default function QualityScoreDashboard({
                 {
                   value: "all",
                   label:
-                    selectedTeam !== "all"
-                      ? `All on ${selectedTeam}`
-                      : "All collectors",
+                    selectedTeam !== "all" ? `All on ${selectedTeam}` : "All collectors",
                 },
                 ...collectorOptions.map((c) => ({
                   value: c.hr_code,
@@ -299,7 +240,7 @@ export default function QualityScoreDashboard({
           </div>
         )}
 
-        {(selectedCollector !== "all" || selectedTeam !== "all" || period !== "year") && (
+        {(selectedCollector !== "all" || selectedTeam !== "all") && (
           <button
             type="button"
             onClick={() => router.push("/quality-score")}
@@ -313,7 +254,7 @@ export default function QualityScoreDashboard({
       {summaryScores && (
         <div>
           <h2 className="text-sm font-semibold text-slate-500 mb-3">
-            Average for the selected period
+            Average for {from} to {to}
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {summaryScores.modSummary.map(({ module, avg }) => (

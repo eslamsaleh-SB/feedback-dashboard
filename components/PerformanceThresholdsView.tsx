@@ -190,6 +190,64 @@ export default function PerformanceThresholdsView({
   const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
   const cardCls = "bg-white rounded-2xl border border-slate-200 p-4";
 
+  function csvCell(value: string | number | null | undefined): string {
+    const s = value == null ? "" : String(value);
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  }
+  function downloadCsv(filename: string, rows: string[][]) {
+    const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+    const bom = "﻿";
+    const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function exportErrorsCsv() {
+    const header = [
+      "HR Code",
+      "Name",
+      "Team",
+      ...errorColumns.map((k) => `${MODULE_LABEL[k]} (>= ${errThresh[k] || 0})`),
+    ];
+    const rows = matchedCollectors.map((c) => {
+      const row = moduleErrorsByHr.get(c.hr_code);
+      return [
+        c.hr_code,
+        c.name,
+        c.team ?? "",
+        ...errorColumns.map((k) => String(row ? Number(row[k] ?? 0) : 0)),
+      ];
+    });
+    downloadCsv(`module-errors_${from}_to_${to}.csv`, [header, ...rows]);
+  }
+  function exportScoresCsv() {
+    const header = [
+      "HR Code",
+      "Name",
+      "Team",
+      ...scoreColumns.map((k) => `${SCORE_LABEL[k]} (<= ${scoreThresh[k] || 0}%)`),
+    ];
+    const rows = matchedCollectors.map((c) => {
+      const scores = avgScoreByHrAndKey[c.hr_code] ?? {};
+      return [
+        c.hr_code,
+        c.name,
+        c.team ?? "",
+        ...scoreColumns.map((k) => {
+          const value = scores[k];
+          return value == null ? "" : value.toFixed(2);
+        }),
+      ];
+    });
+    downloadCsv(`quality-scores_${from}_to_${to}.csv`, [header, ...rows]);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -242,7 +300,6 @@ export default function PerformanceThresholdsView({
 
       {/* Criteria toggles */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Module errors */}
         <div className={cardCls}>
           <label className="flex items-center gap-2 mb-3 cursor-pointer">
             <input
@@ -291,7 +348,6 @@ export default function PerformanceThresholdsView({
           </div>
         </div>
 
-        {/* Quality scores */}
         <div className={cardCls}>
           <label className="flex items-center gap-2 mb-3 cursor-pointer">
             <input
@@ -344,7 +400,6 @@ export default function PerformanceThresholdsView({
         </div>
       </div>
 
-      {/* Result summary */}
       {activeErrCriteria.length === 0 && activeScoreCriteria.length === 0 ? (
         <p className="text-slate-500 text-sm">
           Pick at least one module and enter a threshold to see results.
@@ -355,13 +410,20 @@ export default function PerformanceThresholdsView({
         </p>
       )}
 
-      {/* Module Errors table */}
       {errorColumns.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
-          <div className="px-5 py-3 border-b border-slate-100">
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-slate-700">
               Module Errors ({errorColumns.length} module{errorColumns.length === 1 ? "" : "s"})
             </h2>
+            <button
+              type="button"
+              onClick={exportErrorsCsv}
+              disabled={matchedCollectors.length === 0}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Export CSV
+            </button>
           </div>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
@@ -415,13 +477,20 @@ export default function PerformanceThresholdsView({
         </div>
       )}
 
-      {/* Quality Scores table */}
       {scoreColumns.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
-          <div className="px-5 py-3 border-b border-slate-100">
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-slate-700">
               Quality Scores ({scoreColumns.length} module{scoreColumns.length === 1 ? "" : "s"})
             </h2>
+            <button
+              type="button"
+              onClick={exportScoresCsv}
+              disabled={matchedCollectors.length === 0}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Export CSV
+            </button>
           </div>
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">

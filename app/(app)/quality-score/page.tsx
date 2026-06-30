@@ -5,39 +5,25 @@ import type { AppRole } from "@/components/Sidebar";
 
 export const dynamic = "force-dynamic";
 
-type Period = "month" | "quarter" | "year";
+const isoOk = (s?: string) =>
+  s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
 }
-
-function rangeForFilter(
-  period: Period,
-  year: number,
-  month: number,
-  quarter: number
-): { from: string; to: string } {
-  if (period === "year") {
-    return { from: `${year}-01-01`, to: `${year}-12-01` };
-  }
-  if (period === "quarter") {
-    const startMonth = (quarter - 1) * 3 + 1;
-    return {
-      from: `${year}-${pad(startMonth)}-01`,
-      to: `${year}-${pad(startMonth + 2)}-01`,
-    };
-  }
-  return { from: `${year}-${pad(month)}-01`, to: `${year}-${pad(month)}-01` };
+function todayIso(d = new Date()) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function yearStartIso(d = new Date()) {
+  return `${d.getFullYear()}-01-01`;
 }
 
 export default async function QualityScorePage({
   searchParams,
 }: {
   searchParams: {
-    period?: string;
-    year?: string;
-    month?: string;
-    quarter?: string;
+    from?: string;
+    to?: string;
     collector?: string;
     team?: string;
   };
@@ -50,23 +36,13 @@ export default async function QualityScorePage({
   const role = (profile?.role ?? "Viewer") as AppRole;
   const myHr = profile?.hr_code ?? null;
 
-  // Period defaults to year so the page surfaces every uploaded month unless
-  // the admin narrows it.
-  const now = new Date();
-  const period: Period =
-    searchParams.period === "month"
-      ? "month"
-      : searchParams.period === "quarter"
-      ? "quarter"
-      : "year";
-  const year = Number(searchParams.year) || now.getFullYear();
-  const month = Math.min(12, Math.max(1, Number(searchParams.month) || now.getMonth() + 1));
-  const quarter = Math.min(
-    4,
-    Math.max(1, Number(searchParams.quarter) || Math.floor(now.getMonth() / 3) + 1)
-  );
+  // Default = this year so far.
+  const from = isoOk(searchParams.from) ?? yearStartIso();
+  const to = isoOk(searchParams.to) ?? todayIso();
 
-  const { from, to } = rangeForFilter(period, year, month, quarter);
+  // upload_month is the first of each month; clamp range to month boundaries.
+  const monthFrom = `${from.slice(0, 7)}-01`;
+  const monthTo = `${to.slice(0, 7)}-01`;
 
   const teamParam = searchParams.team && searchParams.team !== "all" ? searchParams.team : null;
 
@@ -102,8 +78,8 @@ export default async function QualityScorePage({
   let qsQuery = supabase
     .from("quality_scores")
     .select("hr_code, module, score, match_count, upload_month")
-    .gte("upload_month", from)
-    .lte("upload_month", to)
+    .gte("upload_month", monthFrom)
+    .lte("upload_month", monthTo)
     .order("upload_month", { ascending: true });
   if (effectiveCollector) qsQuery = qsQuery.eq("hr_code", effectiveCollector);
   else if (teamHrCodes && teamHrCodes.length > 0)
@@ -113,28 +89,13 @@ export default async function QualityScorePage({
   let ffQuery = supabase
     .from("freeze_frame_scores")
     .select("hr_code, score, match_count, upload_month")
-    .gte("upload_month", from)
-    .lte("upload_month", to)
+    .gte("upload_month", monthFrom)
+    .lte("upload_month", monthTo)
     .order("upload_month", { ascending: true });
   if (effectiveCollector) ffQuery = ffQuery.eq("hr_code", effectiveCollector);
   else if (teamHrCodes && teamHrCodes.length > 0)
     ffQuery = ffQuery.in("hr_code", teamHrCodes);
   const { data: ffRows } = await ffQuery;
-
-  const { data: qsMonths } = await supabase
-    .from("quality_scores")
-    .select("upload_month")
-    .order("upload_month", { ascending: false });
-  const { data: ffMonths } = await supabase
-    .from("freeze_frame_scores")
-    .select("upload_month")
-    .order("upload_month", { ascending: false });
-  const allMonths = Array.from(
-    new Set([
-      ...(qsMonths ?? []).map((r: any) => r.upload_month as string),
-      ...(ffMonths ?? []).map((r: any) => r.upload_month as string),
-    ])
-  ).sort((a, b) => b.localeCompare(a));
 
   return (
     <QualityScoreDashboard
@@ -146,10 +107,8 @@ export default async function QualityScorePage({
         team: c.team as string | null,
       }))}
       teams={teams}
-      period={period}
-      year={year}
-      month={month}
-      quarter={quarter}
+      from={from}
+      to={to}
       moduleScores={(qsRows ?? []).map((r: any) => ({
         hr_code: r.hr_code as string,
         module: r.module as string,
@@ -163,7 +122,6 @@ export default async function QualityScorePage({
         match_count: r.match_count as number | null,
         upload_month: r.upload_month as string,
       }))}
-      allMonths={allMonths}
       selectedCollector={effectiveCollector ?? "all"}
       selectedTeam={teamParam ?? "all"}
     />
