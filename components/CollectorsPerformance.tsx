@@ -142,7 +142,7 @@ export default function CollectorsPerformance({
     ...MODULES.map((m) => ({ value: m.value, label: m.label })),
   ];
 
-  const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const inputCls = "w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
   const activeModuleLabel = moduleFilter
     ? MODULES.find((m) => m.value === moduleFilter)?.label
     : null;
@@ -162,59 +162,59 @@ export default function CollectorsPerformance({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Collectors Performance</h1>
-        <p className="text-slate-500">
+        <p className="text-slate-500 dark:text-slate-400">
           Ranked by highest errors{" "}
           {activeModuleLabel ? `in ${activeModuleLabel}` : "across all modules"}
         </p>
       </div>
 
       {/* Filters (at the top) */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-4">
         <div>
-          <p className="text-xs font-medium text-slate-500 mb-2">Review date</p>
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Review date</p>
           <div className="flex flex-wrap gap-3">
             <div className="w-44">
-              <label className="block text-xs text-slate-500 mb-1">Month</label>
+              <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Month</label>
               <input type="month" value={monthValue} onChange={(e) => onMonth(e.target.value)} className={inputCls} />
             </div>
             <div className="w-44">
-              <label className="block text-xs text-slate-500 mb-1">Week (Sun–Sat)</label>
+              <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Week (Sun–Sat)</label>
               <input type="date" value={weekValue} onChange={(e) => onWeek(e.target.value)} className={inputCls} />
             </div>
             <div className="w-40">
-              <label className="block text-xs text-slate-500 mb-1">From</label>
+              <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
               <input type="date" value={from} max={to || undefined} onChange={(e) => applyDates({ from: e.target.value })} className={inputCls} />
             </div>
             <div className="w-40">
-              <label className="block text-xs text-slate-500 mb-1">To</label>
+              <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
               <input type="date" value={to} min={from || undefined} onChange={(e) => applyDates({ to: e.target.value })} className={inputCls} />
             </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
           <div className="w-64">
-            <label className="block text-xs text-slate-500 mb-1">Collector</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
             <Combobox options={collectorOptions} value={collectorFilter} onChange={setCollectorFilter} placeholder="All collectors" />
           </div>
           <div className="w-44">
-            <label className="block text-xs text-slate-500 mb-1">Team</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
             <Combobox options={teamOptions} value={teamFilter} onChange={setTeamFilter} placeholder="All teams" />
           </div>
           <div className="w-44">
-            <label className="block text-xs text-slate-500 mb-1">Title</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Title</label>
             <Combobox options={titleOptions} value={titleFilter} onChange={setTitleFilter} placeholder="All titles" />
           </div>
           <div className="w-44">
-            <label className="block text-xs text-slate-500 mb-1">Module</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Module</label>
             <Combobox options={moduleOptions} value={moduleFilter} onChange={(v) => setModuleFilter(v as "" | ModuleValue)} placeholder="All modules" />
           </div>
           <div className="w-28">
-            <label className="block text-xs text-slate-500 mb-1">Top N</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Top N</label>
             <input type="number" min={1} value={topN} onChange={(e) => setTopN(e.target.value)} placeholder="All" className={inputCls} />
           </div>
           {anyFilter && (
             <div className="flex items-end">
-              <button type="button" onClick={clearAll} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+              <button type="button" onClick={clearAll} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
                 Clear all
               </button>
             </div>
@@ -230,23 +230,23 @@ export default function CollectorsPerformance({
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 text-sm text-slate-500">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400">
           Sorted by{" "}
-          <span className="font-medium text-slate-700">{activeModuleLabel ?? "Total"}</span>{" "}
+          <span className="font-medium text-slate-700 dark:text-slate-200">{activeModuleLabel ?? "Total"}</span>{" "}
           (highest first). {!moduleFilter && "Click a module header to show only that module."}
         </div>
         {filtered.length === 0 ? (
-          <p className="text-slate-500 p-5">No collectors for this filter.</p>
+          <p className="text-slate-500 dark:text-slate-400 p-5">No collectors for this filter.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr>
-                  <th className="text-left font-medium text-slate-500 px-4 py-3">#</th>
-                  <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Collector</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">#</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Collector</th>
                   {moduleFilter ? (
-                    <th className="text-right font-semibold text-slate-900 px-4 py-3 whitespace-nowrap">
+                    <th className="text-right font-semibold text-slate-900 dark:text-slate-100 px-4 py-3 whitespace-nowrap">
                       {activeModuleLabel}
                     </th>
                   ) : (
@@ -255,25 +255,25 @@ export default function CollectorsPerformance({
                         <th
                           key={m.value}
                           onClick={() => setModuleFilter(m.value)}
-                          className="text-right font-medium text-slate-500 px-3 py-3 whitespace-nowrap cursor-pointer hover:text-slate-900"
+                          className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-3 whitespace-nowrap cursor-pointer hover:text-slate-900"
                           title={`Show only ${m.label}`}
                         >
                           {m.label}
                         </th>
                       ))}
-                      <th className="text-right font-semibold text-slate-600 px-4 py-3">Total ↓</th>
+                      <th className="text-right font-semibold text-slate-600 dark:text-slate-300 px-4 py-3">Total ↓</th>
                     </>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((c, i) => (
-                  <tr key={c.hr_code} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-2.5 text-slate-400 tabular-nums">{i + 1}</td>
+                  <tr key={c.hr_code} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <td className="px-4 py-2.5 text-slate-400 dark:text-slate-500 tabular-nums">{i + 1}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="font-medium text-slate-800">{c.hr_code ?? "—"}</span>
-                      {c.name && c.name !== c.hr_code && <span className="text-slate-500"> - {first3(c.name)}</span>}
-                      {c.team && <span className="text-slate-500"> - {c.team}</span>}
+                      <span className="font-medium text-slate-800 dark:text-slate-100">{c.hr_code ?? "—"}</span>
+                      {c.name && c.name !== c.hr_code && <span className="text-slate-500 dark:text-slate-400"> - {first3(c.name)}</span>}
+                      {c.team && <span className="text-slate-500 dark:text-slate-400"> - {c.team}</span>}
                     </td>
                     {moduleFilter ? (
                       <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
@@ -282,7 +282,7 @@ export default function CollectorsPerformance({
                     ) : (
                       <>
                         {MODULES.map((m) => (
-                          <td key={m.value} className="px-3 py-2.5 text-right tabular-nums text-slate-600">
+                          <td key={m.value} className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">
                             {c.counts[m.value]}
                           </td>
                         ))}
@@ -302,10 +302,10 @@ export default function CollectorsPerformance({
 
 function StatCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5">
-      <p className="text-sm text-slate-500">{label}</p>
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+      <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
       <p className="text-3xl font-bold mt-1 tabular-nums">{value}</p>
-      {hint && <p className="text-xs text-slate-400 mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{hint}</p>}
     </div>
   );
 }

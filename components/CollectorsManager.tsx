@@ -147,7 +147,7 @@ export default function CollectorsManager({
     setItems((p) => p.filter((x) => x.id !== c.id));
   }
 
-  const inputCls = "rounded-lg border border-slate-300 px-2 py-1 text-sm bg-white";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-slate-900";
 
   return (
     <div className="space-y-6">
@@ -159,7 +159,7 @@ export default function CollectorsManager({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="New collector name"
-            className="rounded-lg border border-slate-300 px-3 py-2"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2"
           />
           <button
             disabled={busy}
@@ -170,7 +170,7 @@ export default function CollectorsManager({
         </form>
 
         <div className="w-52">
-          <label className="block text-xs text-slate-500 mb-1">Filter by team</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Filter by team</label>
           <Combobox
             options={teamComboOptions}
             value={teamFilter}
@@ -179,7 +179,7 @@ export default function CollectorsManager({
           />
         </div>
         <div className="w-60">
-          <label className="block text-xs text-slate-500 mb-1">Filter by code</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Filter by code</label>
           <Combobox
             options={codeComboOptions}
             value={codeFilter}
@@ -188,12 +188,12 @@ export default function CollectorsManager({
           />
         </div>
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs text-slate-500 mb-1">Search</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Search</label>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Code / name / team..."
-            className="rounded-lg border border-slate-300 px-3 py-2 w-full"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full"
           />
         </div>
         {(teamFilter || codeFilter || search) && (
@@ -204,30 +204,30 @@ export default function CollectorsManager({
               setCodeFilter("");
               setSearch("");
             }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             Clear
           </button>
         )}
-        <span className="text-sm text-slate-500 pb-2">{filtered.length} collector(s)</span>
+        <span className="text-sm text-slate-500 dark:text-slate-400 pb-2">{filtered.length} collector(s)</span>
       </div>
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-slate-50 dark:bg-slate-800">
             <tr>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Code</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Name</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Team</th>
-              <th className="text-right font-medium text-slate-500 px-4 py-3">Actions</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Code</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Name</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Team</th>
+              <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="p-4 text-slate-500">
+                <td colSpan={4} className="p-4 text-slate-500 dark:text-slate-400">
                   No collectors.
                 </td>
               </tr>
@@ -235,7 +235,7 @@ export default function CollectorsManager({
             {filtered.map((c) => {
               const editing = editingId === c.id;
               return (
-                <tr key={c.id} className="border-t border-slate-100">
+                <tr key={c.id} className="border-t border-slate-100 dark:border-slate-800">
                   <td className="px-4 py-2.5 whitespace-nowrap">
                     {editing ? (
                       <input
@@ -245,7 +245,7 @@ export default function CollectorsManager({
                         className={`${inputCls} w-28`}
                       />
                     ) : (
-                      <span className="font-medium text-slate-800">{c.hr_code ?? "-"}</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-100">{c.hr_code ?? "-"}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -259,7 +259,7 @@ export default function CollectorsManager({
                     ) : hasName(c) ? (
                       c.name
                     ) : (
-                      <span className="text-slate-400">- no name -</span>
+                      <span className="text-slate-400 dark:text-slate-500">- no name -</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -277,7 +277,7 @@ export default function CollectorsManager({
                         ))}
                       </select>
                     ) : (
-                      <span className={c.team ? "text-slate-600" : "text-slate-400"}>
+                      <span className={c.team ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}>
                         {c.team ?? "- no team -"}
                       </span>
                     )}
@@ -292,13 +292,13 @@ export default function CollectorsManager({
                         >
                           Save
                         </button>
-                        <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-800">
+                        <button onClick={() => setEditingId(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-800">
                           Cancel
                         </button>
                       </div>
                     ) : (
                       <div className="flex gap-3 justify-end text-sm">
-                        <button onClick={() => startEdit(c)} className="text-slate-600 hover:text-slate-900">
+                        <button onClick={() => startEdit(c)} className="text-slate-600 dark:text-slate-300 hover:text-slate-900">
                           Edit
                         </button>
                         <button onClick={() => remove(c)} className="text-red-600 hover:text-red-800">
@@ -314,7 +314,7 @@ export default function CollectorsManager({
         </table>
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-400 dark:text-slate-500">
         Changing a collector&rsquo;s <span className="font-medium">Code</span> updates it
         everywhere (profile, mistakes, reports, feedback) so their data stays linked.
       </p>

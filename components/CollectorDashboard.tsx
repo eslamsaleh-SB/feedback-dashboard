@@ -7,8 +7,8 @@ import { MODULES, type ModuleValue, type PartSummary, type Report, type Feedback
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5">
-      <p className="text-sm text-slate-500">{label}</p>
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+      <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
       <p className="text-3xl font-bold mt-1">{value}</p>
     </div>
   );
@@ -43,7 +43,7 @@ export default function CollectorDashboard({
   const totalMistakes = Object.values(moduleTotals).reduce((a, b) => a + b, 0);
   const modulesWith = Object.values(moduleTotals).filter((c) => c > 0).length;
 
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
 
   function applyFilters(next: { from?: string; to?: string }) {
     const f = next.from ?? from;
@@ -57,9 +57,9 @@ export default function CollectorDashboard({
 
   if (!isLinked) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center">
         <h1 className="text-xl font-bold mb-2">My Dashboard</h1>
-        <p className="text-slate-600">
+        <p className="text-slate-600 dark:text-slate-300">
           Your account isn't linked to a collector profile yet. Please ask an
           Admin to assign you on the Accounts page.
         </p>
@@ -73,12 +73,12 @@ export default function CollectorDashboard({
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">My Dashboard</h1>
-          {myName && <p className="text-slate-500">{myName}</p>}
-          {myTeam && <p className="text-xs text-slate-400">{myTeam}</p>}
+          {myName && <p className="text-slate-500 dark:text-slate-400">{myName}</p>}
+          {myTeam && <p className="text-xs text-slate-400 dark:text-slate-500">{myTeam}</p>}
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">From</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
             <input
               type="date"
               value={from}
@@ -88,7 +88,7 @@ export default function CollectorDashboard({
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">To</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
             <input
               type="date"
               value={to}
@@ -101,7 +101,7 @@ export default function CollectorDashboard({
             <button
               type="button"
               onClick={() => router.push("/analytics")}
-              className={`${inputCls} text-slate-600 hover:bg-slate-50`}
+              className={`${inputCls} text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800`}
             >
               Clear
             </button>
@@ -121,26 +121,26 @@ export default function CollectorDashboard({
         <button
           type="button"
           onClick={() => router.push("/my-reports")}
-          className="bg-white rounded-2xl border border-slate-200 p-5 text-left hover:bg-slate-50 transition"
+          className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition"
         >
-          <p className="text-sm text-slate-500">Reports</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Reports</p>
           <p className="text-3xl font-bold mt-1">{reports.length}</p>
-          <p className="text-xs text-slate-400 mt-1">View all →</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">View all →</p>
         </button>
         <button
           type="button"
           onClick={() => router.push("/my-sessions")}
-          className="bg-white rounded-2xl border border-slate-200 p-5 text-left hover:bg-slate-50 transition"
+          className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition"
         >
-          <p className="text-sm text-slate-500">Feedback sessions</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Feedback sessions</p>
           <p className="text-3xl font-bold mt-1">{feedbackSessions.length}</p>
-          <p className="text-xs text-slate-400 mt-1">View all →</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">View all →</p>
         </button>
       </div>
 
       {/* Module bar chart */}
       {totalMistakes > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6">
           <h2 className="font-semibold mb-4">Mistakes by module</h2>
           <div className="space-y-3">
             {MODULES.map((mod) => {
@@ -150,10 +150,10 @@ export default function CollectorDashboard({
               );
               return (
                 <div key={mod.value} className="flex items-center gap-3">
-                  <span className="w-44 shrink-0 text-sm text-slate-600">
+                  <span className="w-44 shrink-0 text-sm text-slate-600 dark:text-slate-300">
                     {mod.label}
                   </span>
-                  <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
+                  <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-5 overflow-hidden">
                     <div
                       className="h-5 bg-slate-900 rounded-full transition-all"
                       style={{ width: `${c === 0 ? 0 : Math.max(pct, 4)}%` }}

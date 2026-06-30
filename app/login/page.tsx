@@ -83,47 +83,47 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-8 space-y-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-8 space-y-4">
         <h1 className="text-2xl font-bold text-center">{heading}</h1>
         {mode === "signup" && (
           <>
-            <input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+            <input className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2" placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
             <div>
-              <input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="HR code (e.g. A-2074)" value={hrCode} onChange={(e) => setHrCode(e.target.value.replace(/\s/g, ""))} required />
-              <p className="text-xs text-slate-400 mt-1">Links your account to your data. No spaces.</p>
+              <input className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2" placeholder="HR code (e.g. A-2074)" value={hrCode} onChange={(e) => setHrCode(e.target.value.replace(/\s/g, ""))} required />
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Links your account to your data. No spaces.</p>
             </div>
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Team</label>
-              <select value={team} onChange={(e) => setTeam(e.target.value)} required className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white">
+              <label className="block text-sm text-slate-600 dark:text-slate-300 mb-1">Team</label>
+              <select value={team} onChange={(e) => setTeam(e.target.value)} required className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900">
                 <option value="">-- select your team --</option>
                 <option value="__none__">Team Not Listed</option>
                 {teams.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Title</label>
-              <select value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white">
+              <label className="block text-sm text-slate-600 dark:text-slate-300 mb-1">Title</label>
+              <select value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900">
                 <option value="">-- select your title --</option>
                 {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </>
         )}
-        <input type="email" className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input type="email" className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         {mode !== "forgot" && (
-          <input type="password" className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <input type="password" className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         )}
         <button type="submit" disabled={loading} className="w-full rounded-lg bg-slate-900 text-white py-2 font-medium disabled:opacity-50">
           {loading ? "Please wait..." : mode === "signin" ? "Sign in" : mode === "signup" ? "Sign up" : "Send reset link"}
         </button>
         {message && <p className={`text-sm text-center ${message.type === "ok" ? "text-emerald-600" : "text-red-600"}`}>{message.text}</p>}
-        {mode === "signin" && <button type="button" onClick={() => switchMode("forgot")} className="w-full text-sm text-slate-500 hover:text-slate-800">Forgot password?</button>}
+        {mode === "signin" && <button type="button" onClick={() => switchMode("forgot")} className="w-full text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800">Forgot password?</button>}
         {mode !== "forgot" ? (
-          <button type="button" onClick={() => switchMode(mode === "signin" ? "signup" : "signin")} className="w-full text-sm text-slate-500 hover:text-slate-800">
+          <button type="button" onClick={() => switchMode(mode === "signin" ? "signup" : "signin")} className="w-full text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800">
             {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
           </button>
         ) : (
-          <button type="button" onClick={() => switchMode("signin")} className="w-full text-sm text-slate-500 hover:text-slate-800">Back to sign in</button>
+          <button type="button" onClick={() => switchMode("signin")} className="w-full text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800">Back to sign in</button>
         )}
       </form>
     </main>

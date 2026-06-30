@@ -56,28 +56,28 @@ export default function Combobox({
           setOpen((o) => !o);
           setQuery("");
         }}
-        className={`w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-left text-sm flex items-center justify-between gap-2 truncate${disabled ? " opacity-50 cursor-not-allowed" : ""}`}
+        className={`w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-left text-sm flex items-center justify-between gap-2 truncate${disabled ? " opacity-50 cursor-not-allowed" : ""}`}
       >
-        <span className={`truncate ${selected ? "" : "text-slate-400"}`}>
+        <span className={`truncate ${selected ? "" : "text-slate-400 dark:text-slate-500"}`}>
           {selected?.label ?? placeholder}
         </span>
-        <span className="text-slate-400 text-xs shrink-0">&#9660;</span>
+        <span className="text-slate-400 dark:text-slate-500 text-xs shrink-0">&#9660;</span>
       </button>
 
       {open && !disabled && (
-        <div className="absolute z-50 mt-1 w-full min-w-[220px] bg-white border border-slate-200 rounded-lg shadow-lg flex flex-col max-h-72">
-          <div className="p-2 border-b border-slate-100">
+        <div className="absolute z-50 mt-1 w-full min-w-[220px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-lg flex flex-col max-h-72">
+          <div className="p-2 border-b border-slate-100 dark:border-slate-800">
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+              className="w-full rounded border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm"
             />
           </div>
           <div className="overflow-y-auto flex-1">
             {filtered.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-slate-400">No results</p>
+              <p className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No results</p>
             ) : (
               filtered.map((o) => (
                 <button
@@ -88,8 +88,8 @@ export default function Combobox({
                     setOpen(false);
                     setQuery("");
                   }}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${
-                    o.value === value ? "font-semibold bg-slate-50" : ""
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                    o.value === value ? "font-semibold bg-slate-50 dark:bg-slate-800" : ""
                   }`}
                 >
                   {o.label}

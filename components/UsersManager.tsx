@@ -262,14 +262,14 @@ export default function UsersManager({
     setShowAdd(false);
   }
 
-  const inputCls = "rounded-lg border border-slate-300 px-2 py-1 text-sm bg-white";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-slate-900";
 
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Users</h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
             People with a login account. Edit name, code, team, role, and email — or add / remove users.
           </p>
         </div>
@@ -283,29 +283,29 @@ export default function UsersManager({
       </div>
 
       {showAdd && (
-        <form onSubmit={createUser} className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap items-end gap-3">
+        <form onSubmit={createUser} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap items-end gap-3">
           <div className="w-56">
-            <label className="block text-xs text-slate-500 mb-1">Email *</label>
-            <input type="email" required value={add.email} onChange={(e) => setAdd((d) => ({ ...d, email: e.target.value }))} className="rounded-lg border border-slate-300 px-3 py-2 w-full" />
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Email *</label>
+            <input type="email" required value={add.email} onChange={(e) => setAdd((d) => ({ ...d, email: e.target.value }))} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full" />
           </div>
           <div className="w-40">
-            <label className="block text-xs text-slate-500 mb-1">HR code *</label>
-            <input required value={add.hr} onChange={(e) => setAdd((d) => ({ ...d, hr: e.target.value.replace(/\s/g, "") }))} placeholder="A-1234" className="rounded-lg border border-slate-300 px-3 py-2 w-full" />
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">HR code *</label>
+            <input required value={add.hr} onChange={(e) => setAdd((d) => ({ ...d, hr: e.target.value.replace(/\s/g, "") }))} placeholder="A-1234" className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full" />
           </div>
           <div className="w-48">
-            <label className="block text-xs text-slate-500 mb-1">Full name</label>
-            <input value={add.name} onChange={(e) => setAdd((d) => ({ ...d, name: e.target.value }))} className="rounded-lg border border-slate-300 px-3 py-2 w-full" />
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Full name</label>
+            <input value={add.name} onChange={(e) => setAdd((d) => ({ ...d, name: e.target.value }))} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full" />
           </div>
           <div className="w-44">
-            <label className="block text-xs text-slate-500 mb-1">Team</label>
-            <select value={add.team} onChange={(e) => setAdd((d) => ({ ...d, team: e.target.value }))} className="rounded-lg border border-slate-300 px-3 py-2 bg-white w-full">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
+            <select value={add.team} onChange={(e) => setAdd((d) => ({ ...d, team: e.target.value }))} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 w-full">
               <option value="">(no team)</option>
               {teamOptions.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div className="w-40">
-            <label className="block text-xs text-slate-500 mb-1">Role</label>
-            <select value={add.role} onChange={(e) => setAdd((d) => ({ ...d, role: e.target.value as AppRole }))} className="rounded-lg border border-slate-300 px-3 py-2 bg-white w-full">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Role</label>
+            <select value={add.role} onChange={(e) => setAdd((d) => ({ ...d, role: e.target.value as AppRole }))} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 w-full">
               {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
@@ -317,58 +317,58 @@ export default function UsersManager({
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-52">
-          <label className="block text-xs text-slate-500 mb-1">Filter by team</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Filter by team</label>
           <Combobox options={teamCombo} value={teamFilter} onChange={setTeamFilter} placeholder="All teams" />
         </div>
         <div className="w-48">
-          <label className="block text-xs text-slate-500 mb-1">Filter by role</label>
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as "" | AppRole)} className="rounded-lg border border-slate-300 px-3 py-2 bg-white w-full">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Filter by role</label>
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as "" | AppRole)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 w-full">
             <option value="">All roles</option>
             {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs text-slate-500 mb-1">Search</label>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code / name / email / team..." className="rounded-lg border border-slate-300 px-3 py-2 w-full" />
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Search</label>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code / name / email / team..." className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full" />
         </div>
         {(teamFilter || roleFilter || search) && (
-          <button type="button" onClick={() => { setTeamFilter(""); setRoleFilter(""); setSearch(""); }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+          <button type="button" onClick={() => { setTeamFilter(""); setRoleFilter(""); setSearch(""); }} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
             Clear
           </button>
         )}
-        <span className="text-sm text-slate-500 pb-2">{filtered.length} user(s)</span>
+        <span className="text-sm text-slate-500 dark:text-slate-400 pb-2">{filtered.length} user(s)</span>
       </div>
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
       {ok && <p className="text-sm rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-emerald-800">{ok}</p>}
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-slate-50 dark:bg-slate-800">
             <tr>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Code</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Name</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Team</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Email</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Role</th>
-              <th className="text-right font-medium text-slate-500 px-4 py-3">Actions</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Code</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Name</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Team</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Email</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Role</th>
+              <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="p-4 text-slate-500">No users.</td></tr>
+              <tr><td colSpan={6} className="p-4 text-slate-500 dark:text-slate-400">No users.</td></tr>
             )}
             {filtered.map((r) => {
               const editing = editingId === r.profileId;
               const isSelf = r.profileId === currentUserId;
               const noCollector = !r.collectorId;
               return (
-                <tr key={r.profileId} className="border-t border-slate-100">
+                <tr key={r.profileId} className="border-t border-slate-100 dark:border-slate-800">
                   <td className="px-4 py-2.5 whitespace-nowrap">
                     {editing && !noCollector ? (
                       <input value={draft.hr} onChange={(e) => setDraft((d) => ({ ...d, hr: e.target.value }))} placeholder="HR code" className={`${inputCls} w-28`} />
                     ) : (
-                      <span className="font-medium text-slate-800">{r.hr_code ?? "-"}</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-100">{r.hr_code ?? "-"}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -377,10 +377,10 @@ export default function UsersManager({
                     ) : r.name ? (
                       <>
                         {r.name}
-                        {isSelf && <span className="ml-2 text-xs text-slate-400">(you)</span>}
+                        {isSelf && <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">(you)</span>}
                       </>
                     ) : (
-                      <span className="text-slate-400">- no name -{isSelf && <span className="ml-2">(you)</span>}</span>
+                      <span className="text-slate-400 dark:text-slate-500">- no name -{isSelf && <span className="ml-2">(you)</span>}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -390,14 +390,14 @@ export default function UsersManager({
                         {teamOptions.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
                     ) : (
-                      <span className={r.team ? "text-slate-600" : "text-slate-400"}>{r.team ?? "- no team -"}</span>
+                      <span className={r.team ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}>{r.team ?? "- no team -"}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 whitespace-nowrap">
                     {editing && !isSelf ? (
                       <input type="email" value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} className={`${inputCls} w-56`} />
                     ) : (
-                      <span className="text-slate-600">{r.email ?? "(no email)"}</span>
+                      <span className="text-slate-600 dark:text-slate-300">{r.email ?? "(no email)"}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -406,20 +406,20 @@ export default function UsersManager({
                         {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     ) : (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{roleLabel(r.role)}</span>
+                      <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium">{roleLabel(r.role)}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     {isSelf ? (
-                      <span className="text-xs text-slate-400">your account</span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">your account</span>
                     ) : editing ? (
                       <div className="flex gap-3 justify-end text-sm">
                         <button onClick={() => save(r)} disabled={busy} className="text-emerald-700 hover:text-emerald-900 font-medium disabled:opacity-50">Save</button>
-                        <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-800">Cancel</button>
+                        <button onClick={() => setEditingId(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-800">Cancel</button>
                       </div>
                     ) : (
                       <div className="flex gap-3 justify-end text-sm">
-                        <button onClick={() => startEdit(r)} className="text-slate-600 hover:text-slate-900">Edit</button>
+                        <button onClick={() => startEdit(r)} className="text-slate-600 dark:text-slate-300 hover:text-slate-900">Edit</button>
                         <button onClick={() => resetPw(r)} disabled={busy} className="text-blue-600 hover:text-blue-800 disabled:opacity-50">Reset PW</button>
                         <button onClick={() => remove(r)} disabled={busy} className="text-red-600 hover:text-red-800 disabled:opacity-50">Delete</button>
                       </div>
@@ -432,7 +432,7 @@ export default function UsersManager({
         </table>
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-400 dark:text-slate-500">
         Changing a user&rsquo;s <span className="font-medium">Code</span> re-points their account to the collector
         with that code (it never renames another collector). Deleting a user removes their login only — their collected data stays.
       </p>

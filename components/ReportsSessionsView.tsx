@@ -31,7 +31,7 @@ type SessionItem = {
 const statusStyle: Record<string, string> = {
   Scheduled: "bg-sky-100 text-sky-800",
   Completed: "bg-emerald-100 text-emerald-800",
-  Cancelled: "bg-slate-200 text-slate-600",
+  Cancelled: "bg-slate-200 text-slate-600 dark:text-slate-300",
 };
 
 export default function ReportsSessionsView({
@@ -106,18 +106,18 @@ export default function ReportsSessionsView({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Reports & Sessions</h1>
-        <p className="text-slate-500">Your reports and scheduled feedback sessions.</p>
+        <p className="text-slate-500 dark:text-slate-400">Your reports and scheduled feedback sessions.</p>
       </div>
 
       {/* Tabs */}
-      <div className="inline-flex rounded-xl border border-slate-300 bg-white p-1">
+      <div className="inline-flex rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-1">
         {(["reports", "sessions"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${
-              tab === t ? "bg-slate-900 text-white" : "text-slate-600"
+              tab === t ? "bg-slate-900 text-white" : "text-slate-600 dark:text-slate-300"
             }`}
           >
             {t === "reports" ? `Reports (${reports.length})` : `Sessions (${feedbackSessions.length})`}
@@ -129,20 +129,20 @@ export default function ReportsSessionsView({
       {tab === "reports" && (
         <div className="space-y-4">
           {reports.length === 0 ? (
-            <p className="text-slate-500">No reports yet.</p>
+            <p className="text-slate-500 dark:text-slate-400">No reports yet.</p>
           ) : (
             reports.map((r) => {
               const rNotes = notesForReport(r.id);
               return (
                 <div
                   key={r.id}
-                  className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4"
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <h3 className="font-semibold text-slate-800">{r.title}</h3>
+                      <h3 className="font-semibold text-slate-800 dark:text-slate-100">{r.title}</h3>
                       {r.report_date && (
-                        <p className="text-xs text-slate-400">{r.report_date}</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500">{r.report_date}</p>
                       )}
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
@@ -164,7 +164,7 @@ export default function ReportsSessionsView({
                   </div>
 
                   {r.body && (
-                    <p className="text-sm text-slate-600 whitespace-pre-line">{r.body}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-line">{r.body}</p>
                   )}
                   {r.url && (
                     <a
@@ -179,17 +179,17 @@ export default function ReportsSessionsView({
 
                   {/* Existing notes */}
                   {rNotes.length > 0 && (
-                    <div className="border-t border-slate-100 pt-3 space-y-2">
-                      <p className="text-xs font-medium text-slate-500">
+                    <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-2">
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                         Your notes
                       </p>
                       {rNotes.map((n) => (
                         <div
                           key={n.id}
-                          className="bg-slate-50 rounded-lg p-3 text-sm text-slate-700"
+                          className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 text-sm text-slate-700 dark:text-slate-200"
                         >
                           <p>{n.note_text}</p>
-                          <p className="text-xs text-slate-400 mt-1">
+                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                             {n.status} · {n.created_at.slice(0, 10)}
                           </p>
                         </div>
@@ -198,8 +198,8 @@ export default function ReportsSessionsView({
                   )}
 
                   {/* Add note */}
-                  <div className="border-t border-slate-100 pt-3">
-                    <p className="text-xs font-medium text-slate-500 mb-1">
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
                       Ask a question / request clarification
                     </p>
                     <div className="flex gap-2">
@@ -209,7 +209,7 @@ export default function ReportsSessionsView({
                           setNewNote((prev) => ({ ...prev, [r.id]: e.target.value }))
                         }
                         placeholder="Type your question…"
-                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm"
                       />
                       <button
                         type="button"
@@ -232,24 +232,24 @@ export default function ReportsSessionsView({
       {tab === "sessions" && (
         <div className="space-y-4">
           {feedbackSessions.length === 0 ? (
-            <p className="text-slate-500">No feedback sessions scheduled yet.</p>
+            <p className="text-slate-500 dark:text-slate-400">No feedback sessions scheduled yet.</p>
           ) : (
             feedbackSessions.map((s) => (
               <div
                 key={s.id}
-                className="bg-white rounded-2xl border border-slate-200 p-5"
+                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5"
               >
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
-                    <p className="font-semibold text-slate-800">{s.session_date}</p>
-                    <p className="text-sm text-slate-500 mt-0.5">
+                    <p className="font-semibold text-slate-800 dark:text-slate-100">{s.session_date}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                       {s.mode}
                       {s.location ? ` · ${s.location}` : ""}
                     </p>
                   </div>
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      statusStyle[s.status] ?? "bg-slate-100 text-slate-600"
+                      statusStyle[s.status] ?? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                     }`}
                   >
                     {s.status}
@@ -266,7 +266,7 @@ export default function ReportsSessionsView({
                   </a>
                 )}
                 {s.notes && (
-                  <p className="mt-3 text-sm text-slate-600 whitespace-pre-line">
+                  <p className="mt-3 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-line">
                     {s.notes}
                   </p>
                 )}

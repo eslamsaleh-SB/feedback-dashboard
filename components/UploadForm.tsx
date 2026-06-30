@@ -117,26 +117,26 @@ export default function UploadForm({
     }
   }
 
-  const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const inputCls = "w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold mb-2">Report</h1>
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
         Upload the videos to a Google Drive folder, set the folder sharing to{" "}
         <span className="font-medium">"Anyone with the link"</span>, then paste the
         folder link below - we will pull in every video automatically.
       </p>
 
       {/* Mode switch */}
-      <div className="inline-flex rounded-xl border border-slate-300 bg-white p-1 mb-6">
+      <div className="inline-flex rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-1 mb-6">
         {(["new", "existing"] as Mode[]).map((m) => (
           <button
             key={m}
             type="button"
             onClick={() => setMode(m)}
             className={`px-4 py-2 rounded-lg text-sm font-medium ${
-              mode === m ? "bg-slate-900 text-white" : "text-slate-600"
+              mode === m ? "bg-slate-900 text-white" : "text-slate-600 dark:text-slate-300"
             }`}
           >
             {m === "new" ? "Create new match session" : "Add to existing session"}
@@ -146,7 +146,7 @@ export default function UploadForm({
 
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5"
+        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5"
       >
         {/* Collector - always shown, searchable (by code) */}
         <div>
@@ -226,7 +226,7 @@ export default function UploadForm({
             onChange={(e) => setFolderUrl(e.target.value)}
             required
           />
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
             The folder must be shared as "Anyone with the link".
           </p>
         </div>

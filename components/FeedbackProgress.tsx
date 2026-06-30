@@ -31,8 +31,8 @@ const statusStyle: Record<string, string> = {
   Attended: "bg-emerald-100 text-emerald-800",
   "Attended Late": "bg-amber-100 text-amber-800",
   Absent: "bg-red-100 text-red-800",
-  Cancelled: "bg-slate-200 text-slate-600",
-  "": "bg-slate-100 text-slate-500",
+  Cancelled: "bg-slate-200 text-slate-600 dark:text-slate-300",
+  "": "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
 };
 
 const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
@@ -147,17 +147,17 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
   }, [visible]);
 
   const cards = [
-    { label: "Total sessions", value: stats.total, color: "text-slate-800" },
+    { label: "Total sessions", value: stats.total, color: "text-slate-800 dark:text-slate-100" },
     { label: "Completed", value: stats.completed, color: "text-emerald-600" },
-    { label: "Not completed", value: stats.notCompleted, color: stats.notCompleted ? "text-amber-600" : "text-slate-800" },
+    { label: "Not completed", value: stats.notCompleted, color: stats.notCompleted ? "text-amber-600" : "text-slate-800 dark:text-slate-100" },
     { label: "Attended", value: stats.attended, color: "text-emerald-600" },
-    { label: "Late attendance", value: stats.late, color: stats.late ? "text-amber-600" : "text-slate-800" },
-    { label: "Absent", value: stats.absent, color: stats.absent ? "text-red-600" : "text-slate-800" },
-    { label: "Cancelled", value: stats.cancelled, color: "text-slate-500" },
-    { label: "Not marked", value: stats.notMarked, color: stats.notMarked ? "text-amber-600" : "text-slate-800" },
+    { label: "Late attendance", value: stats.late, color: stats.late ? "text-amber-600" : "text-slate-800 dark:text-slate-100" },
+    { label: "Absent", value: stats.absent, color: stats.absent ? "text-red-600" : "text-slate-800 dark:text-slate-100" },
+    { label: "Cancelled", value: stats.cancelled, color: "text-slate-500 dark:text-slate-400" },
+    { label: "Not marked", value: stats.notMarked, color: stats.notMarked ? "text-amber-600" : "text-slate-800 dark:text-slate-100" },
   ];
 
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
 
   const anyFilter =
     statusFilter ||
@@ -170,23 +170,23 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Feedback Progress</h1>
-        <p className="text-slate-500">Track attendance for every scheduled feedback session.</p>
+        <p className="text-slate-500 dark:text-slate-400">Track attendance for every scheduled feedback session.</p>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
         {cards.map((c) => (
-          <div key={c.label} className="bg-white rounded-2xl border border-slate-200 p-3">
-            <p className="text-xs text-slate-500 truncate">{c.label}</p>
+          <div key={c.label} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{c.label}</p>
             <p className={`text-2xl font-bold mt-1 ${c.color}`}>{c.value}</p>
           </div>
         ))}
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">From</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
           <input
             type="date"
             value={fromDate}
@@ -195,7 +195,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">To</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
           <input
             type="date"
             value={toDate}
@@ -205,7 +205,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
         </div>
 
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Status</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Status</label>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputCls}>
             <option value="">All statuses</option>
             <option value="__none__">Not marked</option>
@@ -216,7 +216,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
         </div>
 
         <div className="w-44">
-          <label className="block text-xs text-slate-500 mb-1">Team</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
           <Combobox
             options={[
               { value: "all", label: "All teams" },
@@ -233,7 +233,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
         </div>
 
         <div className="w-64">
-          <label className="block text-xs text-slate-500 mb-1">Collector</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
           <Combobox
             options={[
               {
@@ -263,7 +263,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                 setFromDate(`${now.getFullYear()}-01-01`);
                 setToDate(isoDate(now));
               }}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               Clear
             </button>
@@ -273,21 +273,21 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
 
-      <div className="text-sm text-slate-500">
+      <div className="text-sm text-slate-500 dark:text-slate-400">
         {visible.length} session(s) between {fromDate} and {toDate}
       </div>
 
       {visible.length === 0 ? (
-        <p className="text-slate-500">No sessions match these filters.</p>
+        <p className="text-slate-500 dark:text-slate-400">No sessions match these filters.</p>
       ) : (
         <div className="space-y-4">
           {visible.map((s) => (
-            <div key={s.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                <span className="font-semibold text-slate-800">{s.session_date}</span>
-                {s.session_time && <span className="text-slate-500">{s.session_time}</span>}
+            <div key={s.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{s.session_date}</span>
+                {s.session_time && <span className="text-slate-500 dark:text-slate-400">{s.session_time}</span>}
                 {s.shift && (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{s.shift}</span>
+                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">{s.shift}</span>
                 )}
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs ${
@@ -302,7 +302,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                   </span>
                 )}
                 {s.mode === "Offline" && s.location && (
-                  <span className="text-slate-500">{s.location}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{s.location}</span>
                 )}
                 {s.mode === "Online" && s.meet_link && (
                   <a
@@ -318,23 +318,23 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
 
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-slate-50 dark:bg-slate-800">
                     <tr>
-                      <th className="text-left font-medium text-slate-500 px-4 py-2.5 whitespace-nowrap">Collector</th>
-                      <th className="text-left font-medium text-slate-500 px-4 py-2.5">Attendance</th>
-                      <th className="text-left font-medium text-slate-500 px-4 py-2.5">Comment</th>
-                      <th className="text-right font-medium text-slate-500 px-4 py-2.5"></th>
+                      <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5 whitespace-nowrap">Collector</th>
+                      <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Attendance</th>
+                      <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Comment</th>
+                      <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {s.attendees.map((a) => (
-                      <tr key={a.id} className="border-t border-slate-100 align-top">
+                      <tr key={a.id} className="border-t border-slate-100 dark:border-slate-800 align-top">
                         <td className="px-4 py-2.5 whitespace-nowrap">
-                          <span className="font-medium text-slate-800">{a.hr_code}</span>
+                          <span className="font-medium text-slate-800 dark:text-slate-100">{a.hr_code}</span>
                           {a.name && a.name !== a.hr_code && (
-                            <span className="text-slate-500"> - {first3(a.name)}</span>
+                            <span className="text-slate-500 dark:text-slate-400"> - {first3(a.name)}</span>
                           )}
-                          {a.team && <span className="text-slate-400"> - {a.team}</span>}
+                          {a.team && <span className="text-slate-400 dark:text-slate-500"> - {a.team}</span>}
                         </td>
                         <td className="px-4 py-2.5">
                           <select
@@ -344,7 +344,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                                 attendance: (e.target.value || null) as Attendance | null,
                               })
                             }
-                            className={`rounded-lg border border-slate-300 px-2 py-1.5 text-sm ${
+                            className={`rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-sm ${
                               statusStyle[a.attendance ?? ""]
                             }`}
                           >
@@ -359,7 +359,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                             value={a.comment ?? ""}
                             onChange={(e) => editAttendee(s.id, a.id, { comment: e.target.value })}
                             placeholder="Reason / notes (late by..., absence reason, etc.)"
-                            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm"
                           />
                         </td>
                         <td className="px-4 py-2.5 text-right whitespace-nowrap">

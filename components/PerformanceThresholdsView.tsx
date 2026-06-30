@@ -187,8 +187,8 @@ export default function PerformanceThresholdsView({
   const errorColumns = activeErrCriteria;
   const scoreColumns = activeScoreCriteria;
 
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
-  const cardCls = "bg-white rounded-2xl border border-slate-200 p-4";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
+  const cardCls = "bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4";
 
   function csvCell(value: string | number | null | undefined): string {
     const s = value == null ? "" : String(value);
@@ -252,7 +252,7 @@ export default function PerformanceThresholdsView({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Performance Thresholds</h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
           Pick a date range, choose which module errors / quality scores to evaluate,
           set a threshold per module, and see who matches.
         </p>
@@ -261,7 +261,7 @@ export default function PerformanceThresholdsView({
       {/* Date range */}
       <div className={`${cardCls} flex flex-wrap items-end gap-3`}>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">From</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
           <input
             type="date"
             value={fromInput}
@@ -270,7 +270,7 @@ export default function PerformanceThresholdsView({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">To</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
           <input
             type="date"
             value={toInput}
@@ -286,7 +286,7 @@ export default function PerformanceThresholdsView({
           Apply date range
         </button>
         <div className="ml-auto flex items-end gap-2">
-          <label className="block text-xs text-slate-500">Match logic</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400">Match logic</label>
           <select
             value={matchLogic}
             onChange={(e) => setMatchLogic(e.target.value as MatchLogic)}
@@ -308,11 +308,11 @@ export default function PerformanceThresholdsView({
               onChange={(e) => setModuleFilterOn(e.target.checked)}
               className="h-4 w-4"
             />
-            <span className="text-sm font-semibold text-slate-800">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
               Apply Module Errors filter
             </span>
           </label>
-          <p className="text-xs text-slate-500 mb-3">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
             Check a module and enter a minimum error count. Collectors with errors
             at or above the threshold will appear in the Module Errors table.
           </p>
@@ -328,10 +328,10 @@ export default function PerformanceThresholdsView({
                     }
                     className="h-4 w-4"
                   />
-                  <span className="text-sm text-slate-700">{MODULE_LABEL[k]}</span>
+                  <span className="text-sm text-slate-700 dark:text-slate-200">{MODULE_LABEL[k]}</span>
                 </label>
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-slate-400">errors &ge;</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">errors &ge;</span>
                   <input
                     type="number"
                     min={0}
@@ -339,7 +339,7 @@ export default function PerformanceThresholdsView({
                     onChange={(e) =>
                       setErrThresh((p) => ({ ...p, [k]: e.target.value }))
                     }
-                    className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                    className="w-24 rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm"
                     placeholder="0"
                   />
                 </div>
@@ -356,11 +356,11 @@ export default function PerformanceThresholdsView({
               onChange={(e) => setScoreFilterOn(e.target.checked)}
               className="h-4 w-4"
             />
-            <span className="text-sm font-semibold text-slate-800">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
               Apply Quality Scores filter
             </span>
           </label>
-          <p className="text-xs text-slate-500 mb-3">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
             Check a module and enter a quality score floor. Collectors whose average
             score is at or below the threshold will appear in the Quality Scores table.
           </p>
@@ -376,10 +376,10 @@ export default function PerformanceThresholdsView({
                     }
                     className="h-4 w-4"
                   />
-                  <span className="text-sm text-slate-700">{SCORE_LABEL[k]}</span>
+                  <span className="text-sm text-slate-700 dark:text-slate-200">{SCORE_LABEL[k]}</span>
                 </label>
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-slate-400">score &le;</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">score &le;</span>
                   <input
                     type="number"
                     min={0}
@@ -389,10 +389,10 @@ export default function PerformanceThresholdsView({
                     onChange={(e) =>
                       setScoreThresh((p) => ({ ...p, [k]: e.target.value }))
                     }
-                    className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                    className="w-24 rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm"
                     placeholder="0"
                   />
-                  <span className="text-xs text-slate-400">%</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">%</span>
                 </div>
               </div>
             ))}
@@ -401,39 +401,39 @@ export default function PerformanceThresholdsView({
       </div>
 
       {activeErrCriteria.length === 0 && activeScoreCriteria.length === 0 ? (
-        <p className="text-slate-500 text-sm">
+        <p className="text-slate-500 dark:text-slate-400 text-sm">
           Pick at least one module and enter a threshold to see results.
         </p>
       ) : (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           {matchedCollectors.length} collector(s) match {matchLogic === "any" ? "any" : "all"} selected criteria ({from} to {to})
         </p>
       )}
 
       {errorColumns.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-slate-700">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+          <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               Module Errors ({errorColumns.length} module{errorColumns.length === 1 ? "" : "s"})
             </h2>
             <button
               type="button"
               onClick={exportErrorsCsv}
               disabled={matchedCollectors.length === 0}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
             >
               Export CSV
             </button>
           </div>
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50 dark:bg-slate-800">
               <tr>
-                <th className="text-left font-medium text-slate-500 px-4 py-2.5">HR Code</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-2.5">Name</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-2.5">Team</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">HR Code</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Name</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Team</th>
                 {errorColumns.map((k) => (
-                  <th key={k} className="text-right font-medium text-slate-500 px-4 py-2.5 whitespace-nowrap">
-                    {MODULE_LABEL[k]} <span className="text-slate-300">(&ge; {errThresh[k] || 0})</span>
+                  <th key={k} className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5 whitespace-nowrap">
+                    {MODULE_LABEL[k]} <span className="text-slate-300 dark:text-slate-600">(&ge; {errThresh[k] || 0})</span>
                   </th>
                 ))}
               </tr>
@@ -441,7 +441,7 @@ export default function PerformanceThresholdsView({
             <tbody>
               {matchedCollectors.length === 0 ? (
                 <tr>
-                  <td colSpan={3 + errorColumns.length} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={3 + errorColumns.length} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                     No collectors match.
                   </td>
                 </tr>
@@ -449,10 +449,10 @@ export default function PerformanceThresholdsView({
                 matchedCollectors.map((c) => {
                   const row = moduleErrorsByHr.get(c.hr_code);
                   return (
-                    <tr key={c.hr_code} className="border-t border-slate-100">
+                    <tr key={c.hr_code} className="border-t border-slate-100 dark:border-slate-800">
                       <td className="px-4 py-2.5 font-medium whitespace-nowrap">{c.hr_code}</td>
-                      <td className="px-4 py-2.5 text-slate-700 whitespace-nowrap">{c.name}</td>
-                      <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{c.team ?? "-"}</td>
+                      <td className="px-4 py-2.5 text-slate-700 dark:text-slate-200 whitespace-nowrap">{c.name}</td>
+                      <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">{c.team ?? "-"}</td>
                       {errorColumns.map((k) => {
                         const value = row ? Number(row[k] ?? 0) : 0;
                         const limit = Number(errThresh[k] || 0);
@@ -461,7 +461,7 @@ export default function PerformanceThresholdsView({
                           <td
                             key={k}
                             className={`px-4 py-2.5 text-right tabular-nums ${
-                              hot ? "text-red-600 font-semibold" : "text-slate-700"
+                              hot ? "text-red-600 font-semibold" : "text-slate-700 dark:text-slate-200"
                             }`}
                           >
                             {value.toLocaleString()}
@@ -478,29 +478,29 @@ export default function PerformanceThresholdsView({
       )}
 
       {scoreColumns.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-slate-700">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+          <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               Quality Scores ({scoreColumns.length} module{scoreColumns.length === 1 ? "" : "s"})
             </h2>
             <button
               type="button"
               onClick={exportScoresCsv}
               disabled={matchedCollectors.length === 0}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
             >
               Export CSV
             </button>
           </div>
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50 dark:bg-slate-800">
               <tr>
-                <th className="text-left font-medium text-slate-500 px-4 py-2.5">HR Code</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-2.5">Name</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-2.5">Team</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">HR Code</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Name</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Team</th>
                 {scoreColumns.map((k) => (
-                  <th key={k} className="text-right font-medium text-slate-500 px-4 py-2.5 whitespace-nowrap">
-                    {SCORE_LABEL[k]} <span className="text-slate-300">(&le; {scoreThresh[k] || 0}%)</span>
+                  <th key={k} className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5 whitespace-nowrap">
+                    {SCORE_LABEL[k]} <span className="text-slate-300 dark:text-slate-600">(&le; {scoreThresh[k] || 0}%)</span>
                   </th>
                 ))}
               </tr>
@@ -508,7 +508,7 @@ export default function PerformanceThresholdsView({
             <tbody>
               {matchedCollectors.length === 0 ? (
                 <tr>
-                  <td colSpan={3 + scoreColumns.length} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={3 + scoreColumns.length} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                     No collectors match.
                   </td>
                 </tr>
@@ -516,10 +516,10 @@ export default function PerformanceThresholdsView({
                 matchedCollectors.map((c) => {
                   const scores = avgScoreByHrAndKey[c.hr_code] ?? {};
                   return (
-                    <tr key={c.hr_code} className="border-t border-slate-100">
+                    <tr key={c.hr_code} className="border-t border-slate-100 dark:border-slate-800">
                       <td className="px-4 py-2.5 font-medium whitespace-nowrap">{c.hr_code}</td>
-                      <td className="px-4 py-2.5 text-slate-700 whitespace-nowrap">{c.name}</td>
-                      <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{c.team ?? "-"}</td>
+                      <td className="px-4 py-2.5 text-slate-700 dark:text-slate-200 whitespace-nowrap">{c.name}</td>
+                      <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">{c.team ?? "-"}</td>
                       {scoreColumns.map((k) => {
                         const value = scores[k];
                         const limit = Number(scoreThresh[k] || 0);
@@ -528,7 +528,7 @@ export default function PerformanceThresholdsView({
                           <td
                             key={k}
                             className={`px-4 py-2.5 text-right tabular-nums ${
-                              cold ? "text-red-600 font-semibold" : "text-slate-700"
+                              cold ? "text-red-600 font-semibold" : "text-slate-700 dark:text-slate-200"
                             }`}
                           >
                             {value == null ? "-" : `${value.toFixed(1)}%`}

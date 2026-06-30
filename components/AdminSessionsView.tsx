@@ -24,11 +24,11 @@ const SESSION_STATUSES = ["Scheduled", "Completed", "Cancelled"] as const;
 const statusBadge: Record<string, string> = {
   Scheduled: "bg-sky-100 text-sky-800",
   Completed: "bg-emerald-100 text-emerald-800",
-  Cancelled: "bg-slate-200 text-slate-600",
+  Cancelled: "bg-slate-200 text-slate-600 dark:text-slate-300",
 };
 const modeBadge: Record<string, string> = {
   Online: "bg-blue-100 text-blue-700",
-  Offline: "bg-slate-100 text-slate-600",
+  Offline: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
 };
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -95,10 +95,10 @@ export default function AdminSessionsView({
     `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
       statusFilter === f
         ? "bg-slate-900 text-white"
-        : "text-slate-600 border border-slate-300 hover:bg-slate-50"
+        : "text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
     }`;
 
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
   const anyFilter =
     statusFilter !== "All" ||
     teamFilter !== "all" ||
@@ -110,14 +110,14 @@ export default function AdminSessionsView({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Feedback Sessions</h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
           All feedback sessions. Update status inline.
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">From</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
           <input
             type="date"
             value={from}
@@ -126,7 +126,7 @@ export default function AdminSessionsView({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">To</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
           <input
             type="date"
             value={to}
@@ -136,7 +136,7 @@ export default function AdminSessionsView({
         </div>
 
         <div className="flex flex-col">
-          <label className="block text-xs text-slate-500 mb-1">Status</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Status</label>
           <div className="flex gap-2">
             {statusFilters.map((f) => (
               <button key={f} className={btnClass(f)} onClick={() => setStatusFilter(f)}>
@@ -147,7 +147,7 @@ export default function AdminSessionsView({
         </div>
 
         <div className="w-44">
-          <label className="block text-xs text-slate-500 mb-1">Team</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
           <Combobox
             options={[
               { value: "all", label: "All teams" },
@@ -164,7 +164,7 @@ export default function AdminSessionsView({
         </div>
 
         <div className="w-64">
-          <label className="block text-xs text-slate-500 mb-1">Collector</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
           <Combobox
             options={[
               {
@@ -193,41 +193,41 @@ export default function AdminSessionsView({
               setFrom(`${now.getFullYear()}-01-01`);
               setTo(isoDate(now));
             }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 self-end"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 self-end"
           >
             Clear
           </button>
         )}
       </div>
 
-      <p className="text-sm text-slate-500">{filtered.length} session(s)</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{filtered.length} session(s)</p>
 
       {filtered.length === 0 ? (
-        <p className="text-slate-500">No sessions for this filter.</p>
+        <p className="text-slate-500 dark:text-slate-400">No sessions for this filter.</p>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50 dark:bg-slate-800">
               <tr>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">HR Code</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Name</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Team</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Date</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3">Mode</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3">Status</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3">Link / Location</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3">Notes</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">HR Code</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Name</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Team</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Date</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Mode</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Status</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Link / Location</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Notes</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((s) => (
-                <tr key={s.id} className="border-t border-slate-100 align-top">
+                <tr key={s.id} className="border-t border-slate-100 dark:border-slate-800 align-top">
                   <td className="px-4 py-3 font-medium whitespace-nowrap">{s.hr_code}</td>
-                  <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{s.collector_name}</td>
-                  <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{s.team ?? "-"}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-600">{s.session_date}</td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-slate-200 whitespace-nowrap">{s.collector_name}</td>
+                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">{s.team ?? "-"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">{s.session_date}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${modeBadge[s.mode] ?? "bg-slate-100 text-slate-600"}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${modeBadge[s.mode] ?? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}>
                       {s.mode}
                     </span>
                   </td>
@@ -236,14 +236,14 @@ export default function AdminSessionsView({
                       value={s.status}
                       disabled={updatingId === s.id}
                       onChange={(e) => updateStatus(s.id, e.target.value)}
-                      className={`rounded-full border-0 px-3 py-1 text-xs font-medium cursor-pointer ${statusBadge[s.status] ?? "bg-slate-100 text-slate-600"}`}
+                      className={`rounded-full border-0 px-3 py-1 text-xs font-medium cursor-pointer ${statusBadge[s.status] ?? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}
                     >
                       {SESSION_STATUSES.map((st) => (
                         <option key={st} value={st}>{st}</option>
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3 text-slate-600 max-w-xs">
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-xs">
                     {s.mode === "Online" && s.meet_link ? (
                       <a href={s.meet_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs break-all">
                         {s.meet_link}
@@ -252,7 +252,7 @@ export default function AdminSessionsView({
                       <span className="text-xs">{s.location}</span>
                     ) : "-"}
                   </td>
-                  <td className="px-4 py-3 text-slate-500 max-w-xs text-xs">{s.notes ?? "-"}</td>
+                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-xs text-xs">{s.notes ?? "-"}</td>
                 </tr>
               ))}
             </tbody>

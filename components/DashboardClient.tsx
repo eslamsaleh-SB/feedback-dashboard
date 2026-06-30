@@ -25,8 +25,8 @@ type Role = "Admin" | "Uploader" | "Viewer";
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5">
-      <p className="text-sm text-slate-500">{label}</p>
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+      <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
       <p className="text-3xl font-bold mt-1">{value}</p>
     </div>
   );
@@ -75,9 +75,9 @@ export default function DashboardClient({
   // Viewer with no linked collector yet.
   if (isPersonal && !isLinked) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center">
         <h1 className="text-xl font-bold mb-2">My Profile</h1>
-        <p className="text-slate-600">
+        <p className="text-slate-600 dark:text-slate-300">
           Your account isn’t linked to a collector profile yet. Please ask an
           Admin to assign you on the Accounts page.
         </p>
@@ -93,17 +93,17 @@ export default function DashboardClient({
             {isPersonal ? "My Profile" : "Dashboard"}
           </h1>
           {isPersonal && myName && (
-            <p className="text-slate-500">{myName}</p>
+            <p className="text-slate-500 dark:text-slate-400">{myName}</p>
           )}
         </div>
 
         {!isPersonal && (
           <div>
-            <label className="text-sm text-slate-500 mr-2">Collector:</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 mr-2">Collector:</label>
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 bg-white"
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900"
             >
               <option value="all">All collectors</option>
               {collectors.map((c) => (
@@ -123,7 +123,7 @@ export default function DashboardClient({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-slate-500">No match sessions yet.</p>
+        <p className="text-slate-500 dark:text-slate-400">No match sessions yet.</p>
       ) : (
         <div className="space-y-3">
           {filtered.map((s) => {
@@ -131,16 +131,16 @@ export default function DashboardClient({
             return (
               <div
                 key={s.id}
-                className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
               >
                 {/* Header row (click to expand) */}
                 <button
                   onClick={() => setExpanded(open ? null : s.id)}
-                  className="w-full text-left p-5 flex items-center justify-between gap-4 hover:bg-slate-50"
+                  className="w-full text-left p-5 flex items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-800"
                 >
                   <div className="min-w-0">
                     <p className="font-semibold truncate">{s.match_name}</p>
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
                       {!isPersonal && <>{s.collector_name} · </>}
                       {s.review_date ?? "—"} · {s.videos.length} video(s)
                     </p>
@@ -151,7 +151,7 @@ export default function DashboardClient({
                         {s.quality_score}/10
                       </span>
                     )}
-                    <span className="text-slate-400 text-sm">
+                    <span className="text-slate-400 dark:text-slate-500 text-sm">
                       {open ? "▲" : "▼"}
                     </span>
                   </div>
@@ -159,16 +159,16 @@ export default function DashboardClient({
 
                 {/* Expanded body */}
                 {open && (
-                  <div className="border-t border-slate-100 p-5 space-y-5">
+                  <div className="border-t border-slate-100 dark:border-slate-800 p-5 space-y-5">
                     {s.overall_notes && (
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
                         <span className="font-medium">Overall notes: </span>
                         {s.overall_notes}
                       </p>
                     )}
 
                     {s.videos.length === 0 ? (
-                      <p className="text-sm text-slate-400">
+                      <p className="text-sm text-slate-400 dark:text-slate-500">
                         No videos attached to this match.
                       </p>
                     ) : (
@@ -183,12 +183,12 @@ export default function DashboardClient({
                                 className="w-full aspect-video bg-black rounded-lg border-0"
                               />
                             ) : (
-                              <div className="w-full aspect-video bg-slate-100 rounded-lg flex items-center justify-center text-sm text-slate-400">
+                              <div className="w-full aspect-video bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-sm text-slate-400 dark:text-slate-500">
                                 Video unavailable
                               </div>
                             )}
                             <p className="text-sm">
-                              <span className="font-medium text-slate-500">
+                              <span className="font-medium text-slate-500 dark:text-slate-400">
                                 #{i + 1} ·{" "}
                               </span>
                               {v.mistake_description?.trim()

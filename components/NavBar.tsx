@@ -13,7 +13,6 @@ export default function NavBar({
 }) {
   const router = useRouter();
   const supabase = createClient();
-  const isViewer = role === "Viewer";
   const canUpload = role === "Admin" || role === "Uploader";
 
   async function signOut() {
@@ -21,61 +20,48 @@ export default function NavBar({
     router.replace("/login");
   }
 
-  const link = "text-sm text-slate-600 hover:text-slate-900";
-
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
         <nav className="flex items-center gap-6">
-          <Link href={isViewer ? "/analytics" : "/dashboard"} className="font-bold">
+          <Link href="/dashboard" className="font-bold">
             🎬 Feedback
           </Link>
-
-          {isViewer ? (
-            // Collector experience: a single dashboard, nothing admin-related.
-            <Link href="/analytics" className={link}>
-              My Dashboard
+          <Link href="/dashboard" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
+            {role === "Viewer" ? "My Profile" : "Dashboard"}
+          </Link>
+          <Link href="/analytics" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
+            {role === "Viewer" ? "My Analytics" : "Analytics"}
+          </Link>
+          {canUpload && (
+            <Link href="/upload" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
+              Upload
             </Link>
-          ) : (
-            <>
-              <Link href="/dashboard" className={link}>
-                Dashboard
-              </Link>
-              <Link href="/analytics" className={link}>
-                Collectors Performance
-              </Link>
-              {canUpload && (
-                <Link href="/upload" className={link}>
-                  Upload
-                </Link>
-              )}
-              {canUpload && (
-                <Link href="/module-upload" className={link}>
-                  Module Data
-                </Link>
-              )}
-              {role === "Admin" && (
-                <Link href="/collectors" className={link}>
-                  Collectors
-                </Link>
-              )}
-              {role === "Admin" && (
-                <Link href="/accounts" className={link}>
-                  Accounts
-                </Link>
-              )}
-            </>
+          )}
+          {canUpload && (
+            <Link href="/module-upload" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
+              Module Data
+            </Link>
+          )}
+          {role === "Admin" && (
+            <Link href="/collectors" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
+              Collectors
+            </Link>
+          )}
+          {role === "Admin" && (
+            <Link href="/accounts" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
+              Accounts
+            </Link>
           )}
         </nav>
-
         <div className="flex items-center gap-3 text-sm">
-          <span className="hidden sm:inline text-slate-500">{email}</span>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">
+          <span className="hidden sm:inline text-slate-500 dark:text-slate-400">{email}</span>
+          <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium">
             {role}
           </span>
           <button
             onClick={signOut}
-            className="rounded-lg border border-slate-300 px-3 py-1 hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             Sign out
           </button>

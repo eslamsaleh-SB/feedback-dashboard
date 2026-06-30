@@ -17,11 +17,11 @@ type StatusFilter = "All" | "Scheduled" | "Completed" | "Cancelled";
 const statusBadge: Record<string, string> = {
   Scheduled: "bg-sky-100 text-sky-800",
   Completed: "bg-emerald-100 text-emerald-800",
-  Cancelled: "bg-slate-200 text-slate-600",
+  Cancelled: "bg-slate-200 text-slate-600 dark:text-slate-300",
 };
 const modeBadge: Record<string, string> = {
   Online: "bg-blue-100 text-blue-700",
-  Offline: "bg-slate-100 text-slate-600",
+  Offline: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
 };
 
 export default function MySessionsView({
@@ -42,49 +42,49 @@ export default function MySessionsView({
 
   const statusFilters: StatusFilter[] = ["All", "Scheduled", "Completed", "Cancelled"];
   const btnClass = (f: StatusFilter) =>
-    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${statusFilter === f ? "bg-slate-900 text-white" : "text-slate-600 border border-slate-300 hover:bg-slate-50"}`;
+    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${statusFilter === f ? "bg-slate-900 text-white" : "text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"}`;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">My Feedback Sessions</h1>
-        <p className="text-slate-500 text-sm mt-1">Your scheduled and completed feedback meetings.</p>
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Your scheduled and completed feedback meetings.</p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3 items-end">
         <div className="flex gap-2">
           {statusFilters.map((f) => (
             <button key={f} className={btnClass(f)} onClick={() => setStatusFilter(f)}>{f}</button>
           ))}
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">From</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">To</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm" />
         </div>
         {(from || to) && (
-          <button onClick={() => { setFrom(""); setTo(""); }} className="text-sm text-slate-500 underline self-end pb-2">Clear dates</button>
+          <button onClick={() => { setFrom(""); setTo(""); }} className="text-sm text-slate-500 dark:text-slate-400 underline self-end pb-2">Clear dates</button>
         )}
       </div>
 
-      <p className="text-sm text-slate-500">{filtered.length} session(s)</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{filtered.length} session(s)</p>
 
       {filtered.length === 0 ? (
-        <p className="text-slate-500">No sessions for this filter.</p>
+        <p className="text-slate-500 dark:text-slate-400">No sessions for this filter.</p>
       ) : (
         <div className="space-y-3">
           {filtered.map((s) => (
-            <div key={s.id} className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+            <div key={s.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-slate-800">{s.session_date}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${modeBadge[s.mode] ?? "bg-slate-100 text-slate-600"}`}>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{s.session_date}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${modeBadge[s.mode] ?? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}>
                     {s.mode}
                   </span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[s.status] ?? "bg-slate-100 text-slate-600"}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[s.status] ?? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}>
                     {s.status}
                   </span>
                 </div>
@@ -100,12 +100,12 @@ export default function MySessionsView({
                 )}
               </div>
               {s.mode === "Offline" && s.location && (
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
                   <span className="font-medium">Location:</span> {s.location}
                 </p>
               )}
               {s.notes && (
-                <p className="text-sm text-slate-600 whitespace-pre-wrap">{s.notes}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{s.notes}</p>
               )}
             </div>
           ))}

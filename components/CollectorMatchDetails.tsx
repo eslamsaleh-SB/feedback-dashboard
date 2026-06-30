@@ -86,7 +86,7 @@ export default function CollectorMatchDetails({
   }, [rows, moduleFilter, errOp, errVal]);
 
   const shown = matches.slice(0, MAX_MATCHES);
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
   const moduleLabel = moduleFilter
     ? MODULES.find((m) => m.value === moduleFilter)?.label
     : null;
@@ -95,13 +95,13 @@ export default function CollectorMatchDetails({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">My Match Details</h1>
-        <p className="text-slate-500">Module totals by Match → Part. Sorted by highest errors.</p>
+        <p className="text-slate-500 dark:text-slate-400">Module totals by Match → Part. Sorted by highest errors.</p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3">
         <div className="w-44">
-          <label className="block text-xs text-slate-500 mb-1">Module</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Module</label>
           <select
             value={moduleFilter}
             onChange={(e) => {
@@ -118,7 +118,7 @@ export default function CollectorMatchDetails({
           </select>
         </div>
         <div className="w-56">
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
             Errors {moduleLabel ? `(${moduleLabel})` : "(total)"} — match total
           </label>
           <div className="flex gap-2">
@@ -131,7 +131,7 @@ export default function CollectorMatchDetails({
           </div>
         </div>
         <div className="w-56">
-          <label className="block text-xs text-slate-500 mb-1">Search Match ID</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Search Match ID</label>
           <div className="flex gap-2">
             <input
               value={matchInput}
@@ -144,16 +144,16 @@ export default function CollectorMatchDetails({
           </div>
         </div>
         <div className="w-40">
-          <label className="block text-xs text-slate-500 mb-1">Review date — from</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Review date — from</label>
           <input type="date" value={from} max={to || undefined} onChange={(e) => applyFilters({ from: e.target.value })} className={`${inputCls} w-full`} />
         </div>
         <div className="w-40">
-          <label className="block text-xs text-slate-500 mb-1">to</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">to</label>
           <input type="date" value={to} min={from || undefined} onChange={(e) => applyFilters({ to: e.target.value })} className={`${inputCls} w-full`} />
         </div>
       </div>
 
-      <div className="text-sm text-slate-500">
+      <div className="text-sm text-slate-500 dark:text-slate-400">
         {matches.length} match(es) sorted by highest {moduleLabel ? moduleLabel : "total"} errors
         {matches.length > MAX_MATCHES && (
           <span className="text-amber-600"> — showing top {MAX_MATCHES}. Narrow by date or Match ID.</span>
@@ -161,23 +161,23 @@ export default function CollectorMatchDetails({
       </div>
 
       {shown.length === 0 ? (
-        <p className="text-slate-500">No matches for this filter.</p>
+        <p className="text-slate-500 dark:text-slate-400">No matches for this filter.</p>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50 dark:bg-slate-800">
               <tr>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Match</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Review date</th>
-                <th className="text-left font-medium text-slate-500 px-3 py-3">Part</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Match</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Review date</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-3">Part</th>
                 {moduleFilter ? (
-                  <th className="text-right font-semibold text-slate-900 px-4 py-3 whitespace-nowrap">{moduleLabel}</th>
+                  <th className="text-right font-semibold text-slate-900 dark:text-slate-100 px-4 py-3 whitespace-nowrap">{moduleLabel}</th>
                 ) : (
                   <>
                     {MODULES.map((m) => (
-                      <th key={m.value} className="text-right font-medium text-slate-500 px-3 py-3 whitespace-nowrap">{m.label}</th>
+                      <th key={m.value} className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-3 whitespace-nowrap">{m.label}</th>
                     ))}
-                    <th className="text-right font-semibold text-slate-600 px-4 py-3">Total</th>
+                    <th className="text-right font-semibold text-slate-600 dark:text-slate-300 px-4 py-3">Total</th>
                   </>
                 )}
               </tr>
@@ -189,25 +189,25 @@ export default function CollectorMatchDetails({
                   return (
                     <tr
                       key={`${m.matchid}-${p.partid}-${p.hr_code ?? "x"}`}
-                      className={`${first ? "border-t-2 border-slate-200" : "border-t border-slate-100"} hover:bg-slate-50`}
+                      className={`${first ? "border-t-2 border-slate-200 dark:border-slate-800" : "border-t border-slate-100 dark:border-slate-800"} hover:bg-slate-50 dark:hover:bg-slate-800`}
                     >
                       <td className="px-4 py-2.5 whitespace-nowrap align-top">
                         {first && (
-                          <span className="font-semibold text-slate-800">
-                            {m.matchid} <span className="text-slate-400 font-normal">({m.parts.length})</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-100">
+                            {m.matchid} <span className="text-slate-400 dark:text-slate-500 font-normal">({m.parts.length})</span>
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-slate-500 align-top">
+                      <td className="px-4 py-2.5 whitespace-nowrap text-slate-500 dark:text-slate-400 align-top">
                         {first && (m.date ? m.date.slice(0, 10) : "—")}
                       </td>
-                      <td className="px-3 py-2.5 text-slate-500 align-top">{p.partid}</td>
+                      <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 align-top">{p.partid}</td>
                       {moduleFilter ? (
                         <td className="px-4 py-2.5 text-right font-semibold align-top">{p.counts[moduleFilter] ?? 0}</td>
                       ) : (
                         <>
                           {MODULES.map((mod) => (
-                            <td key={mod.value} className="px-3 py-2.5 text-right text-slate-600 align-top">{p.counts[mod.value] ?? 0}</td>
+                            <td key={mod.value} className="px-3 py-2.5 text-right text-slate-600 dark:text-slate-300 align-top">{p.counts[mod.value] ?? 0}</td>
                           ))}
                           <td className="px-4 py-2.5 text-right font-semibold align-top">{p.total}</td>
                         </>

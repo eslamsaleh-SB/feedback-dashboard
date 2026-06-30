@@ -21,44 +21,44 @@ export default function NavBar({
   }
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
         <nav className="flex items-center gap-6">
           <Link href="/dashboard" className="font-bold">
             Feedback
           </Link>
-          <Link href="/dashboard" className="text-sm text-slate-600 hover:text-slate-900">
+          <Link href="/dashboard" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
             {role === "Viewer" ? "My Profile" : "Dashboard"}
           </Link>
-          <Link href="/analytics" className="text-sm text-slate-600 hover:text-slate-900">
+          <Link href="/analytics" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
             {role === "Viewer" ? "My Analytics" : "Analytics"}
           </Link>
           {canUpload && (
-            <Link href="/upload" className="text-sm text-slate-600 hover:text-slate-900">
+            <Link href="/upload" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
               Upload
             </Link>
           )}
           {canUpload && (
-            <Link href="/module-upload" className="text-sm text-slate-600 hover:text-slate-900">
+            <Link href="/module-upload" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
               Module Data
             </Link>
           )}
           {role === "Admin" && (
-            <Link href="/collectors" className="text-sm text-slate-600 hover:text-slate-900">
+            <Link href="/collectors" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
               Collectors
             </Link>
           )}
           {role === "Admin" && (
-            <Link href="/accounts" className="text-sm text-slate-600 hover:text-slate-900">
+            <Link href="/accounts" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900">
               Accounts
             </Link>
           )}
         </nav>
         <div className="flex items-center gap-3 text-sm">
-          <span className="hidden sm:inline text-slate-500">{email}</span>
+          <span className="hidden sm:inline text-slate-500 dark:text-slate-400">{email}</span>
           <button
             onClick={signOut}
-            className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             Sign out
           </button>

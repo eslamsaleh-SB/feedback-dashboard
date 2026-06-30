@@ -56,12 +56,12 @@ export default function AdminInquiriesView({
   }, [inquiries]);
 
   const cards = [
-    { label: "Total matches submitted", value: stats.total, color: "text-slate-800" },
+    { label: "Total matches submitted", value: stats.total, color: "text-slate-800 dark:text-slate-100" },
     { label: "Completed matches", value: stats.completed, color: "text-emerald-600" },
     {
       label: "Pending videos",
       value: stats.pendingVideos,
-      color: stats.pendingVideos ? "text-amber-600" : "text-slate-800",
+      color: stats.pendingVideos ? "text-amber-600" : "text-slate-800 dark:text-slate-100",
     },
   ];
 
@@ -146,13 +146,13 @@ export default function AdminInquiriesView({
     }
   }
 
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Inquiries</h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
           Match questions submitted by collectors - reply per video and notify the
           collector once every inquiry on a match has been answered.
         </p>
@@ -161,26 +161,26 @@ export default function AdminInquiriesView({
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
         {cards.map((c) => (
-          <div key={c.label} className="bg-white rounded-2xl border border-slate-200 p-4">
-            <p className="text-xs text-slate-500">{c.label}</p>
+          <div key={c.label} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400">{c.label}</p>
             <p className={`text-2xl font-bold mt-1 ${c.color}`}>{c.value}</p>
           </div>
         ))}
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3 items-end">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs text-slate-500 mb-1">Search collector / match</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Search collector / match</label>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Match ID, HR code, name, team..."
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm"
           />
         </div>
         <div className="w-64">
-          <label className="block text-xs text-slate-500 mb-1">Collector</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
           <Combobox
             options={[
               { value: "all", label: "All collectors" },
@@ -196,7 +196,7 @@ export default function AdminInquiriesView({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Status</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Status</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -215,17 +215,17 @@ export default function AdminInquiriesView({
               setStatusFilter("all");
               setSearch("");
             }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             Clear
           </button>
         )}
       </div>
 
-      <p className="text-sm text-slate-500">{visible.length} match(es)</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{visible.length} match(es)</p>
 
       {visible.length === 0 ? (
-        <p className="text-slate-500">No inquiries match these filters.</p>
+        <p className="text-slate-500 dark:text-slate-400">No inquiries match these filters.</p>
       ) : (
         <div className="space-y-2">
           {visible.map((q) => {
@@ -239,22 +239,22 @@ export default function AdminInquiriesView({
             return (
               <div
                 key={q.id}
-                className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
               >
                 <button
                   type="button"
                   onClick={() => setExpandedId(isExp ? null : q.id)}
-                  className="w-full text-left px-5 py-4 flex items-center justify-between gap-4 hover:bg-slate-50"
+                  className="w-full text-left px-5 py-4 flex items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-800"
                 >
                   <div className="flex-1 min-w-0 flex flex-wrap items-center gap-3">
-                    <span className="font-semibold text-slate-800">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">
                       Match {q.match_id}
                     </span>
-                    <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
+                    <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full px-2 py-0.5">
                       {q.hr_code} - {q.collector_name}
                       {q.team ? ` - ${q.team}` : ""}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
                       {q.created_at.slice(0, 10)}
                     </span>
                     {q.completed_at ? (
@@ -270,18 +270,18 @@ export default function AdminInquiriesView({
                         Pending
                       </span>
                     )}
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
                       {repliedCount} / {q.videos.length} replied
                     </span>
                   </div>
-                  <span className="text-slate-400 text-sm">{isExp ? "▲" : "▼"}</span>
+                  <span className="text-slate-400 dark:text-slate-500 text-sm">{isExp ? "▲" : "▼"}</span>
                 </button>
 
                 {isExp && (
-                  <div className="border-t border-slate-100 px-5 pb-5 pt-4 space-y-4">
+                  <div className="border-t border-slate-100 dark:border-slate-800 px-5 pb-5 pt-4 space-y-4">
                     {/* Collapsible Videos */}
                     {q.videos.length > 0 && (
-                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -290,22 +290,22 @@ export default function AdminInquiriesView({
                               [q.id]: !videosOpen,
                             }))
                           }
-                          className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-sm font-medium text-slate-700"
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200"
                         >
                           <span>Videos ({q.videos.length})</span>
-                          <span className="text-slate-500 text-xs">
+                          <span className="text-slate-500 dark:text-slate-400 text-xs">
                             {videosOpen ? "Hide ▲" : "Show ▼"}
                           </span>
                         </button>
 
                         {videosOpen && (
-                          <div className="p-4 space-y-5 bg-white">
+                          <div className="p-4 space-y-5 bg-white dark:bg-slate-900">
                             {q.videos.map((v) => (
                               <div
                                 key={v.id}
-                                className="rounded-xl border border-slate-200 overflow-hidden"
+                                className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden"
                               >
-                                <p className="text-xs text-slate-400 px-3 py-1.5 bg-slate-900 text-slate-100 truncate">
+                                <p className="text-xs text-slate-400 dark:text-slate-500 px-3 py-1.5 bg-slate-900 text-slate-100 truncate">
                                   {v.file_name}
                                 </p>
                                 <iframe
@@ -323,13 +323,13 @@ export default function AdminInquiriesView({
                                         ? ` - ${v.replied_at.slice(0, 10)}`
                                         : ""}
                                     </p>
-                                    <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">
+                                    <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">
                                       {v.reply_text}
                                     </p>
                                   </div>
                                 ) : (
-                                  <div className="border-t border-slate-200 px-3 py-3 space-y-2 bg-slate-50">
-                                    <p className="text-xs text-slate-500 font-medium">
+                                  <div className="border-t border-slate-200 dark:border-slate-800 px-3 py-3 space-y-2 bg-slate-50 dark:bg-slate-800">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                                       Reply to the collector
                                     </p>
                                     <div className="flex gap-2">
@@ -343,7 +343,7 @@ export default function AdminInquiriesView({
                                           }))
                                         }
                                         placeholder="Type your reply..."
-                                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+                                        className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm bg-white dark:bg-slate-900"
                                         onKeyDown={(e) => {
                                           if (e.key === "Enter") sendReply(v.id, q.id);
                                         }}
@@ -386,7 +386,7 @@ export default function AdminInquiriesView({
                           : `Mark complete & email collector (Match ${q.match_id})`}
                       </button>
                       {!allReplied && !q.completed_at && (
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
                           Reply to every video before marking complete.
                         </span>
                       )}

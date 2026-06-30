@@ -171,7 +171,7 @@ export default function Sidebar({
                 }`}
               >
                 <span>{entry.label}</span>
-                <span className="text-slate-400 ml-1">{isOpen ? "▼" : "▶"}</span>
+                <span className="text-slate-400 dark:text-slate-500 ml-1">{isOpen ? "▼" : "▶"}</span>
               </button>
               {isOpen && (
                 <div className="mt-1 space-y-0.5 pl-3">

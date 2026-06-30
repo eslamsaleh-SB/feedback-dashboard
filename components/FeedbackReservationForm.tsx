@@ -156,15 +156,15 @@ export default function FeedbackReservationForm({
     setMeetLink("");
   }
 
-  const card = "bg-white rounded-2xl border border-slate-200 p-5";
-  const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
-  const labelCls = "block text-xs font-medium text-slate-500 mb-1";
+  const card = "bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5";
+  const inputCls = "w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
+  const labelCls = "block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1";
 
   return (
     <form onSubmit={submit} className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold">Feedback Reservation</h1>
-        <p className="text-slate-500">Book a feedback session for one collector or a group.</p>
+        <p className="text-slate-500 dark:text-slate-400">Book a feedback session for one collector or a group.</p>
       </div>
 
       {/* Session type */}
@@ -182,7 +182,7 @@ export default function FeedbackReservationForm({
               className={`rounded-lg border px-4 py-2 text-sm font-medium ${
                 isGroup === o.v
                   ? "bg-slate-900 text-white border-slate-900"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  : "border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
               {o.label}
@@ -205,7 +205,7 @@ export default function FeedbackReservationForm({
                 <button
                   type="button"
                   onClick={() => removeRow(i)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-slate-500 hover:bg-slate-50"
+                  className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
                   title="Remove"
                 >
                   x
@@ -217,7 +217,7 @@ export default function FeedbackReservationForm({
             <button
               type="button"
               onClick={addRow}
-              className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               + Add collector
             </button>
@@ -237,7 +237,7 @@ export default function FeedbackReservationForm({
               className={`rounded-lg border px-4 py-2 text-sm font-medium ${
                 mode === m
                   ? "bg-slate-900 text-white border-slate-900"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  : "border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
               {m}
@@ -265,12 +265,12 @@ export default function FeedbackReservationForm({
               <button
                 type="button"
                 onClick={pasteLink}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               >
                 Paste
               </button>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
               The button opens Google Meet and creates a new meeting - copy that link and paste it here.
             </p>
           </div>

@@ -24,7 +24,7 @@ export default async function MyReportsPage() {
     .single();
 
   if (!collector) {
-    return <div className="p-8 text-slate-500">No collector record linked to your account yet.</div>;
+    return <div className="p-8 text-slate-500 dark:text-slate-400">No collector record linked to your account yet.</div>;
   }
 
   const { data: sessions } = await supabase

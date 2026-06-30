@@ -30,7 +30,7 @@ type CollectorOpt = { hr_code: string; name: string; team: string | null };
 
 const NOTE_STATUSES = ["Not Started", "In Progress", "Complete"] as const;
 const statusBadge: Record<string, string> = {
-  "Not Started": "bg-slate-100 text-slate-600",
+  "Not Started": "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
   "In Progress": "bg-amber-100 text-amber-700",
   Complete: "bg-emerald-100 text-emerald-700",
 };
@@ -154,10 +154,10 @@ export default function AdminReportsView({
   }, [sessions, collectorFilter, ackFilter, search]);
 
   const cards = [
-    { label: "Total reports", value: stats.total, color: "text-slate-800" },
-    { label: "Not acknowledged", value: stats.notAcknowledged, color: stats.notAcknowledged ? "text-amber-600" : "text-slate-800" },
+    { label: "Total reports", value: stats.total, color: "text-slate-800 dark:text-slate-100" },
+    { label: "Not acknowledged", value: stats.notAcknowledged, color: stats.notAcknowledged ? "text-amber-600" : "text-slate-800 dark:text-slate-100" },
     { label: "Acknowledged", value: stats.acknowledged, color: "text-emerald-600" },
-    { label: "Incomplete notes", value: stats.incompleteNotes, color: stats.incompleteNotes ? "text-amber-600" : "text-slate-800" },
+    { label: "Incomplete notes", value: stats.incompleteNotes, color: stats.incompleteNotes ? "text-amber-600" : "text-slate-800 dark:text-slate-100" },
     { label: "Completed reports", value: stats.completed, color: "text-emerald-600" },
   ];
 
@@ -166,7 +166,7 @@ export default function AdminReportsView({
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Reports</h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
             Match session reports - videos, collector notes and acknowledgements.
           </p>
         </div>
@@ -181,27 +181,27 @@ export default function AdminReportsView({
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {cards.map((c) => (
-          <div key={c.label} className="bg-white rounded-2xl border border-slate-200 p-4">
-            <p className="text-xs text-slate-500">{c.label}</p>
+          <div key={c.label} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400">{c.label}</p>
             <p className={`text-2xl font-bold mt-1 ${c.color}`}>{c.value}</p>
           </div>
         ))}
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-4 items-end">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-4 items-end">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs text-slate-500 mb-1">Search collector / match</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Search collector / match</label>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="HR code, name, match..."
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm"
           />
         </div>
         <div className="w-64">
-          <label className="block text-xs text-slate-500 mb-1">Collector</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
           <Combobox
             options={[
               { value: "all", label: "All collectors" },
@@ -217,11 +217,11 @@ export default function AdminReportsView({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Acknowledgement</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Acknowledgement</label>
           <select
             value={ackFilter}
             onChange={(e) => setAckFilter(e.target.value as AckFilter)}
-            className="rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm"
           >
             <option value="all">All</option>
             <option value="not_acknowledged">Not acknowledged</option>
@@ -229,11 +229,11 @@ export default function AdminReportsView({
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Filter notes by status</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Filter notes by status</label>
           <select
             value={noteFilter}
             onChange={(e) => setNoteFilter(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm"
           >
             <option value="">All statuses</option>
             {NOTE_STATUSES.map((s) => (
@@ -250,17 +250,17 @@ export default function AdminReportsView({
               setCollectorFilter("all");
               setAckFilter("all");
             }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 self-end"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 self-end"
           >
             Clear
           </button>
         )}
       </div>
 
-      <p className="text-sm text-slate-500">{visible.length} report(s)</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{visible.length} report(s)</p>
 
       {visible.length === 0 ? (
-        <p className="text-slate-500">
+        <p className="text-slate-500 dark:text-slate-400">
           No reports match these filters.{" "}
           <Link href="/upload" className="text-blue-600 underline">Upload one.</Link>
         </p>
@@ -273,18 +273,18 @@ export default function AdminReportsView({
               noteFilter ? n.status === noteFilter : true
             );
             return (
-              <div key={s.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div key={s.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setExpandedId(isExp ? null : s.id)}
-                  className="w-full text-left px-5 py-4 flex items-center justify-between gap-4 hover:bg-slate-50"
+                  className="w-full text-left px-5 py-4 flex items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-800"
                 >
                   <div className="flex-1 min-w-0 flex flex-wrap items-center gap-3">
-                    <span className="font-semibold text-slate-800">{s.match_name}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">{s.match_name}</span>
                     {s.review_date && (
-                      <span className="text-xs text-slate-400">{s.review_date}</span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">{s.review_date}</span>
                     )}
-                    <span className="text-xs bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">
+                    <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full px-2 py-0.5">
                       {s.hr_code ?? "-"}
                       {s.collector_name ? ` - ${s.collector_name}` : ""}
                     </span>
@@ -298,24 +298,24 @@ export default function AdminReportsView({
                       </span>
                     )}
                     {s.videos.length > 0 && (
-                      <span className="text-xs text-slate-500">{s.videos.length} video(s)</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{s.videos.length} video(s)</span>
                     )}
                     {s.notes.length > 0 && (
                       <span className="text-xs text-amber-600 font-medium">{s.notes.length} note(s)</span>
                     )}
                   </div>
-                  <span className="text-slate-400 text-sm">{isExp ? "▲" : "▼"}</span>
+                  <span className="text-slate-400 dark:text-slate-500 text-sm">{isExp ? "▲" : "▼"}</span>
                 </button>
 
                 {isExp && (
-                  <div className="border-t border-slate-100 px-5 pb-5 pt-4 space-y-5">
+                  <div className="border-t border-slate-100 dark:border-slate-800 px-5 pb-5 pt-4 space-y-5">
                     {s.overall_notes && (
-                      <p className="text-sm text-slate-600 whitespace-pre-wrap">{s.overall_notes}</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{s.overall_notes}</p>
                     )}
 
                     {/* Collapsible Videos */}
                     {s.videos.length > 0 && (
-                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -324,18 +324,18 @@ export default function AdminReportsView({
                               [s.id]: !videosOpen,
                             }))
                           }
-                          className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-sm font-medium text-slate-700"
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200"
                         >
                           <span>Videos ({s.videos.length})</span>
-                          <span className="text-slate-500 text-xs">
+                          <span className="text-slate-500 dark:text-slate-400 text-xs">
                             {videosOpen ? "Hide ▲" : "Show ▼"}
                           </span>
                         </button>
                         {videosOpen && (
-                          <div className="p-4 space-y-4 bg-white">
+                          <div className="p-4 space-y-4 bg-white dark:bg-slate-900">
                             {s.videos.map((v) => (
-                              <div key={v.id} className="rounded-xl overflow-hidden border border-slate-200 bg-black">
-                                <p className="text-xs text-slate-400 px-3 py-1.5 bg-slate-900 truncate">{v.file_name}</p>
+                              <div key={v.id} className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-black">
+                                <p className="text-xs text-slate-400 dark:text-slate-500 px-3 py-1.5 bg-slate-900 truncate">{v.file_name}</p>
                                 <iframe
                                   src={`https://drive.google.com/file/d/${v.drive_file_id}/preview`}
                                   className="w-full"
@@ -352,23 +352,23 @@ export default function AdminReportsView({
 
                     {/* Notes + reply UI */}
                     <div>
-                      <p className="text-sm font-medium text-slate-700 mb-2">Collector Notes</p>
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Collector Notes</p>
                       {visibleNotes.length === 0 ? (
-                        <p className="text-slate-500 text-sm">
+                        <p className="text-slate-500 dark:text-slate-400 text-sm">
                           {noteFilter ? "No notes matching this status." : "No notes yet."}
                         </p>
                       ) : (
                         <div className="space-y-3">
                           {visibleNotes.map((n) => (
-                            <div key={n.id} className="border border-slate-200 rounded-xl p-3 space-y-2">
+                            <div key={n.id} className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 space-y-2">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs text-slate-500">
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
                                     {n.hr_code}{" "}
-                                    <span className="text-slate-300">.</span>{" "}
+                                    <span className="text-slate-300 dark:text-slate-600">.</span>{" "}
                                     {n.created_at.slice(0, 10)}
                                   </p>
-                                  <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{n.note_text}</p>
+                                  <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">{n.note_text}</p>
                                 </div>
                                 <select
                                   value={n.status}
@@ -388,7 +388,7 @@ export default function AdminReportsView({
                                     Your reply
                                     {n.replied_at ? ` - ${n.replied_at.slice(0, 10)}` : ""}
                                   </p>
-                                  <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{n.reply_text}</p>
+                                  <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">{n.reply_text}</p>
                                 </div>
                               )}
 
@@ -404,7 +404,7 @@ export default function AdminReportsView({
                                       }))
                                     }
                                     placeholder="Reply (collector will be emailed)..."
-                                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm"
                                     onKeyDown={(e) => {
                                       if (e.key === "Enter") sendReply(n.id, s.id);
                                     }}

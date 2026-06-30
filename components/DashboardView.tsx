@@ -29,11 +29,11 @@ function trendInfo(
   opts: { lowerIsBetter?: boolean } = {}
 ) {
   if (curr == null || prev == null) {
-    return { text: null as string | null, color: "text-slate-400" };
+    return { text: null as string | null, color: "text-slate-400 dark:text-slate-500" };
   }
   if (prev === 0) {
-    if (curr === 0) return { text: "no change", color: "text-slate-400" };
-    return { text: null, color: "text-slate-400" };
+    if (curr === 0) return { text: "no change", color: "text-slate-400 dark:text-slate-500" };
+    return { text: null, color: "text-slate-400 dark:text-slate-500" };
   }
   const lowerIsBetter = opts.lowerIsBetter ?? false;
   const diff = curr - prev;
@@ -42,7 +42,7 @@ function trendInfo(
   const isFlat = Math.abs(pct) < 0.5;
   const good = isFlat ? null : lowerIsBetter ? !isUp : isUp;
   const color =
-    good === null ? "text-slate-400" : good ? "text-emerald-600" : "text-red-500";
+    good === null ? "text-slate-400 dark:text-slate-500" : good ? "text-emerald-600" : "text-red-500";
   const arrow = isFlat ? "=" : isUp ? "▲" : "▼";
   const text = `${arrow} ${Math.abs(pct).toFixed(1)}%`;
   return { text, color };
@@ -50,7 +50,7 @@ function trendInfo(
 
 function ChevronToggle({ open }: { open: boolean }) {
   return (
-    <span className={`inline-block transition-transform ${open ? "rotate-180" : ""} text-slate-500`}>
+    <span className={`inline-block transition-transform ${open ? "rotate-180" : ""} text-slate-500 dark:text-slate-400`}>
       ▼
     </span>
   );

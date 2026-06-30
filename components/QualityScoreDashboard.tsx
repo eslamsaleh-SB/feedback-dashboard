@@ -35,7 +35,7 @@ function LineChart({
   data: { label: string; value: number }[];
   color?: string;
 }) {
-  if (data.length === 0) return <p className="text-xs text-slate-400">No data</p>;
+  if (data.length === 0) return <p className="text-xs text-slate-400 dark:text-slate-500">No data</p>;
   const W = 340;
   const H = 120;
   const PAD = { top: 12, right: 12, bottom: 28, left: 36 };
@@ -158,7 +158,7 @@ export default function QualityScoreDashboard({
     return { modSummary, ffAvg };
   }, [moduleScores, freezeFrameScores]);
 
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white text-sm";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
   const allModules = Array.from(new Set(moduleScores.map((r) => r.module))).sort();
 
   const collectorOptions =
@@ -170,13 +170,13 @@ export default function QualityScoreDashboard({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Quality Score</h1>
-        <p className="text-slate-500">Monthly quality scores by module and freeze frame.</p>
+        <p className="text-slate-500 dark:text-slate-400">Monthly quality scores by module and freeze frame.</p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">From</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
           <input
             type="date"
             value={fromInput}
@@ -185,7 +185,7 @@ export default function QualityScoreDashboard({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">To</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
           <input
             type="date"
             value={toInput}
@@ -203,7 +203,7 @@ export default function QualityScoreDashboard({
 
         {!isViewer && (
           <div className="w-44">
-            <label className="block text-xs text-slate-500 mb-1">Team</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
             <Combobox
               options={[
                 { value: "all", label: "All teams" },
@@ -219,7 +219,7 @@ export default function QualityScoreDashboard({
 
         {!isViewer && (
           <div className="w-64">
-            <label className="block text-xs text-slate-500 mb-1">Collector</label>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
             <Combobox
               options={[
                 {
@@ -244,7 +244,7 @@ export default function QualityScoreDashboard({
           <button
             type="button"
             onClick={() => router.push("/quality-score")}
-            className={`${inputCls} text-slate-600 hover:bg-slate-50`}
+            className={`${inputCls} text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800`}
           >
             Reset
           </button>
@@ -253,21 +253,21 @@ export default function QualityScoreDashboard({
 
       {summaryScores && (
         <div>
-          <h2 className="text-sm font-semibold text-slate-500 mb-3">
+          <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3">
             Average for {from} to {to}
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {summaryScores.modSummary.map(({ module, avg }) => (
-              <div key={module} className="bg-white rounded-2xl border border-slate-200 p-4">
-                <p className="text-xs text-slate-500 truncate capitalize">
+              <div key={module} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate capitalize">
                   {module.replace(/_/g, " ")}
                 </p>
                 <p className="text-2xl font-bold mt-1">{avg.toFixed(1)}%</p>
               </div>
             ))}
             {summaryScores.ffAvg !== null && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-4">
-                <p className="text-xs text-slate-500">Freeze Frame</p>
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Freeze Frame</p>
                 <p className="text-2xl font-bold mt-1">{summaryScores.ffAvg.toFixed(1)}%</p>
               </div>
             )}
@@ -282,8 +282,8 @@ export default function QualityScoreDashboard({
             {allModules.map((mod) => {
               const data = (moduleCharts[mod] ?? []).sort((a, b) => a.label.localeCompare(b.label));
               return (
-                <div key={mod} className="bg-white rounded-2xl border border-slate-200 p-4">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-2 capitalize">
+                <div key={mod} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
+                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2 capitalize">
                     {mod.replace(/_/g, " ")}
                   </h3>
                   <LineChart data={data} />
@@ -297,17 +297,17 @@ export default function QualityScoreDashboard({
       {ffChart.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3">Freeze Frame score over time</h2>
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 max-w-lg">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 max-w-lg">
             <LineChart data={ffChart} color="#0284c7" />
           </div>
         </div>
       )}
 
       {allModules.length === 0 && ffChart.length === 0 && (
-        <p className="text-slate-500">
+        <p className="text-slate-500 dark:text-slate-400">
           No quality scores uploaded for this filter.{" "}
           {(role === "Admin" || role === "QualityLeader") && (
-            <a href="/quality-upload" className="text-slate-900 underline">
+            <a href="/quality-upload" className="text-slate-900 dark:text-slate-100 underline">
               Upload scores
             </a>
           )}

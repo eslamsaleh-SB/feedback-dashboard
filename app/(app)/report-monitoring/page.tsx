@@ -75,42 +75,42 @@ export default async function ReportMonitoringPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Unacknowledged Reports</h1>
-        <p className="text-slate-500">
+        <p className="text-slate-500 dark:text-slate-400">
           Reports that have not yet been acknowledged by the assigned collector(s).
         </p>
       </div>
 
-      <div className="text-sm text-slate-500">{unacked.length} unacknowledged</div>
+      <div className="text-sm text-slate-500 dark:text-slate-400">{unacked.length} unacknowledged</div>
 
       {unacked.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center">
           <p className="text-emerald-600 font-medium">All reports have been acknowledged.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50 dark:bg-slate-800">
               <tr>
-                <th className="text-left font-medium text-slate-500 px-4 py-3">Report</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3">Date</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3">Collector</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3">Team</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Report</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Date</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Collector</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Team</th>
               </tr>
             </thead>
             <tbody>
               {unacked.map((row, i) => (
-                <tr key={`${row.report_id}-${row.hr_code}`} className="border-t border-slate-100">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">
+                <tr key={`${row.report_id}-${row.hr_code}`} className="border-t border-slate-100 dark:border-slate-800">
+                  <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-100">
                     {row.report_title}
                   </td>
-                  <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
+                  <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                     {row.report_date ?? "—"}
                   </td>
                   <td className="px-4 py-2.5 whitespace-nowrap">
                     <span className="font-medium">{row.hr_code}</span>{" "}
-                    <span className="text-slate-400">{row.collector_name}</span>
+                    <span className="text-slate-400 dark:text-slate-500">{row.collector_name}</span>
                   </td>
-                  <td className="px-4 py-2.5 text-slate-500">{row.team ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{row.team ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

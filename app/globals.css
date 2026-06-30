@@ -2,9 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-html {
-  color-scheme: light dark;
-}
+/* Lock native controls (scrollbars, date pickers, etc.) to the explicit
+ * theme the user chose via the toggle. Without this, browsers may pick a
+ * different scheme based on the OS preference and the result clashes
+ * with the page colors. */
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
 
 body {
   @apply bg-slate-50 text-slate-900;
@@ -12,4 +15,24 @@ body {
 
 html.dark body {
   @apply bg-slate-950 text-slate-100;
+}
+
+/* Inputs / selects without explicit colors inherit body color, which
+ * breaks once dark mode is on. Force explicit colors so native
+ * controls render correctly in both modes. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select,
+textarea {
+  @apply bg-white text-slate-900;
+}
+
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html.dark select,
+html.dark textarea {
+  @apply bg-slate-900 text-slate-100;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  @apply text-slate-500;
 }

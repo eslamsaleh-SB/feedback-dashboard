@@ -64,7 +64,7 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Accounts</h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
           Set each person&rsquo;s role. Name is managed on the Collectors page.
         </p>
       </div>
@@ -74,46 +74,46 @@ export default function AccountsManager({ accounts }: { accounts: Account[] }) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by code or email..."
-          className="rounded-lg border border-slate-300 px-3 py-2 flex-1 min-w-[240px]"
+          className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 flex-1 min-w-[240px]"
         />
-        <span className="text-sm text-slate-500">{filtered.length} account(s)</span>
+        <span className="text-sm text-slate-500 dark:text-slate-400">{filtered.length} account(s)</span>
       </div>
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-slate-50 dark:bg-slate-800">
             <tr>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Code</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Name</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Email</th>
-              <th className="text-left font-medium text-slate-500 px-4 py-3">Role</th>
-              <th className="text-right font-medium text-slate-500 px-4 py-3"></th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Code</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Name</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Email</th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Role</th>
+              <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-4 text-slate-500">
+                <td colSpan={5} className="p-4 text-slate-500 dark:text-slate-400">
                   No accounts.
                 </td>
               </tr>
             )}
             {filtered.map((a) => (
-              <tr key={a.id} className="border-t border-slate-100">
-                <td className="px-4 py-2.5 whitespace-nowrap font-medium text-slate-800">
+              <tr key={a.id} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="px-4 py-2.5 whitespace-nowrap font-medium text-slate-800 dark:text-slate-100">
                   {a.hr_code ?? "-"}
                 </td>
-                <td className="px-4 py-2.5 text-slate-700">{a.full_name ?? "-"}</td>
-                <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
+                <td className="px-4 py-2.5 text-slate-700 dark:text-slate-200">{a.full_name ?? "-"}</td>
+                <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                   {a.email ?? "(no email)"}
                 </td>
                 <td className="px-4 py-2.5">
                   <select
                     value={a.role}
                     onChange={(e) => setRole(a.id, e.target.value as AppRole)}
-                    className="rounded-lg border border-slate-300 px-2 py-1.5 bg-white text-sm"
+                    className="rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1.5 bg-white dark:bg-slate-900 text-sm"
                   >
                     {ROLE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>

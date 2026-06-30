@@ -188,7 +188,7 @@ export default function MatchTotals({
       label: clabel(c.hr_code, c.name, c.team),
     })),
   ];
-  const inputCls = "rounded-lg border border-slate-300 px-3 py-2 bg-white";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
   const moduleLabel = moduleFilter
     ? MODULES.find((m) => m.value === moduleFilter)?.label
     : null;
@@ -233,27 +233,27 @@ export default function MatchTotals({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Match Total per Module</h1>
-        <p className="text-slate-500">
+        <p className="text-slate-500 dark:text-slate-400">
           Module totals by Match → Collector → Part. Sorted by highest errors.
           Select a module to rank by that module across the full dataset.
         </p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3">
         <div className="w-64">
-          <label className="block text-xs text-slate-500 mb-1">Collector</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
           <Combobox options={collectorOptions} value={collector} onChange={(v) => applyFilters({ collector: v })} placeholder="All collectors" />
         </div>
         <div className="w-44">
-          <label className="block text-xs text-slate-500 mb-1">Module</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Module</label>
           <select value={moduleFilter} onChange={(e) => applyFilters({ module: e.target.value })} className={`${inputCls} w-full`}>
             <option value="">All modules</option>
             {MODULES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </div>
         <div className="w-72">
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
             Errors {moduleLabel ? `(${moduleLabel})` : "(total)"} — match total
           </label>
           <div className="flex gap-2">
@@ -267,24 +267,24 @@ export default function MatchTotals({
           </div>
         </div>
         <div className="w-56">
-          <label className="block text-xs text-slate-500 mb-1">Search Match ID</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Search Match ID</label>
           <div className="flex gap-2">
             <input value={matchInput} onChange={(e) => setMatchInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") applyFilters({ match: matchInput }); }} placeholder="e.g. 1457319" className={`${inputCls} w-full`} />
             <button type="button" onClick={() => applyFilters({ match: matchInput })} className="rounded-lg bg-slate-900 text-white px-3 text-sm font-medium">Find</button>
           </div>
         </div>
         <div className="w-40">
-          <label className="block text-xs text-slate-500 mb-1">Review date — from</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Review date — from</label>
           <input type="date" value={from} max={to || undefined} onChange={(e) => applyFilters({ from: e.target.value })} className={`${inputCls} w-full`} />
         </div>
         <div className="w-40">
-          <label className="block text-xs text-slate-500 mb-1">to</label>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">to</label>
           <input type="date" value={to} min={from || undefined} onChange={(e) => applyFilters({ to: e.target.value })} className={`${inputCls} w-full`} />
         </div>
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-sm text-slate-500">
+        <div className="text-sm text-slate-500 dark:text-slate-400">
           {matches.length} match(es) sorted by highest {moduleLabel ? moduleLabel : "total"} errors
           {capped && (
             <span className="text-amber-600"> — showing top {MAX_MATCHES} across the full dataset. Narrow by collector, date, errors, or Match ID to see more.</span>
@@ -296,36 +296,36 @@ export default function MatchTotals({
               {deleting ? "Deleting..." : `Delete selected (${selected.size})`}
             </button>
           )}
-          <button type="button" onClick={exportCsv} disabled={matches.length === 0} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50">Export CSV</button>
+          <button type="button" onClick={exportCsv} disabled={matches.length === 0} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">Export CSV</button>
         </div>
       </div>
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
 
       {shown.length === 0 ? (
-        <p className="text-slate-500">No matches for this filter.</p>
+        <p className="text-slate-500 dark:text-slate-400">No matches for this filter.</p>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50 dark:bg-slate-800">
               <tr>
                 {canDelete && (
                   <th className="px-3 py-3 w-8">
                     <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all shown" />
                   </th>
                 )}
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Match</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Review date</th>
-                <th className="text-left font-medium text-slate-500 px-4 py-3 whitespace-nowrap">Collector</th>
-                <th className="text-left font-medium text-slate-500 px-3 py-3">Part</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Match</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Review date</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Collector</th>
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-3">Part</th>
                 {moduleFilter ? (
-                  <th className="text-right font-semibold text-slate-900 px-4 py-3 whitespace-nowrap">{moduleLabel}</th>
+                  <th className="text-right font-semibold text-slate-900 dark:text-slate-100 px-4 py-3 whitespace-nowrap">{moduleLabel}</th>
                 ) : (
                   <>
                     {MODULES.map((m) => (
-                      <th key={m.value} className="text-right font-medium text-slate-500 px-3 py-3 whitespace-nowrap">{m.label}</th>
+                      <th key={m.value} className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-3 whitespace-nowrap">{m.label}</th>
                     ))}
-                    <th className="text-right font-semibold text-slate-600 px-4 py-3">Total</th>
+                    <th className="text-right font-semibold text-slate-600 dark:text-slate-300 px-4 py-3">Total</th>
                   </>
                 )}
               </tr>
@@ -336,29 +336,29 @@ export default function MatchTotals({
                   const first = idx === 0;
                   const k = rowKey(p);
                   return (
-                    <tr key={`${m.matchid}-${p.partid}-${p.hr_code ?? "x"}`} className={`${first ? "border-t-2 border-slate-200" : "border-t border-slate-100"} hover:bg-slate-50 ${selected.has(k) ? "bg-amber-50" : ""}`}>
+                    <tr key={`${m.matchid}-${p.partid}-${p.hr_code ?? "x"}`} className={`${first ? "border-t-2 border-slate-200 dark:border-slate-800" : "border-t border-slate-100 dark:border-slate-800"} hover:bg-slate-50 dark:hover:bg-slate-800 ${selected.has(k) ? "bg-amber-50" : ""}`}>
                       {canDelete && (
                         <td className="px-3 py-2.5 align-top">
                           <input type="checkbox" checked={selected.has(k)} onChange={() => toggleRow(k)} />
                         </td>
                       )}
                       <td className="px-4 py-2.5 whitespace-nowrap align-top">
-                        <span className="font-semibold text-slate-800">{m.matchid}</span>
-                        {first && <span className="text-slate-400 font-normal"> ({m.parts.length})</span>}
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">{m.matchid}</span>
+                        {first && <span className="text-slate-400 dark:text-slate-500 font-normal"> ({m.parts.length})</span>}
                       </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-slate-500 align-top">{m.date ? m.date.slice(0, 10) : "—"}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-slate-500 dark:text-slate-400 align-top">{m.date ? m.date.slice(0, 10) : "—"}</td>
                       <td className="px-4 py-2.5 whitespace-nowrap align-top">
                         <span className="font-medium">{p.hr_code ?? "—"}</span>
-                        {p.name && <span className="text-slate-500 ml-1">{first3(p.name)}</span>}
-                        {p.team && <span className="ml-1 text-xs text-slate-400">({p.team})</span>}
+                        {p.name && <span className="text-slate-500 dark:text-slate-400 ml-1">{first3(p.name)}</span>}
+                        {p.team && <span className="ml-1 text-xs text-slate-400 dark:text-slate-500">({p.team})</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-slate-500 align-top">{p.partid}</td>
+                      <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 align-top">{p.partid}</td>
                       {moduleFilter ? (
                         <td className="px-4 py-2.5 text-right font-semibold align-top">{p.counts[moduleFilter] ?? 0}</td>
                       ) : (
                         <>
                           {MODULES.map((mod) => (
-                            <td key={mod.value} className="px-3 py-2.5 text-right text-slate-600 align-top">{p.counts[mod.value] ?? 0}</td>
+                            <td key={mod.value} className="px-3 py-2.5 text-right text-slate-600 dark:text-slate-300 align-top">{p.counts[mod.value] ?? 0}</td>
                           ))}
                           <td className="px-4 py-2.5 text-right font-semibold align-top">{p.total}</td>
                         </>

@@ -57,13 +57,13 @@ export default function QualityUploadPage() {
   }
 
   const inputCls =
-    "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
+    "w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
 
   return (
     <div className="space-y-6 max-w-xl">
       <div>
         <h1 className="text-2xl font-bold">Quality Score Upload</h1>
-        <p className="text-slate-500 mt-1">
+        <p className="text-slate-500 dark:text-slate-400 mt-1">
           Upload monthly quality score files (Module Score or Freeze Frame Score).
           Re-uploading the same month overwrites previous data.
         </p>
@@ -71,10 +71,10 @@ export default function QualityUploadPage() {
 
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5"
+        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5"
       >
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
             File type
           </label>
           <select
@@ -89,7 +89,7 @@ export default function QualityUploadPage() {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
               Year
             </label>
             <select
@@ -105,7 +105,7 @@ export default function QualityUploadPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
               Month
             </label>
             <select
@@ -123,15 +123,15 @@ export default function QualityUploadPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">CSV file</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">CSV file</label>
           <input
             type="file"
             accept=".csv,.tsv,.txt"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:text-white file:px-4 file:py-2 file:text-sm cursor-pointer"
+            className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:text-white file:px-4 file:py-2 file:text-sm cursor-pointer"
           />
           {file && (
-            <p className="text-xs text-slate-400 mt-1">{file.name}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{file.name}</p>
           )}
         </div>
 

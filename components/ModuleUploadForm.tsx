@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
-import Combobox, { type ComboOption } from "@/components/Combobox";
 
 type Collector = { id: string; name: string };
 
@@ -65,11 +64,7 @@ export default function ModuleUploadForm({
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 bg-white";
-  const moduleOptions: ComboOption[] = MODULES.map((m) => ({
-    value: m.value,
-    label: m.label,
-  }));
+  const inputCls = "w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -109,6 +104,7 @@ export default function ModuleUploadForm({
 
   const preview = useMemo(() => records.slice(0, 5), [records]);
   const previewCols = useMemo(() => headers.slice(0, 8), [headers]);
+  const selected = MODULES.find((m) => m.value === module);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -142,7 +138,7 @@ export default function ModuleUploadForm({
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold mb-2">Upload module data (CSV)</h1>
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
         Pick the module and choose its CSV file. Comma or tab delimiters and
         UTF-8/UTF-16 are detected automatically — upload Tableau exports
         directly. Each row is linked to a collector by{" "}
@@ -153,18 +149,22 @@ export default function ModuleUploadForm({
 
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5"
+        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5"
       >
         <div>
           <label className="block text-sm font-medium mb-1">Module</label>
-          <Combobox
-            options={moduleOptions}
+          <select
             value={module}
-            onChange={setModule}
-            placeholder="Select a module…"
-            searchPlaceholder="Search modules…"
-          />
-          <p className="text-xs text-slate-400 mt-1">
+            onChange={(e) => setModule(e.target.value)}
+            className={inputCls}
+          >
+            {MODULES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
             Expected columns: <span className="font-mono">matchid, partid,
             collector (HR code), review_date</span> and either{" "}
             <span className="font-mono">total_mistakes</span> (pre-aggregated) or
@@ -179,10 +179,10 @@ export default function ModuleUploadForm({
             type="file"
             accept=".csv,text/csv"
             onChange={handleFile}
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-white"
+            className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-white"
           />
           {fileName && (
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
               {fileName}
               {parsing
                 ? " · parsing…"
@@ -198,20 +198,20 @@ export default function ModuleUploadForm({
         </div>
 
         {preview.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
             <table className="min-w-full text-xs">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr>
                   {previewCols.map((h) => (
                     <th
                       key={h}
-                      className="text-left font-medium text-slate-500 px-3 py-2 whitespace-nowrap"
+                      className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2 whitespace-nowrap"
                     >
                       {h}
                     </th>
                   ))}
                   {headers.length > previewCols.length && (
-                    <th className="px-3 py-2 text-slate-400">
+                    <th className="px-3 py-2 text-slate-400 dark:text-slate-500">
                       +{headers.length - previewCols.length} more
                     </th>
                   )}
@@ -219,17 +219,17 @@ export default function ModuleUploadForm({
               </thead>
               <tbody>
                 {preview.map((r, i) => (
-                  <tr key={i} className="border-t border-slate-100">
+                  <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
                     {previewCols.map((h) => (
                       <td
                         key={h}
-                        className="px-3 py-1.5 text-slate-600 whitespace-nowrap max-w-[180px] truncate"
+                        className="px-3 py-1.5 text-slate-600 dark:text-slate-300 whitespace-nowrap max-w-[180px] truncate"
                       >
                         {r[h]}
                       </td>
                     ))}
                     {headers.length > previewCols.length && (
-                      <td className="px-3 py-1.5 text-slate-300">…</td>
+                      <td className="px-3 py-1.5 text-slate-300 dark:text-slate-600">…</td>
                     )}
                   </tr>
                 ))}
