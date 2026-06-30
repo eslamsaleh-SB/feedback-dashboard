@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getEffective } from "@/lib/effective";
 import type { AppRole } from "@/components/Sidebar";
-import DashboardView from "@/components/DashboardView";
+import DashboardView, { type CompareTo } from "@/components/DashboardView";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +13,7 @@ function isoDate(d: Date) {
 const isoOk = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
 
 const MODULE_KEYS = [
-  "players",
-  "event",
-  "formation_tactical",
-  "location",
-  "impact",
-  "extras",
-  "freeze_frame",
+  "players","event","formation_tactical","location","impact","extras","freeze_frame",
 ] as const;
 
 function sumByModule(rows: any[] | null | undefined) {
@@ -37,9 +31,9 @@ function avgByModule(rows: any[] | null | undefined) {
     if (!groups[mod]) groups[mod] = [];
     groups[mod].push(Number((r as any).score ?? 0));
   }
-  const out: Record<string, number> = {};
+  const out: Record<string, number | null> = {};
   for (const [k, v] of Object.entries(groups)) {
-    out[k] = v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+    out[k] = v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
   }
   return out;
 }
@@ -48,31 +42,38 @@ function avgScores(rows: any[] | null | undefined): number | null {
   return rows.reduce((a, r: any) => a + Number(r.score ?? 0), 0) / rows.length;
 }
 
-// Default range = this year so far.
 function defaultRange() {
   const now = new Date();
-  return {
-    from: `${now.getFullYear()}-01-01`,
-    to: isoDate(now),
-  };
+  return { from: `${now.getFullYear()}-01-01`, to: isoDate(now) };
 }
 
-// Previous range = same length window immediately before "from".
-function previousRange(fromIso: string, toIso: string) {
-  const from = new Date(fromIso);
-  const to = new Date(toIso);
-  const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86400000) + 1);
-  const prevTo = new Date(from);
-  prevTo.setDate(prevTo.getDate() - 1);
-  const prevFrom = new Date(prevTo);
-  prevFrom.setDate(prevFrom.getDate() - (days - 1));
-  return { prevFromIso: isoDate(prevFrom), prevToIso: isoDate(prevTo) };
+// Shift a [from,to] window back by month / quarter / year. Quarter = 3 months.
+function shiftBack(fromIso: string, toIso: string, mode: CompareTo) {
+  const f = new Date(fromIso);
+  const t = new Date(toIso);
+  function shift(d: Date) {
+    const out = new Date(d);
+    if (mode === "last_year") {
+      out.setFullYear(out.getFullYear() - 1);
+    } else {
+      const months = mode === "last_quarter" ? 3 : 1;
+      out.setMonth(out.getMonth() - months);
+    }
+    return out;
+  }
+  return { prevFrom: isoDate(shift(f)), prevTo: isoDate(shift(t)) };
+}
+
+function prevLabelFor(mode: CompareTo): string {
+  if (mode === "last_quarter") return "previous quarter (same dates, -3 months)";
+  if (mode === "last_year")    return "previous year (same dates, -1 year)";
+  return "previous month (same dates, -1 month)";
 }
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { from?: string; to?: string };
+  searchParams: { from?: string; to?: string; compare?: string };
 }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -86,16 +87,22 @@ export default async function DashboardPage({
   const def = defaultRange();
   const from = isoOk(searchParams.from) ?? def.from;
   const to = isoOk(searchParams.to) ?? def.to;
-  const { prevFromIso, prevToIso } = previousRange(from, to);
+  const compareTo: CompareTo =
+    searchParams.compare === "last_quarter"
+      ? "last_quarter"
+      : searchParams.compare === "last_year"
+      ? "last_year"
+      : "last_month";
+  const { prevFrom, prevTo } = shiftBack(from, to, compareTo);
 
   const curLabel = `${from} to ${to}`;
-  const prevLabel = `${prevFromIso} to ${prevToIso}`;
+  const prevLabel = `${prevFrom} to ${prevTo}`;
 
-  // Feedback attendance stats for the current window.
+  // Feedback attendance for the current window.
   const { data: attendeeRows } = await supabase
     .from("feedback_attendees")
     .select("attendance, feedback_reservations(session_date)");
-  function attendInPeriod(rows: any[], fromStr: string, toStr: string) {
+  function attend(rows: any[], fromStr: string, toStr: string) {
     let total = 0, completed = 0, cancelled = 0, absent = 0;
     for (const r of rows ?? []) {
       const d = r?.feedback_reservations?.session_date ?? null;
@@ -107,7 +114,7 @@ export default async function DashboardPage({
     }
     return { total, completed, cancelled, absent, incomplete: total - completed };
   }
-  const feedback = attendInPeriod(attendeeRows ?? [], from, to);
+  const feedback = attend(attendeeRows ?? [], from, to);
 
   const { count: submittedReports } = await supabase
     .from("match_sessions")
@@ -122,41 +129,29 @@ export default async function DashboardPage({
 
   const [{ data: curMt }, { data: prevMt }] = await Promise.all([
     supabase.rpc("collector_module_totals", { p_from: from, p_to: to }),
-    supabase.rpc("collector_module_totals", { p_from: prevFromIso, p_to: prevToIso }),
+    supabase.rpc("collector_module_totals", { p_from: prevFrom, p_to: prevTo }),
   ]);
   const modulesCur = sumByModule(curMt);
   const modulesPrev = sumByModule(prevMt);
-  const moduleErrorsCur = MODULE_KEYS.reduce((acc, m) => acc + modulesCur[m], 0);
-  const moduleErrorsPrev = MODULE_KEYS.reduce((acc, m) => acc + modulesPrev[m], 0);
+  const moduleErrorsCur = MODULE_KEYS.reduce((a, m) => a + modulesCur[m], 0);
+  const moduleErrorsPrev = MODULE_KEYS.reduce((a, m) => a + modulesPrev[m], 0);
 
-  // Quality scores by upload_month overlapping the window.
-  const monthFirstIso = (d: string) => `${d.slice(0, 7)}-01`;
+  // For quality scores, also shift by month/quarter/year.
+  const monthFirst = (d: string) => `${d.slice(0, 7)}-01`;
   const [{ data: qsRows }, { data: qsPrevRows }] = await Promise.all([
-    supabase
-      .from("quality_scores")
-      .select("module, score, upload_month")
-      .gte("upload_month", monthFirstIso(from))
-      .lte("upload_month", monthFirstIso(to)),
-    supabase
-      .from("quality_scores")
-      .select("module, score, upload_month")
-      .gte("upload_month", monthFirstIso(prevFromIso))
-      .lte("upload_month", monthFirstIso(prevToIso)),
+    supabase.from("quality_scores").select("module, score, upload_month")
+      .gte("upload_month", monthFirst(from)).lte("upload_month", monthFirst(to)),
+    supabase.from("quality_scores").select("module, score, upload_month")
+      .gte("upload_month", monthFirst(prevFrom)).lte("upload_month", monthFirst(prevTo)),
   ]);
   const qualityCurByModule = avgByModule(qsRows);
   const qualityPrevByModule = avgByModule(qsPrevRows);
 
   const [{ data: ffRows }, { data: ffPrevRows }] = await Promise.all([
-    supabase
-      .from("freeze_frame_scores")
-      .select("score, upload_month")
-      .gte("upload_month", monthFirstIso(from))
-      .lte("upload_month", monthFirstIso(to)),
-    supabase
-      .from("freeze_frame_scores")
-      .select("score, upload_month")
-      .gte("upload_month", monthFirstIso(prevFromIso))
-      .lte("upload_month", monthFirstIso(prevToIso)),
+    supabase.from("freeze_frame_scores").select("score, upload_month")
+      .gte("upload_month", monthFirst(from)).lte("upload_month", monthFirst(to)),
+    supabase.from("freeze_frame_scores").select("score, upload_month")
+      .gte("upload_month", monthFirst(prevFrom)).lte("upload_month", monthFirst(prevTo)),
   ]);
   const freezeFrameQualityCur = avgScores(ffRows);
   const freezeFrameQualityPrev = avgScores(ffPrevRows);
@@ -169,8 +164,10 @@ export default async function DashboardPage({
     <DashboardView
       from={from}
       to={to}
+      compareTo={compareTo}
       curLabel={curLabel}
       prevLabel={prevLabel}
+      compareLabel={prevLabelFor(compareTo)}
       submittedReports={submittedReports ?? 0}
       collectorCount={collectorCount ?? 0}
       openNotes={openNotes ?? 0}

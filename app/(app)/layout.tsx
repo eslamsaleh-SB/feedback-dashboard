@@ -16,8 +16,6 @@ export default async function AppLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Self-heal: ensure a profile row exists for the real user (created UNLINKED;
-  // an Admin assigns the collector on the Users page).
   const { data: meCheck } = await supabase
     .from("profiles")
     .select("id")
@@ -43,7 +41,6 @@ export default async function AppLayout({
   if (!eff) redirect("/login");
   const role = eff.profile.role as AppRole;
 
-  // Account list for the Admin "View as" picker.
   let accounts: { id: string; label: string }[] = [];
   if (eff.isAdmin) {
     const { data: profs } = await supabase
@@ -54,14 +51,14 @@ export default async function AppLayout({
       .filter((p: any) => p.id !== eff.realUserId)
       .map((p: any) => ({
         id: p.id as string,
-        label: `${p.hr_code ? p.hr_code + " " : ""}${p.full_name ?? p.email ?? p.id} · ${p.role}`,
+        label: `${p.hr_code ? p.hr_code + " " : ""}${p.full_name ?? p.email ?? p.id} - ${p.role}`,
       }));
   }
 
   const sidebarEmail = eff.viewingAs ? eff.viewingAs.label : user.email ?? "";
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
+    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <Sidebar email={sidebarEmail} role={role} />
       <main className="flex-1 min-w-0 px-6 py-8">
         <div className="max-w-6xl mx-auto">
