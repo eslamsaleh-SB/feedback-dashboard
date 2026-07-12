@@ -120,12 +120,26 @@ export default function QualityScoreDashboard({
   }
 
   const moduleCharts = useMemo(() => {
-    const map: Record<string, { label: string; value: number }[]> = {};
+    // Key by YYYY-MM so June never collapses onto May, and average by
+    // proper sum/count (the old running-average was wrong when >2 collectors
+    // shared a month).
+    const acc: Record<string, Record<string, { sum: number; count: number }>> = {};
     for (const r of moduleScores) {
-      if (!map[r.module]) map[r.module] = [];
-      const existing = map[r.module].find((e) => e.label === fmtMonth(r.upload_month));
-      if (existing) existing.value = (existing.value + r.score) / 2;
-      else map[r.module].push({ label: fmtMonth(r.upload_month), value: r.score });
+      if (!acc[r.module]) acc[r.module] = {};
+      const key = (r.upload_month || "").slice(0, 7);
+      if (!key) continue;
+      if (!acc[r.module][key]) acc[r.module][key] = { sum: 0, count: 0 };
+      acc[r.module][key].sum += r.score;
+      acc[r.module][key].count += 1;
+    }
+    const map: Record<string, { label: string; value: number }[]> = {};
+    for (const [mod, byMonth] of Object.entries(acc)) {
+      map[mod] = Object.entries(byMonth)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, v]) => ({
+          label: fmtMonth(`${key}-01`),
+          value: v.sum / v.count,
+        }));
     }
     return map;
   }, [moduleScores]);
