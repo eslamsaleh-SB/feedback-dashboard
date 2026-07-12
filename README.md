@@ -28,8 +28,20 @@ volume and stays under PostgREST's hard ceiling.
 - `app/(app)/dashboard/page.tsx`
 - `app/(app)/quality-score/page.tsx`
 - `app/(app)/performance-thresholds/page.tsx`
+- `components/QualityScoreDashboard.tsx` *(dark-mode chart fix)*
 
 No SQL. No env-var changes.
+
+## Dark-mode chart fix (also in this update)
+
+The LineChart used a hard-coded `#0f172a` (near-black) stroke. On the
+dark background the line + dots + area fill all disappeared. Changed the
+default color to `currentColor` and wrapped the SVG in
+`text-slate-800 dark:text-slate-100`, so the chart flips its stroke and
+dot colour automatically between light and dark mode. The freeze-frame
+chart still uses its explicit sky colour and reads clearly in both modes.
+Axis labels also use `fill-slate-500 dark:fill-slate-400` so tick text
+stays legible.
 
 ## Verify
 

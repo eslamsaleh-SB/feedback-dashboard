@@ -30,12 +30,13 @@ function fmtMonth(iso: string) {
 
 function LineChart({
   data,
-  color = "#0f172a",
+  color,
 }: {
   data: { label: string; value: number }[];
   color?: string;
 }) {
-  if (data.length === 0) return <p className="text-xs text-slate-400 dark:text-slate-500">No data</p>;
+  if (data.length === 0)
+    return <p className="text-xs text-slate-400 dark:text-slate-500">No data</p>;
   const W = 340;
   const H = 120;
   const PAD = { top: 12, right: 12, bottom: 28, left: 36 };
@@ -50,23 +51,25 @@ function LineChart({
     `M ${xScale(0)},${yScale(minV)} ` +
     data.map((d, i) => `L ${xScale(i)},${yScale(d.value)}`).join(" ") +
     ` L ${xScale(data.length - 1)},${yScale(minV)} Z`;
+  // No color -> inherit current text color so it flips light/dark automatically.
+  const stroke = color ?? "currentColor";
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      <path d={area} fill={color} fillOpacity={0.08} />
-      <polyline points={points} fill="none" stroke={color} strokeWidth={1.8} />
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full text-slate-800 dark:text-slate-100">
+      <path d={area} fill={stroke} fillOpacity={0.1} />
+      <polyline points={points} fill="none" stroke={stroke} strokeWidth={1.8} />
       {data.map((d, i) => (
         <g key={i}>
-          <circle cx={xScale(i)} cy={yScale(d.value)} r={3} fill={color} />
+          <circle cx={xScale(i)} cy={yScale(d.value)} r={3.5} fill={stroke} />
           <title>{d.label}: {d.value.toFixed(2)}%</title>
         </g>
       ))}
       {data.map((d, i) => (
-        <text key={i} x={xScale(i)} y={H - 4} textAnchor="middle" fontSize={8} fill="#94a3b8">
+        <text key={i} x={xScale(i)} y={H - 4} textAnchor="middle" fontSize={8} className="fill-slate-500 dark:fill-slate-400">
           {d.label}
         </text>
       ))}
       {[minV, (minV + maxV) / 2, maxV].map((v, i) => (
-        <text key={i} x={PAD.left - 4} y={yScale(v) + 3} textAnchor="end" fontSize={7} fill="#94a3b8">
+        <text key={i} x={PAD.left - 4} y={yScale(v) + 3} textAnchor="end" fontSize={7} className="fill-slate-500 dark:fill-slate-400">
           {Math.round(v)}%
         </text>
       ))}
@@ -173,25 +176,14 @@ export default function QualityScoreDashboard({
         <p className="text-slate-500 dark:text-slate-400">Monthly quality scores by module and freeze frame.</p>
       </div>
 
-      {/* Filters */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3 items-end">
         <div>
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
-          <input
-            type="date"
-            value={fromInput}
-            onChange={(e) => setFromInput(e.target.value)}
-            className={inputCls}
-          />
+          <input type="date" value={fromInput} onChange={(e) => setFromInput(e.target.value)} className={inputCls} />
         </div>
         <div>
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
-          <input
-            type="date"
-            value={toInput}
-            onChange={(e) => setToInput(e.target.value)}
-            className={inputCls}
-          />
+          <input type="date" value={toInput} onChange={(e) => setToInput(e.target.value)} className={inputCls} />
         </div>
         <button
           type="button"
@@ -224,8 +216,7 @@ export default function QualityScoreDashboard({
               options={[
                 {
                   value: "all",
-                  label:
-                    selectedTeam !== "all" ? `All on ${selectedTeam}` : "All collectors",
+                  label: selectedTeam !== "all" ? `All on ${selectedTeam}` : "All collectors",
                 },
                 ...collectorOptions.map((c) => ({
                   value: c.hr_code,
