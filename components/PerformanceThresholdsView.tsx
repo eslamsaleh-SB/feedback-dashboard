@@ -106,6 +106,7 @@ export default function PerformanceThresholdsView({
 
   const [fromInput, setFromInput] = useState(from);
   const [toInput, setToInput] = useState(to);
+  const [topN, setTopN] = useState<string>("");
   function applyDateRange() {
     const params = new URLSearchParams();
     params.set("from", fromInput);
@@ -187,6 +188,38 @@ export default function PerformanceThresholdsView({
   const errorColumns = activeErrCriteria;
   const scoreColumns = activeScoreCriteria;
 
+  // Top N: sort by sum of selected module errors (DESC = highest offenders)
+  // and by avg of selected module scores (ASC = lowest performers). Slice
+  // to the requested count. Empty topN = show all matched collectors.
+  const topNNum = topN.trim() ? Math.max(0, Number(topN)) : null;
+  const errorsRanked = useMemo(() => {
+    const list = matchedCollectors.map((c) => {
+      const row = moduleErrorsByHr.get(c.hr_code);
+      const total = errorColumns.reduce(
+        (acc, k) => acc + (row ? Number(row[k] ?? 0) : 0),
+        0
+      );
+      return { c, total };
+    });
+    list.sort((a, b) => b.total - a.total);
+    const capped = topNNum != null ? list.slice(0, topNNum) : list;
+    return capped.map((x) => x.c);
+  }, [matchedCollectors, moduleErrorsByHr, errorColumns, topNNum]);
+
+  const scoresRanked = useMemo(() => {
+    const list = matchedCollectors.map((c) => {
+      const scores = avgScoreByHrAndKey[c.hr_code] ?? {};
+      const values = scoreColumns
+        .map((k) => scores[k])
+        .filter((v): v is number => v != null);
+      const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : Number.POSITIVE_INFINITY;
+      return { c, avg };
+    });
+    list.sort((a, b) => a.avg - b.avg);
+    const capped = topNNum != null ? list.slice(0, topNNum) : list;
+    return capped.map((x) => x.c);
+  }, [matchedCollectors, avgScoreByHrAndKey, scoreColumns, topNNum]);
+
   const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
   const cardCls = "bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4";
 
@@ -215,7 +248,7 @@ export default function PerformanceThresholdsView({
       "Team",
       ...errorColumns.map((k) => `${MODULE_LABEL[k]} (>= ${errThresh[k] || 0})`),
     ];
-    const rows = matchedCollectors.map((c) => {
+    const rows = errorsRanked.map((c) => {
       const row = moduleErrorsByHr.get(c.hr_code);
       return [
         c.hr_code,
@@ -233,7 +266,7 @@ export default function PerformanceThresholdsView({
       "Team",
       ...scoreColumns.map((k) => `${SCORE_LABEL[k]} (<= ${scoreThresh[k] || 0}%)`),
     ];
-    const rows = matchedCollectors.map((c) => {
+    const rows = scoresRanked.map((c) => {
       const scores = avgScoreByHrAndKey[c.hr_code] ?? {};
       return [
         c.hr_code,
@@ -285,16 +318,31 @@ export default function PerformanceThresholdsView({
         >
           Apply date range
         </button>
-        <div className="ml-auto flex items-end gap-2">
-          <label className="block text-xs text-slate-500 dark:text-slate-400">Match logic</label>
-          <select
-            value={matchLogic}
-            onChange={(e) => setMatchLogic(e.target.value as MatchLogic)}
-            className={inputCls}
-          >
-            <option value="any">Any selected criterion</option>
-            <option value="all">All selected criteria</option>
-          </select>
+        <div className="ml-auto flex items-end gap-3">
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+              Top N (leave empty = all)
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={topN}
+              onChange={(e) => setTopN(e.target.value)}
+              placeholder="e.g. 40"
+              className={`${inputCls} w-28`}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Match logic</label>
+            <select
+              value={matchLogic}
+              onChange={(e) => setMatchLogic(e.target.value as MatchLogic)}
+              className={inputCls}
+            >
+              <option value="any">Any selected criterion</option>
+              <option value="all">All selected criteria</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -406,7 +454,8 @@ export default function PerformanceThresholdsView({
         </p>
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {matchedCollectors.length} collector(s) match {matchLogic === "any" ? "any" : "all"} selected criteria ({from} to {to})
+          {matchedCollectors.length} collector(s) match {matchLogic === "any" ? "any" : "all"} selected criteria ({from} to {to}
+          {topNNum != null ? `, showing top ${topNNum}` : ""})
         </p>
       )}
 
@@ -419,7 +468,7 @@ export default function PerformanceThresholdsView({
             <button
               type="button"
               onClick={exportErrorsCsv}
-              disabled={matchedCollectors.length === 0}
+              disabled={errorsRanked.length === 0}
               className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
             >
               Export CSV
@@ -439,14 +488,14 @@ export default function PerformanceThresholdsView({
               </tr>
             </thead>
             <tbody>
-              {matchedCollectors.length === 0 ? (
+              {errorsRanked.length === 0 ? (
                 <tr>
                   <td colSpan={3 + errorColumns.length} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                     No collectors match.
                   </td>
                 </tr>
               ) : (
-                matchedCollectors.map((c) => {
+                errorsRanked.map((c) => {
                   const row = moduleErrorsByHr.get(c.hr_code);
                   return (
                     <tr key={c.hr_code} className="border-t border-slate-100 dark:border-slate-800">
@@ -486,7 +535,7 @@ export default function PerformanceThresholdsView({
             <button
               type="button"
               onClick={exportScoresCsv}
-              disabled={matchedCollectors.length === 0}
+              disabled={scoresRanked.length === 0}
               className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
             >
               Export CSV
@@ -506,14 +555,14 @@ export default function PerformanceThresholdsView({
               </tr>
             </thead>
             <tbody>
-              {matchedCollectors.length === 0 ? (
+              {scoresRanked.length === 0 ? (
                 <tr>
                   <td colSpan={3 + scoreColumns.length} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                     No collectors match.
                   </td>
                 </tr>
               ) : (
-                matchedCollectors.map((c) => {
+                scoresRanked.map((c) => {
                   const scores = avgScoreByHrAndKey[c.hr_code] ?? {};
                   return (
                     <tr key={c.hr_code} className="border-t border-slate-100 dark:border-slate-800">

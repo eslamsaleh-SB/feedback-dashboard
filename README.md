@@ -32,6 +32,18 @@ volume and stays under PostgREST's hard ceiling.
 
 No SQL. No env-var changes.
 
+## Top N filter on Performance Thresholds (also in this update)
+
+Added a **Top N** number input next to the Match logic dropdown. Behavior:
+
+- **Module Errors table** - sorted by *sum of selected module errors* DESC, sliced to N. Top N highest offenders.
+- **Quality Scores table** - sorted by *avg of selected module scores* ASC, sliced to N. Bottom N lowest performers.
+- Empty N = show all matches (previous behavior).
+- Threshold filters still apply first; Top N caps the already-filtered set.
+- CSV exports use the same ranked, sliced lists.
+
+Example: check Players (errors >= 40), set Top N = 40 -> table shows the 40 collectors with the most Players errors among everyone crossing the 40 threshold.
+
 ## Dark-mode chart fix (also in this update)
 
 The LineChart used a hard-coded `#0f172a` (near-black) stroke. On the
