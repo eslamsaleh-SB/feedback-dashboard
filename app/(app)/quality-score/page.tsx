@@ -80,7 +80,7 @@ export default async function QualityScorePage({
     .select("hr_code, module, score, match_count, upload_month")
     .gte("upload_month", monthFrom)
     .lte("upload_month", monthTo)
-    .order("upload_month", { ascending: true });
+    .order("upload_month", { ascending: true }).limit(50000);
   if (effectiveCollector) qsQuery = qsQuery.eq("hr_code", effectiveCollector);
   else if (teamHrCodes && teamHrCodes.length > 0)
     qsQuery = qsQuery.in("hr_code", teamHrCodes);
@@ -91,7 +91,7 @@ export default async function QualityScorePage({
     .select("hr_code, score, match_count, upload_month")
     .gte("upload_month", monthFrom)
     .lte("upload_month", monthTo)
-    .order("upload_month", { ascending: true });
+    .order("upload_month", { ascending: true }).limit(50000);
   if (effectiveCollector) ffQuery = ffQuery.eq("hr_code", effectiveCollector);
   else if (teamHrCodes && teamHrCodes.length > 0)
     ffQuery = ffQuery.in("hr_code", teamHrCodes);

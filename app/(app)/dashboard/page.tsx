@@ -140,18 +140,18 @@ export default async function DashboardPage({
   const monthFirst = (d: string) => `${d.slice(0, 7)}-01`;
   const [{ data: qsRows }, { data: qsPrevRows }] = await Promise.all([
     supabase.from("quality_scores").select("module, score, upload_month")
-      .gte("upload_month", monthFirst(from)).lte("upload_month", monthFirst(to)),
+      .gte("upload_month", monthFirst(from)).lte("upload_month", monthFirst(to)).limit(50000),
     supabase.from("quality_scores").select("module, score, upload_month")
-      .gte("upload_month", monthFirst(prevFrom)).lte("upload_month", monthFirst(prevTo)),
+      .gte("upload_month", monthFirst(prevFrom)).lte("upload_month", monthFirst(prevTo)).limit(50000),
   ]);
   const qualityCurByModule = avgByModule(qsRows);
   const qualityPrevByModule = avgByModule(qsPrevRows);
 
   const [{ data: ffRows }, { data: ffPrevRows }] = await Promise.all([
     supabase.from("freeze_frame_scores").select("score, upload_month")
-      .gte("upload_month", monthFirst(from)).lte("upload_month", monthFirst(to)),
+      .gte("upload_month", monthFirst(from)).lte("upload_month", monthFirst(to)).limit(50000),
     supabase.from("freeze_frame_scores").select("score, upload_month")
-      .gte("upload_month", monthFirst(prevFrom)).lte("upload_month", monthFirst(prevTo)),
+      .gte("upload_month", monthFirst(prevFrom)).lte("upload_month", monthFirst(prevTo)).limit(50000),
   ]);
   const freezeFrameQualityCur = avgScores(ffRows);
   const freezeFrameQualityPrev = avgScores(ffPrevRows);

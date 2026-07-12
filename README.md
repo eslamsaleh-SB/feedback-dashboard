@@ -1,99 +1,45 @@
-# v49 - Dashboard polish + Dark Mode
+# v50 - Fix "June not showing" (Supabase row limit)
 
-No SQL. No env-var changes.
+## Root cause
+
+The Quality Score / Dashboard / Performance Thresholds pages query
+`quality_scores` (and `freeze_frame_scores`) with a date range filter and
+`.order("upload_month", { ascending: true })` but no explicit `.limit()`.
+
+PostgREST / Supabase caps the response at ~1,000 rows when no limit is set.
+Your DB has:
+
+- `2026-05-01` -> 2972 rows
+- `2026-06-01` -> 1930 rows
+
+The query returned only ~1,671 May rows (all it could fit under the cap)
+sorted ASC by month, so June never made it into the payload. Result: cards
+and charts showed May data only, and looked like your June upload wasn't
+reflected.
+
+## Fix
+
+Added `.limit(50000)` to every unbounded `quality_scores` /
+`freeze_frame_scores` fetch. 50000 is well above any realistic monthly
+volume and stays under PostgREST's hard ceiling.
 
 ## Files to push
 
-- `tailwind.config.ts` (enables `darkMode: "class"`)
-- `app/globals.css` (dark-mode body background/text)
-- `app/layout.tsx` (no-flash theme bootstrap in `<head>`)
-- `app/(app)/layout.tsx` (dark variants on the shell)
-- `app/(app)/dashboard/page.tsx` (compareTo logic, shifted prev range)
-- `components/DashboardView.tsx` (trend fix, compareTo picker, reorder, collapsibles, dark variants)
-- `components/Sidebar.tsx` (dark variants + ThemeToggle button)
-- `components/ThemeToggle.tsx` *(new)*
+- `app/(app)/dashboard/page.tsx`
+- `app/(app)/quality-score/page.tsx`
+- `app/(app)/performance-thresholds/page.tsx`
 
-## What changed
-
-### Trend arrows fix
-
-Old code: when the previous period had zero data, the formula returned
-`(curr - 0) / 0 * 100` and we clamped to `100%`. Result: every card
-showed "↑ 100%" the first time you used the app. Fixed:
-
-- `prev == 0 && curr == 0` -> "no change"
-- `prev == 0 && curr > 0` -> renders the grey "no baseline" hint instead
-  of a misleading 100%
-- normal `prev > 0` case unchanged
-
-### Comparison picker (Last month / quarter / year)
-
-Dashboard now has a **Compare to** dropdown next to From / To:
-
-- *Last month* (default) - shifts the `[from, to]` window back by 1
-  calendar month
-- *Last quarter* - shifts back by 3 calendar months
-- *Last year* - shifts back by 1 year
-
-A small line under the filter bar shows the exact previous window the
-cards are comparing against. Persisted in `?compare=` URL param.
-
-### Header date label fix
-
-Removed the "vs YYYY-MM-DD to YYYY-MM-DD" string that lived next to the
-Apply button (it was easy to mistake for today's date). The current
-date sits cleanly under the page title; the comparison context now
-lives directly under the filter bar as
-*"Comparing against previous month: 2026-02-01 to 2026-03-31"*.
-
-### Layout reorder + collapsible sections
-
-New order:
-1. Top stats - Submitted Reports / Collectors / Open Notes
-2. Feedback Sessions (5 cards) - directly below the top stats
-3. **Module Errors** - now a collapsible card with a chevron toggle
-4. **Quality Scores** - same collapsible treatment
-
-Click the chevron on the right of either section header to collapse / expand.
-
-### Dark Mode
-
-Sidewide light / dark theme:
-
-- `tailwind.config.ts` enables Tailwind's `class` strategy.
-- A tiny inline script in `<head>` reads `localStorage.theme` (or the
-  OS preference) and applies `.dark` to `<html>` **before** React
-  hydrates. No white flash.
-- A **theme toggle button** lives at the bottom of the sidebar (shows
-  the opposite mode's name). Click flips the theme and persists the
-  choice.
-- Dark variants applied to: app shell, sidebar, dashboard cards /
-  collapsibles, header.
-
-If you want to extend dark mode to other pages later, the pattern is
-the same: add `dark:` classes on backgrounds (`bg-slate-900`),
-borders (`border-slate-800`) and text (`text-slate-100`).
-
-### UI polish
-
-- Header tightened (page title + date stacked, filters right-aligned).
-- All cards share one rounded / border treatment with hover state.
-- Sidebar nav row now uses the same active / inactive pattern in both
-  themes.
-- Numbers render with `tabular-nums` where they appear in tables (no
-  change needed - already in PerformanceThresholds).
+No SQL. No env-var changes.
 
 ## Verify
 
-1. Open `/dashboard`. Bottom of the sidebar shows a **Dark** /
-   **Light** button. Click it - whole UI flips. Reload - theme stays.
-2. Comparison: pick `Compare to: Last quarter`, click Apply. The line
-   under the filter bar should now say "Comparing against previous
-   quarter (same dates, -3 months): <prev-from> to <prev-to>". The
-   trend arrows on the cards update accordingly.
-3. Trend correctness: pick a date range that has zero data in the
-   previous window. Cards now show "no baseline" instead of "↑ 100%".
-4. Layout: scroll the page - Feedback Sessions appears directly under
-   the top stats; Module Errors and Quality Scores live below it as
-   collapsible cards. Click the chevron to collapse; click again to
-   expand.
+After deploy, open `/quality-score?from=2026-05-01&to=2026-06-30`. You
+should now see:
+
+- Header still says "Average for 2026-05-01 to 2026-06-30".
+- Cards should shift because they now include June rows in the average.
+- "Module scores over time" charts should show **two** dots per module
+  (May 2026 and Jun 2026), joined by a line.
+
+Also verify Dashboard and Performance Thresholds pages: numbers should
+change to reflect the full month range.

@@ -58,12 +58,12 @@ export default async function PerformanceThresholdsPage({
       .from("quality_scores")
       .select("hr_code, module, score, match_count, upload_month")
       .gte("upload_month", monthFromIso)
-      .lte("upload_month", monthToIso),
+      .lte("upload_month", monthToIso).limit(50000),
     supabase
       .from("freeze_frame_scores")
       .select("hr_code, score, match_count, upload_month")
       .gte("upload_month", monthFromIso)
-      .lte("upload_month", monthToIso),
+      .lte("upload_month", monthToIso).limit(50000),
   ]);
 
   return (
