@@ -18,6 +18,31 @@ function yearStartIso(d = new Date()) {
   return `${d.getFullYear()}-01-01`;
 }
 
+/**
+ * Fetch every row matching the filter by paginating with `.range()`.
+ * `.limit()` alone is capped by PostgREST's max-rows setting; range-based
+ * pagination bypasses that so all months land in the payload.
+ */
+async function fetchAll<T>(
+  build: (q: any) => any,
+  supabase: any,
+  table: string,
+  select: string
+): Promise<T[]> {
+  const out: T[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; ; offset += PAGE) {
+    let q = supabase.from(table).select(select);
+    q = build(q).range(offset, offset + PAGE - 1);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    out.push(...(data as T[]));
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
 export default async function QualityScorePage({
   searchParams,
 }: {
@@ -36,11 +61,9 @@ export default async function QualityScorePage({
   const role = (profile?.role ?? "Viewer") as AppRole;
   const myHr = profile?.hr_code ?? null;
 
-  // Default = this year so far.
   const from = isoOk(searchParams.from) ?? yearStartIso();
   const to = isoOk(searchParams.to) ?? todayIso();
 
-  // upload_month is the first of each month; clamp range to month boundaries.
   const monthFrom = `${from.slice(0, 7)}-01`;
   const monthTo = `${to.slice(0, 7)}-01`;
 
@@ -75,27 +98,25 @@ export default async function QualityScorePage({
     ? (filteredCollectors ?? []).map((c: any) => c.hr_code as string)
     : null;
 
-  let qsQuery = supabase
-    .from("quality_scores")
-    .select("hr_code, module, score, match_count, upload_month")
-    .gte("upload_month", monthFrom)
-    .lte("upload_month", monthTo)
-    .order("upload_month", { ascending: true }).limit(50000);
-  if (effectiveCollector) qsQuery = qsQuery.eq("hr_code", effectiveCollector);
-  else if (teamHrCodes && teamHrCodes.length > 0)
-    qsQuery = qsQuery.in("hr_code", teamHrCodes);
-  const { data: qsRows } = await qsQuery;
+  const applyFilters = (q: any) => {
+    q = q.gte("upload_month", monthFrom).lte("upload_month", monthTo).order("upload_month", { ascending: true });
+    if (effectiveCollector) q = q.eq("hr_code", effectiveCollector);
+    else if (teamHrCodes && teamHrCodes.length > 0) q = q.in("hr_code", teamHrCodes);
+    return q;
+  };
 
-  let ffQuery = supabase
-    .from("freeze_frame_scores")
-    .select("hr_code, score, match_count, upload_month")
-    .gte("upload_month", monthFrom)
-    .lte("upload_month", monthTo)
-    .order("upload_month", { ascending: true }).limit(50000);
-  if (effectiveCollector) ffQuery = ffQuery.eq("hr_code", effectiveCollector);
-  else if (teamHrCodes && teamHrCodes.length > 0)
-    ffQuery = ffQuery.in("hr_code", teamHrCodes);
-  const { data: ffRows } = await ffQuery;
+  const qsRows = await fetchAll<any>(
+    applyFilters,
+    supabase,
+    "quality_scores",
+    "hr_code, module, score, match_count, upload_month"
+  );
+  const ffRows = await fetchAll<any>(
+    applyFilters,
+    supabase,
+    "freeze_frame_scores",
+    "hr_code, score, match_count, upload_month"
+  );
 
   return (
     <QualityScoreDashboard
@@ -109,14 +130,14 @@ export default async function QualityScorePage({
       teams={teams}
       from={from}
       to={to}
-      moduleScores={(qsRows ?? []).map((r: any) => ({
+      moduleScores={qsRows.map((r: any) => ({
         hr_code: r.hr_code as string,
         module: r.module as string,
         score: Number(r.score),
         match_count: r.match_count as number | null,
         upload_month: r.upload_month as string,
       }))}
-      freezeFrameScores={(ffRows ?? []).map((r: any) => ({
+      freezeFrameScores={ffRows.map((r: any) => ({
         hr_code: r.hr_code as string,
         score: Number(r.score),
         match_count: r.match_count as number | null,

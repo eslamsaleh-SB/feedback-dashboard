@@ -19,9 +19,17 @@ reflected.
 
 ## Fix
 
-Added `.limit(50000)` to every unbounded `quality_scores` /
-`freeze_frame_scores` fetch. 50000 is well above any realistic monthly
-volume and stays under PostgREST's hard ceiling.
+Replaced the unbounded `.limit(50000)` with an explicit `.range()`-based
+pagination loop. PostgREST's `max-rows` server config caps single-page
+responses (usually at 1000), so `.limit(N)` beyond the cap is ignored -
+that's why May consumed the whole page and June never appeared. The new
+loop fetches 1000-row pages until the table is exhausted, so every month
+in the filter range lands in the payload.
+
+Also made the Performance Thresholds filters more useful: the per-module
+threshold input is now optional (checkbox alone activates the module),
+and a new **Top N** input caps results to the highest-error / lowest-score
+collectors regardless of threshold.
 
 ## Files to push
 

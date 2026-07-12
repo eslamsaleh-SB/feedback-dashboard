@@ -143,11 +143,14 @@ export default function PerformanceThresholdsView({
     return m;
   }, [moduleErrors]);
 
+  // A module is "active" as soon as its checkbox is on. Threshold is
+  // optional now: if set it filters (errors >= N, scores <= N); if empty
+  // no filter applies and Top N alone ranks the results.
   const activeErrCriteria = MODULE_KEYS.filter(
-    (k) => moduleFilterOn && errChecked[k] && errThresh[k] !== ""
+    (k) => moduleFilterOn && errChecked[k]
   );
   const activeScoreCriteria = SCORE_KEYS.filter(
-    (k) => scoreFilterOn && scoreChecked[k] && scoreThresh[k] !== ""
+    (k) => scoreFilterOn && scoreChecked[k]
   );
 
   const matchedCollectors = useMemo(() => {
@@ -158,16 +161,20 @@ export default function PerformanceThresholdsView({
       const errRow = moduleErrorsByHr.get(c.hr_code);
       const scoreRow = avgScoreByHrAndKey[c.hr_code];
 
+      // Threshold empty -> pass through (no filter). Threshold set -> gate.
       const errResults = activeErrCriteria.map((k) => {
+        if (errThresh[k] === "") return true;
         const value = errRow ? Number(errRow[k] ?? 0) : 0;
-        const limit = Number(errThresh[k]);
-        return value >= limit;
+        return value >= Number(errThresh[k]);
       });
       const scoreResults = activeScoreCriteria.map((k) => {
+        if (scoreThresh[k] === "") {
+          // Only pass if the collector actually has a value for this module.
+          return scoreRow?.[k] != null;
+        }
         const value = scoreRow?.[k];
         if (value == null) return false;
-        const limit = Number(scoreThresh[k]);
-        return value <= limit;
+        return value <= Number(scoreThresh[k]);
       });
 
       const checks = [...errResults, ...scoreResults];
@@ -578,7 +585,7 @@ export default function PerformanceThresholdsView({
                             key={k}
                             className={`px-4 py-2.5 text-right tabular-nums ${
                               cold ? "text-red-600 font-semibold" : "text-slate-700 dark:text-slate-200"
-                            }`}
+                             }`}
                           >
                             {value == null ? "-" : `${value.toFixed(1)}%`}
                           </td>

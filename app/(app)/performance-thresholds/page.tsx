@@ -19,6 +19,32 @@ function todayIso(d = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// Range-paginated fetch bypasses PostgREST's max-rows cap so every row lands.
+async function fetchAllInMonthRange<T>(
+  supabase: any,
+  table: string,
+  select: string,
+  monthFrom: string,
+  monthTo: string
+): Promise<T[]> {
+  const out: T[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(select)
+      .gte("upload_month", monthFrom)
+      .lte("upload_month", monthTo)
+      .order("upload_month", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    out.push(...(data as T[]));
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
 export default async function PerformanceThresholdsPage({
   searchParams,
 }: {
@@ -33,37 +59,33 @@ export default async function PerformanceThresholdsPage({
   const role = profile?.role ?? "Viewer";
   if (!["Admin", "Uploader", "Supervisor"].includes(role)) redirect("/analytics");
 
-  // Default date range: this year to today.
   const from = isoOk(searchParams.from) ?? yearStart();
   const to = isoOk(searchParams.to) ?? todayIso();
 
-  // Same-month boundaries for the score tables (upload_month is the first day
-  // of the month).
   const monthFromIso = `${from.slice(0, 7)}-01`;
   const monthToIso = `${to.slice(0, 7)}-01`;
 
-  const [
-    { data: collectorRows },
-    { data: moduleRows },
-    { data: qualityRows },
-    { data: freezeFrameRows },
-  ] = await Promise.all([
+  const [{ data: collectorRows }, { data: moduleRows }, qualityRows, freezeFrameRows] = await Promise.all([
     supabase
       .from("collectors")
       .select("hr_code, name, team")
       .not("hr_code", "is", null)
       .order("name"),
     supabase.rpc("collector_module_totals", { p_from: from, p_to: to }),
-    supabase
-      .from("quality_scores")
-      .select("hr_code, module, score, match_count, upload_month")
-      .gte("upload_month", monthFromIso)
-      .lte("upload_month", monthToIso).limit(50000),
-    supabase
-      .from("freeze_frame_scores")
-      .select("hr_code, score, match_count, upload_month")
-      .gte("upload_month", monthFromIso)
-      .lte("upload_month", monthToIso).limit(50000),
+    fetchAllInMonthRange<any>(
+      supabase,
+      "quality_scores",
+      "hr_code, module, score, match_count, upload_month",
+      monthFromIso,
+      monthToIso
+    ),
+    fetchAllInMonthRange<any>(
+      supabase,
+      "freeze_frame_scores",
+      "hr_code, score, match_count, upload_month",
+      monthFromIso,
+      monthToIso
+    ),
   ]);
 
   return (
@@ -87,13 +109,13 @@ export default async function PerformanceThresholdsPage({
         total: Number(r.total ?? 0),
         matches: Number(r.matches ?? 0),
       }))}
-      qualityScores={(qualityRows ?? []).map((r: any) => ({
+      qualityScores={qualityRows.map((r: any) => ({
         hr_code: r.hr_code as string,
         module: r.module as string,
         score: Number(r.score ?? 0),
         upload_month: r.upload_month as string,
       }))}
-      freezeFrameScores={(freezeFrameRows ?? []).map((r: any) => ({
+      freezeFrameScores={freezeFrameRows.map((r: any) => ({
         hr_code: r.hr_code as string,
         score: Number(r.score ?? 0),
         upload_month: r.upload_month as string,

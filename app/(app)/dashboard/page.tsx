@@ -47,7 +47,6 @@ function defaultRange() {
   return { from: `${now.getFullYear()}-01-01`, to: isoDate(now) };
 }
 
-// Shift a [from,to] window back by month / quarter / year. Quarter = 3 months.
 function shiftBack(fromIso: string, toIso: string, mode: CompareTo) {
   const f = new Date(fromIso);
   const t = new Date(toIso);
@@ -98,7 +97,6 @@ export default async function DashboardPage({
   const curLabel = `${from} to ${to}`;
   const prevLabel = `${prevFrom} to ${prevTo}`;
 
-  // Feedback attendance for the current window.
   const { data: attendeeRows } = await supabase
     .from("feedback_attendees")
     .select("attendance, feedback_reservations(session_date)");
@@ -136,23 +134,41 @@ export default async function DashboardPage({
   const moduleErrorsCur = MODULE_KEYS.reduce((a, m) => a + modulesCur[m], 0);
   const moduleErrorsPrev = MODULE_KEYS.reduce((a, m) => a + modulesPrev[m], 0);
 
-  // For quality scores, also shift by month/quarter/year.
   const monthFirst = (d: string) => `${d.slice(0, 7)}-01`;
-  const [{ data: qsRows }, { data: qsPrevRows }] = await Promise.all([
-    supabase.from("quality_scores").select("module, score, upload_month")
-      .gte("upload_month", monthFirst(from)).lte("upload_month", monthFirst(to)).limit(50000),
-    supabase.from("quality_scores").select("module, score, upload_month")
-      .gte("upload_month", monthFirst(prevFrom)).lte("upload_month", monthFirst(prevTo)).limit(50000),
+
+  // Range-paginated fetch bypasses PostgREST's max-rows cap.
+  async function fetchAllInRange(
+    table: string,
+    select: string,
+    fromMonth: string,
+    toMonth: string
+  ): Promise<any[]> {
+    const out: any[] = [];
+    const PAGE = 1000;
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await supabase
+        .from(table)
+        .select(select)
+        .gte("upload_month", fromMonth)
+        .lte("upload_month", toMonth)
+        .order("upload_month", { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      out.push(...data);
+      if (data.length < PAGE) break;
+    }
+    return out;
+  }
+
+  const [qsRows, qsPrevRows, ffRows, ffPrevRows] = await Promise.all([
+    fetchAllInRange("quality_scores", "module, score, upload_month", monthFirst(from), monthFirst(to)),
+    fetchAllInRange("quality_scores", "module, score, upload_month", monthFirst(prevFrom), monthFirst(prevTo)),
+    fetchAllInRange("freeze_frame_scores", "score, upload_month", monthFirst(from), monthFirst(to)),
+    fetchAllInRange("freeze_frame_scores", "score, upload_month", monthFirst(prevFrom), monthFirst(prevTo)),
   ]);
   const qualityCurByModule = avgByModule(qsRows);
   const qualityPrevByModule = avgByModule(qsPrevRows);
-
-  const [{ data: ffRows }, { data: ffPrevRows }] = await Promise.all([
-    supabase.from("freeze_frame_scores").select("score, upload_month")
-      .gte("upload_month", monthFirst(from)).lte("upload_month", monthFirst(to)).limit(50000),
-    supabase.from("freeze_frame_scores").select("score, upload_month")
-      .gte("upload_month", monthFirst(prevFrom)).lte("upload_month", monthFirst(prevTo)).limit(50000),
-  ]);
   const freezeFrameQualityCur = avgScores(ffRows);
   const freezeFrameQualityPrev = avgScores(ffPrevRows);
 
