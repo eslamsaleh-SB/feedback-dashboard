@@ -12,8 +12,11 @@ export const runtime = "nodejs";
 //   5. Set env vars in Vercel:
 //        GOOGLE_SERVICE_ACCOUNT_EMAIL = the JSON `client_email`
 //        GOOGLE_SERVICE_ACCOUNT_KEY   = the JSON `private_key` (paste as-is; \n escapes are handled)
-//        GOOGLE_SLIDES_SHARE_WITH     = optional, comma-separated user emails to grant edit access
+//        GOOGLE_SLIDES_SHARE_WITH     = optional, comma-separated Google-account emails to grant EDIT access
 //   6. Run `npm install` locally then commit package-lock, or Vercel installs it on next deploy.
+//
+// Every generated deck is also made public via "anyone with the link can view",
+// so recipients WITHOUT Google accounts can still open + download the deck.
 
 async function requireReviewer(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -134,7 +137,17 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   await slides.presentations.batchUpdate({ presentationId, requestBody: { requests } });
 
-  // 3) Share with configured emails.
+  // 3) Public "anyone with link" access so users without Google accounts can view + download.
+  try {
+    await drive.permissions.create({
+      fileId: presentationId,
+      requestBody: { type: "anyone", role: "reader" },
+    });
+  } catch (e: any) {
+    console.warn(`[export-slides] anyone-with-link share failed:`, e?.message ?? e);
+  }
+
+  // 4) Named editors (must be Google accounts).
   const shareWith = (process.env.GOOGLE_SLIDES_SHARE_WITH || "")
     .split(",")
     .map((s) => s.trim())
