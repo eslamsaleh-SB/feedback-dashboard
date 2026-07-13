@@ -21,6 +21,11 @@ export const maxDuration = 60;
 //
 // Every generated deck is also made public via "anyone with the link can view",
 // so recipients WITHOUT Google accounts can still open + download the deck.
+//
+// IMPORTANT: this route creates the deck via drive.files.create with mimeType
+// application/vnd.google-apps.presentation, NOT via slides.presentations.create.
+// The Slides create endpoint often returns "The caller does not have permission"
+// from a service account context even with the API enabled; Drive works.
 
 async function requireReviewer(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -104,29 +109,37 @@ async function handle(_req: NextRequest, id: string) {
   const slides = google.slides({ version: "v1", auth: jwt });
   const drive = google.drive({ version: "v3", auth: jwt });
 
-  let createRes: any;
+  // 1) Create the deck as a Drive file (works from service accounts).
+  let presentationId: string;
   try {
-    createRes = await slides.presentations.create({ requestBody: { title: pres.title } });
+    const driveCreate = await drive.files.create({
+      requestBody: {
+        name: pres.title,
+        mimeType: "application/vnd.google-apps.presentation",
+      },
+      fields: "id",
+    });
+    presentationId = driveCreate.data.id as string;
   } catch (e: any) {
     const msg = e?.message ?? String(e);
-    console.error("[export-slides] slides.presentations.create failed:", msg);
-    if (/does not have permission/i.test(msg)) {
-      return NextResponse.json(
-        {
-          error:
-            "Google denied the create call: 'The caller does not have permission'. This almost always means: (1) Google Slides API is NOT enabled in the Cloud project the service account belongs to, OR (2) Google Drive API is NOT enabled in that same project, OR (3) the service account key is from a different project than the one where you enabled the APIs. Open https://console.cloud.google.com/apis/library, confirm you are in the CORRECT project (top bar), enable BOTH 'Google Slides API' and 'Google Drive API', wait ~1 minute, then retry.",
-        },
-        { status: 500 }
-      );
-    }
-    return NextResponse.json({ error: `Slides create failed: ${msg}` }, { status: 500 });
+    console.error("[export-slides] drive.files.create failed:", msg);
+    return NextResponse.json({ error: `Drive create failed: ${msg}` }, { status: 500 });
   }
-  const presentationId = createRes.data.presentationId as string;
+
+  // 2) Read the empty deck to learn its default first-slide objectId.
+  let createRes: any;
+  try {
+    createRes = await slides.presentations.get({ presentationId });
+  } catch (e: any) {
+    const msg = e?.message ?? String(e);
+    console.error("[export-slides] slides.presentations.get failed:", msg);
+    return NextResponse.json({ error: `Slides get failed: ${msg}` }, { status: 500 });
+  }
 
   const requests: any[] = [];
-  const firstSlideId = createRes.data.slides?.[0]?.objectId;
-  if (firstSlideId) requests.push({ deleteObject: { objectId: firstSlideId } });
+  const initialFirstSlideId: string | undefined = createRes.data.slides?.[0]?.objectId;
 
+  // Title slide first (order matters - never delete the ONLY slide in an empty deck).
   requests.push({
     createSlide: {
       objectId: "title_slide",
@@ -140,6 +153,11 @@ async function handle(_req: NextRequest, id: string) {
   requests.push({ insertText: { objectId: "title_slide_title", text: pres.title } });
   if (pres.description) {
     requests.push({ insertText: { objectId: "title_slide_subtitle", text: pres.description } });
+  }
+
+  // Now safe to remove the empty default slide.
+  if (initialFirstSlideId) {
+    requests.push({ deleteObject: { objectId: initialFirstSlideId } });
   }
 
   pages.forEach((p: any, i: number) => {
@@ -173,6 +191,7 @@ async function handle(_req: NextRequest, id: string) {
     return NextResponse.json({ error: `Slides content update failed: ${msg}` }, { status: 500 });
   }
 
+  // 3) Public "anyone with link" access so users without Google accounts can view + download.
   try {
     await drive.permissions.create({
       fileId: presentationId,
@@ -182,6 +201,7 @@ async function handle(_req: NextRequest, id: string) {
     console.warn(`[export-slides] anyone-with-link share failed:`, e?.message ?? e);
   }
 
+  // 4) Named editors.
   const shareWith = (process.env.GOOGLE_SLIDES_SHARE_WITH || "")
     .split(",")
     .map((s) => s.trim())
