@@ -39,6 +39,7 @@ function buildNav(role: AppRole): NavEntry[] {
       { type: "link", href: "/my-sessions", label: "My Sessions" },
       { type: "link", href: "/my-matches", label: "My Match Details" },
       { type: "link", href: "/my-inquiries", label: "Ask a Question" },
+      { type: "link", href: "/my-presentations", label: "Presentations" },
       { type: "link", href: "/quality-score", label: "Quality Score" },
     ];
   }
@@ -81,6 +82,7 @@ function buildNav(role: AppRole): NavEntry[] {
       items: [
         { href: "/admin-reports", label: "Reports" },
         { href: "/admin-inquiries", label: "Inquiries" },
+        { href: "/admin-presentations", label: "Presentations" },
         { href: "/feedback-progress", label: "Feedback Progress" },
         { href: "/users", label: "Users" },
       ],
