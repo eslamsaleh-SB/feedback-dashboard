@@ -5,27 +5,11 @@ import { isViewingAs } from "@/lib/effective";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// SETUP (Google Cloud):
-//   1. https://console.cloud.google.com -> create/pick a project.
-//   2. APIs & Services -> Library -> enable BOTH:
-//        - "Google Slides API"
-//        - "Google Drive API"
-//      IMPORTANT: enable them in the SAME project that owns the service account.
-//   3. Credentials -> Create Credentials -> Service Account (no roles needed).
-//   4. On the service account -> Keys -> Add Key -> JSON. Download.
-//   5. Set env vars in Vercel:
-//        GOOGLE_SERVICE_ACCOUNT_EMAIL = the JSON `client_email`
-//        GOOGLE_SERVICE_ACCOUNT_KEY   = the JSON `private_key` (paste as-is; \n escapes are handled)
-//        GOOGLE_SLIDES_SHARE_WITH     = optional, comma-separated Google-account emails to grant EDIT access
-//   6. Run `npm install` locally then commit package-lock, or Vercel installs it on next deploy.
-//
-// Every generated deck is also made public via "anyone with the link can view",
-// so recipients WITHOUT Google accounts can still open + download the deck.
-//
-// IMPORTANT: this route creates the deck via drive.files.create with mimeType
-// application/vnd.google-apps.presentation, NOT via slides.presentations.create.
-// The Slides create endpoint often returns "The caller does not have permission"
-// from a service account context even with the API enabled; Drive works.
+// POST /api/admin/presentations/[id]/export-slides
+// Builds a .pptx file server-side with pptxgenjs and streams it back as a download.
+// No Google APIs, no service account, no OAuth - the browser saves the file
+// and the user can open it in PowerPoint, Keynote, or upload to Google Slides
+// themselves.
 
 async function requireReviewer(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -41,11 +25,16 @@ async function requireReviewer(supabase: any) {
   return { user };
 }
 
+function sanitizeFilename(name: string): string {
+  const cleaned = name.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_");
+  return (cleaned || "presentation") + ".pptx";
+}
+
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    return await handle(_req, params.id);
+    return await handle(params.id);
   } catch (e: any) {
-    console.error("[export-slides] uncaught:", e?.message ?? e, e?.stack);
+    console.error("[export-pptx] uncaught:", e?.message ?? e, e?.stack);
     return NextResponse.json(
       { error: `Export crashed: ${e?.message ?? String(e)}` },
       { status: 500 }
@@ -53,22 +42,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   }
 }
 
-async function handle(_req: NextRequest, id: string) {
+async function handle(id: string) {
   const supabase = createClient();
   if (isViewingAs()) {
     return NextResponse.json({ error: "Read-only in 'View as' mode." }, { status: 403 });
   }
   const auth = await requireReviewer(supabase);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
-
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const key = process.env.GOOGLE_SERVICE_ACCOUNT_KEY?.replace(/\\n/g, "\n");
-  if (!email || !key) {
-    return NextResponse.json(
-      { error: "GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_SERVICE_ACCOUNT_KEY not set. See setup notes in export-slides/route.ts." },
-      { status: 500 }
-    );
-  }
 
   const [{ data: pres }, { data: pageRows }] = await Promise.all([
     supabase
@@ -87,138 +67,99 @@ async function handle(_req: NextRequest, id: string) {
   }
   const pages = pageRows ?? [];
 
-  let google: any;
+  let PptxGenJS: any;
   try {
-    // @ts-ignore -- resolves at runtime after `npm install googleapis`.
-    google = (await import("googleapis")).google;
-  } catch {
+    // @ts-ignore -- pptxgenjs is a CommonJS package with a default export.
+    const mod = await import("pptxgenjs");
+    PptxGenJS = mod.default ?? mod;
+  } catch (e: any) {
     return NextResponse.json(
-      { error: "googleapis package not installed. Run `npm install googleapis`." },
+      { error: "pptxgenjs not installed. Run `npm install pptxgenjs`." },
       { status: 500 }
     );
   }
 
-  const jwt = new google.auth.JWT({
-    email,
-    key,
-    scopes: [
-      "https://www.googleapis.com/auth/presentations",
-      "https://www.googleapis.com/auth/drive",
-    ],
+  const pptx = new PptxGenJS();
+  pptx.layout = "LAYOUT_16x9";
+  pptx.title = pres.title as string;
+  if (pres.description) pptx.subject = pres.description as string;
+
+  const title = pptx.addSlide();
+  title.background = { color: "0F172A" };
+  title.addText(pres.title as string, {
+    x: 0.5, y: 2.2, w: 9, h: 1.4,
+    fontSize: 40, bold: true, color: "FFFFFF",
+    align: "center", fontFace: "Calibri",
   });
-  const slides = google.slides({ version: "v1", auth: jwt });
-  const drive = google.drive({ version: "v3", auth: jwt });
-
-  // 1) Create the deck as a Drive file (works from service accounts).
-  let presentationId: string;
-  try {
-    const driveCreate = await drive.files.create({
-      requestBody: {
-        name: pres.title,
-        mimeType: "application/vnd.google-apps.presentation",
-      },
-      fields: "id",
-    });
-    presentationId = driveCreate.data.id as string;
-  } catch (e: any) {
-    const msg = e?.message ?? String(e);
-    console.error("[export-slides] drive.files.create failed:", msg);
-    return NextResponse.json({ error: `Drive create failed: ${msg}` }, { status: 500 });
-  }
-
-  // 2) Read the empty deck to learn its default first-slide objectId.
-  let createRes: any;
-  try {
-    createRes = await slides.presentations.get({ presentationId });
-  } catch (e: any) {
-    const msg = e?.message ?? String(e);
-    console.error("[export-slides] slides.presentations.get failed:", msg);
-    return NextResponse.json({ error: `Slides get failed: ${msg}` }, { status: 500 });
-  }
-
-  const requests: any[] = [];
-  const initialFirstSlideId: string | undefined = createRes.data.slides?.[0]?.objectId;
-
-  // Title slide first (order matters - never delete the ONLY slide in an empty deck).
-  requests.push({
-    createSlide: {
-      objectId: "title_slide",
-      slideLayoutReference: { predefinedLayout: "TITLE" },
-      placeholderIdMappings: [
-        { layoutPlaceholder: { type: "CENTERED_TITLE", index: 0 }, objectId: "title_slide_title" },
-        { layoutPlaceholder: { type: "SUBTITLE", index: 0 }, objectId: "title_slide_subtitle" },
-      ],
-    },
-  });
-  requests.push({ insertText: { objectId: "title_slide_title", text: pres.title } });
   if (pres.description) {
-    requests.push({ insertText: { objectId: "title_slide_subtitle", text: pres.description } });
+    title.addText(pres.description as string, {
+      x: 0.5, y: 3.7, w: 9, h: 1.2,
+      fontSize: 20, color: "CBD5E1",
+      align: "center", fontFace: "Calibri",
+    });
   }
-
-  // Now safe to remove the empty default slide.
-  if (initialFirstSlideId) {
-    requests.push({ deleteObject: { objectId: initialFirstSlideId } });
-  }
+  title.addText("Hudl Collector Performance Dashboard", {
+    x: 0.5, y: 5.0, w: 9, h: 0.4,
+    fontSize: 12, color: "94A3B8",
+    align: "center", fontFace: "Calibri",
+  });
 
   pages.forEach((p: any, i: number) => {
-    const slideId = `page_${i + 1}`;
-    const titleId = `${slideId}_title`;
-    const bodyId = `${slideId}_body`;
-    requests.push({
-      createSlide: {
-        objectId: slideId,
-        slideLayoutReference: { predefinedLayout: "TITLE_AND_BODY" },
-        placeholderIdMappings: [
-          { layoutPlaceholder: { type: "TITLE", index: 0 }, objectId: titleId },
-          { layoutPlaceholder: { type: "BODY", index: 0 }, objectId: bodyId },
-        ],
-      },
+    const s = pptx.addSlide();
+    s.background = { color: "FFFFFF" };
+    s.addText(p.header || `Page ${i + 1}`, {
+      x: 0.5, y: 0.3, w: 9, h: 0.7,
+      fontSize: 26, bold: true, color: "0F172A", fontFace: "Calibri",
     });
-    requests.push({ insertText: { objectId: titleId, text: p.header || `Page ${i + 1}` } });
-    const bodyText =
-      (p.description ? p.description + "\n\n" : "") +
-      (p.video_link ? `Video: ${p.video_link}` : "");
-    if (bodyText.trim()) {
-      requests.push({ insertText: { objectId: bodyId, text: bodyText } });
+    if (p.description) {
+      s.addText(String(p.description), {
+        x: 0.5, y: 1.1, w: 9, h: 3.4,
+        fontSize: 16, color: "334155", fontFace: "Calibri",
+        valign: "top", paraSpaceAfter: 8,
+      });
     }
+    if (p.video_link) {
+      s.addText(
+        [
+          { text: "Video: ", options: { bold: true, color: "0F172A" } },
+          {
+            text: String(p.video_link),
+            options: {
+              color: "2563EB",
+              underline: { style: "sng" } as any,
+              hyperlink: { url: String(p.video_link) },
+            },
+          },
+        ] as any,
+        { x: 0.5, y: 4.7, w: 9, h: 0.5, fontSize: 14, fontFace: "Calibri" }
+      );
+    }
+    s.addText(`${i + 1} / ${pages.length}`, {
+      x: 8.6, y: 5.2, w: 0.9, h: 0.3,
+      fontSize: 10, color: "94A3B8", align: "right", fontFace: "Calibri",
+    });
   });
 
-  try {
-    await slides.presentations.batchUpdate({ presentationId, requestBody: { requests } });
-  } catch (e: any) {
-    const msg = e?.message ?? String(e);
-    console.error("[export-slides] slides.presentations.batchUpdate failed:", msg);
-    return NextResponse.json({ error: `Slides content update failed: ${msg}` }, { status: 500 });
-  }
+  const buf: any = await pptx.write({ outputType: "nodebuffer" });
+  const bytes: Buffer =
+    buf instanceof Buffer
+      ? buf
+      : buf?.buffer
+      ? Buffer.from(buf.buffer)
+      : Buffer.from(buf);
 
-  // 3) Public "anyone with link" access so users without Google accounts can view + download.
-  try {
-    await drive.permissions.create({
-      fileId: presentationId,
-      requestBody: { type: "anyone", role: "reader" },
-    });
-  } catch (e: any) {
-    console.warn(`[export-slides] anyone-with-link share failed:`, e?.message ?? e);
-  }
+  const filename = sanitizeFilename(pres.title as string);
+  // Uint8Array satisfies BodyInit; a raw Node Buffer does not in newer TS lib types.
+  const body = new Uint8Array(bytes);
 
-  // 4) Named editors.
-  const shareWith = (process.env.GOOGLE_SLIDES_SHARE_WITH || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  for (const emailAddress of shareWith) {
-    try {
-      await drive.permissions.create({
-        fileId: presentationId,
-        requestBody: { type: "user", role: "writer", emailAddress },
-        sendNotificationEmail: false,
-      });
-    } catch (e: any) {
-      console.warn(`[export-slides] share to ${emailAddress} failed:`, e?.message ?? e);
-    }
-  }
-
-  const url = `https://docs.google.com/presentation/d/${presentationId}/edit`;
-  await supabase.from("presentations").update({ google_slides_url: url }).eq("id", id);
-  return NextResponse.json({ ok: true, url });
+  return new NextResponse(body, {
+    status: 200,
+    headers: {
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(body.byteLength),
+      "Cache-Control": "no-store",
+    },
+  });
 }

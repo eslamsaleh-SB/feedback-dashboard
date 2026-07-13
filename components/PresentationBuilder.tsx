@@ -160,17 +160,35 @@ export default function PresentationBuilder({
         `/api/admin/presentations/${initial!.id}/export-slides`,
         { method: "POST", cache: "no-store" }
       );
-      const raw = await res.text();
-      let json: any = {};
-      try {
-        json = raw ? JSON.parse(raw) : {};
-      } catch {
-        json = { error: raw?.slice(0, 300) || `Server returned ${res.status} with no body.` };
+
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!res.ok || contentType.includes("application/json")) {
+        const raw = await res.text();
+        let json: any = {};
+        try {
+          json = raw ? JSON.parse(raw) : {};
+        } catch {
+          json = { error: raw?.slice(0, 300) || `Server returned ${res.status} with no body.` };
+        }
+        throw new Error(json.error || `Export failed (${res.status})`);
       }
-      if (!res.ok) throw new Error(json.error || `Export failed (${res.status})`);
-      setMsg({ type: "ok", text: `Google Slides created. Opening in a new tab...` });
-      if (json.url) window.open(json.url, "_blank", "noopener,noreferrer");
-      router.refresh();
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") ?? "";
+      const nameMatch = disposition.match(/filename="?([^"]+)"?/i);
+      const filename =
+        nameMatch?.[1] ??
+        `${(initial?.title ?? "presentation").replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") || "presentation"}.pptx`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setMsg({ type: "ok", text: `Downloaded ${filename}.` });
     } catch (e: any) {
       setMsg({ type: "err", text: e?.message ?? "Export failed" });
     } finally {
@@ -198,16 +216,6 @@ export default function PresentationBuilder({
           <h1 className="text-2xl font-bold">
             {mode === "create" ? "New Presentation" : "Edit Presentation"}
           </h1>
-          {initial?.google_slides_url && (
-            <a
-              href={initial.google_slides_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-600 dark:text-blue-400 underline mt-1 inline-block"
-            >
-              Open in Google Slides
-            </a>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {mode === "edit" && initial?.id && (
@@ -227,7 +235,7 @@ export default function PresentationBuilder({
               disabled={exportingSlides}
               className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
             >
-              {exportingSlides ? "Exporting..." : "Convert to Google Slides"}
+              {exportingSlides ? "Building..." : "Download PowerPoint"}
             </button>
           )}
           <button
