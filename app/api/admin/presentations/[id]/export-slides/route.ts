@@ -7,7 +7,10 @@ export const maxDuration = 60;
 
 // SETUP (Google Cloud):
 //   1. https://console.cloud.google.com -> create/pick a project.
-//   2. APIs & Services -> Library -> enable "Google Slides API" + "Google Drive API".
+//   2. APIs & Services -> Library -> enable BOTH:
+//        - "Google Slides API"
+//        - "Google Drive API"
+//      IMPORTANT: enable them in the SAME project that owns the service account.
 //   3. Credentials -> Create Credentials -> Service Account (no roles needed).
 //   4. On the service account -> Keys -> Add Key -> JSON. Download.
 //   5. Set env vars in Vercel:
@@ -101,7 +104,23 @@ async function handle(_req: NextRequest, id: string) {
   const slides = google.slides({ version: "v1", auth: jwt });
   const drive = google.drive({ version: "v3", auth: jwt });
 
-  const createRes = await slides.presentations.create({ requestBody: { title: pres.title } });
+  let createRes: any;
+  try {
+    createRes = await slides.presentations.create({ requestBody: { title: pres.title } });
+  } catch (e: any) {
+    const msg = e?.message ?? String(e);
+    console.error("[export-slides] slides.presentations.create failed:", msg);
+    if (/does not have permission/i.test(msg)) {
+      return NextResponse.json(
+        {
+          error:
+            "Google denied the create call: 'The caller does not have permission'. This almost always means: (1) Google Slides API is NOT enabled in the Cloud project the service account belongs to, OR (2) Google Drive API is NOT enabled in that same project, OR (3) the service account key is from a different project than the one where you enabled the APIs. Open https://console.cloud.google.com/apis/library, confirm you are in the CORRECT project (top bar), enable BOTH 'Google Slides API' and 'Google Drive API', wait ~1 minute, then retry.",
+        },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ error: `Slides create failed: ${msg}` }, { status: 500 });
+  }
   const presentationId = createRes.data.presentationId as string;
 
   const requests: any[] = [];
@@ -146,7 +165,13 @@ async function handle(_req: NextRequest, id: string) {
     }
   });
 
-  await slides.presentations.batchUpdate({ presentationId, requestBody: { requests } });
+  try {
+    await slides.presentations.batchUpdate({ presentationId, requestBody: { requests } });
+  } catch (e: any) {
+    const msg = e?.message ?? String(e);
+    console.error("[export-slides] slides.presentations.batchUpdate failed:", msg);
+    return NextResponse.json({ error: `Slides content update failed: ${msg}` }, { status: 500 });
+  }
 
   try {
     await drive.permissions.create({
