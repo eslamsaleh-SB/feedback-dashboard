@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isViewingAs } from "@/lib/effective";
+import { notifyPresentationAssignees } from "@/lib/presentation-notify";
 
 export const runtime = "nodejs";
 
@@ -33,7 +34,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     ? body.hr_codes.map((s: any) => String(s).trim()).filter(Boolean)
     : [];
 
-  // Fetch existing assignments for this presentation.
   const { data: existing, error: fetchErr } = await supabase
     .from("presentation_assignments")
     .select("hr_code")
@@ -54,6 +54,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       .in("hr_code", toRemove);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   }
+
+  let emailSent = 0;
+  let emailFailed: string[] = [];
   if (toAdd.length > 0) {
     const rows = toAdd.map((hr) => ({
       presentation_id: params.id,
@@ -62,6 +65,24 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }));
     const { error } = await supabase.from("presentation_assignments").insert(rows);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    try {
+      const { data: pres } = await supabase
+        .from("presentations")
+        .select("title")
+        .eq("id", params.id)
+        .single();
+      const title = (pres as any)?.title ?? "Presentation";
+      const notify = await notifyPresentationAssignees({
+        hrCodes: toAdd,
+        presentationId: params.id,
+        presentationTitle: title,
+      });
+      emailSent = notify.sent;
+      emailFailed = notify.failed;
+    } catch (e: any) {
+      console.warn("[presentations/assignments] notify failed:", e?.message ?? e);
+    }
   }
 
   return NextResponse.json({
@@ -69,5 +90,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     added: toAdd.length,
     removed: toRemove.length,
     current: hrCodes.length,
+    email_sent: emailSent,
+    email_failed: emailFailed,
   });
 }

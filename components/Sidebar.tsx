@@ -63,6 +63,9 @@ function buildNav(role: AppRole): NavEntry[] {
   if (role === "Admin" || role === "Uploader") uploadItems.push({ href: "/module-upload", label: "Module Data" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   if (role === "Admin" || role === "Uploader") uploadItems.push({ href: "/upload", label: "Send Report" });
+  if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
+    uploadItems.push({ href: "/admin-presentations", label: "Presentations" });
+  }
   if (uploadItems.length > 0) {
     entries.push({ type: "group", key: "upload", label: "Upload Data", items: uploadItems });
   }
@@ -82,7 +85,6 @@ function buildNav(role: AppRole): NavEntry[] {
       items: [
         { href: "/admin-reports", label: "Reports" },
         { href: "/admin-inquiries", label: "Inquiries" },
-        { href: "/admin-presentations", label: "Presentations" },
         { href: "/feedback-progress", label: "Feedback Progress" },
         { href: "/users", label: "Users" },
       ],

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isViewingAs } from "@/lib/effective";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // SETUP (Google Cloud):
 //   1. https://console.cloud.google.com -> create/pick a project.
@@ -33,6 +34,18 @@ async function requireReviewer(supabase: any) {
 }
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    return await handle(_req, params.id);
+  } catch (e: any) {
+    console.error("[export-slides] uncaught:", e?.message ?? e, e?.stack);
+    return NextResponse.json(
+      { error: `Export crashed: ${e?.message ?? String(e)}` },
+      { status: 500 }
+    );
+  }
+}
+
+async function handle(_req: NextRequest, id: string) {
   const supabase = createClient();
   if (isViewingAs()) {
     return NextResponse.json({ error: "Read-only in 'View as' mode." }, { status: 403 });
@@ -53,12 +66,12 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     supabase
       .from("presentations")
       .select("id, title, description")
-      .eq("id", params.id)
+      .eq("id", id)
       .single(),
     supabase
       .from("presentation_pages")
       .select("page_order, header, description, video_link, drive_file_id")
-      .eq("presentation_id", params.id)
+      .eq("presentation_id", id)
       .order("page_order", { ascending: true }),
   ]);
   if (!pres) {
@@ -88,11 +101,9 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const slides = google.slides({ version: "v1", auth: jwt });
   const drive = google.drive({ version: "v3", auth: jwt });
 
-  // 1) Create the deck.
   const createRes = await slides.presentations.create({ requestBody: { title: pres.title } });
   const presentationId = createRes.data.presentationId as string;
 
-  // 2) Build batchUpdate: title slide + one slide per page.
   const requests: any[] = [];
   const firstSlideId = createRes.data.slides?.[0]?.objectId;
   if (firstSlideId) requests.push({ deleteObject: { objectId: firstSlideId } });
@@ -137,7 +148,6 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   await slides.presentations.batchUpdate({ presentationId, requestBody: { requests } });
 
-  // 3) Public "anyone with link" access so users without Google accounts can view + download.
   try {
     await drive.permissions.create({
       fileId: presentationId,
@@ -147,7 +157,6 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     console.warn(`[export-slides] anyone-with-link share failed:`, e?.message ?? e);
   }
 
-  // 4) Named editors (must be Google accounts).
   const shareWith = (process.env.GOOGLE_SLIDES_SHARE_WITH || "")
     .split(",")
     .map((s) => s.trim())
@@ -165,6 +174,6 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   }
 
   const url = `https://docs.google.com/presentation/d/${presentationId}/edit`;
-  await supabase.from("presentations").update({ google_slides_url: url }).eq("id", params.id);
+  await supabase.from("presentations").update({ google_slides_url: url }).eq("id", id);
   return NextResponse.json({ ok: true, url });
 }

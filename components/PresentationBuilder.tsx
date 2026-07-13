@@ -129,7 +129,6 @@ export default function PresentationBuilder({
       if (!res.ok) throw new Error(json.error || "Save failed");
 
       if (mode === "edit") {
-        // Also PUT the assignments for edit mode (create route wrote them once).
         await fetch(`/api/admin/presentations/${initial!.id}/assignments`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -161,10 +160,16 @@ export default function PresentationBuilder({
         `/api/admin/presentations/${initial!.id}/export-slides`,
         { method: "POST", cache: "no-store" }
       );
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Export failed");
+      const raw = await res.text();
+      let json: any = {};
+      try {
+        json = raw ? JSON.parse(raw) : {};
+      } catch {
+        json = { error: raw?.slice(0, 300) || `Server returned ${res.status} with no body.` };
+      }
+      if (!res.ok) throw new Error(json.error || `Export failed (${res.status})`);
       setMsg({ type: "ok", text: `Google Slides created. Opening in a new tab...` });
-      window.open(json.url, "_blank", "noopener,noreferrer");
+      if (json.url) window.open(json.url, "_blank", "noopener,noreferrer");
       router.refresh();
     } catch (e: any) {
       setMsg({ type: "err", text: e?.message ?? "Export failed" });
@@ -205,6 +210,16 @@ export default function PresentationBuilder({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {mode === "edit" && initial?.id && (
+            <a
+              href={`/admin-presentations/${initial.id}/preview`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
+            >
+              Preview
+            </a>
+          )}
           {mode === "edit" && (
             <button
               type="button"
@@ -241,7 +256,6 @@ export default function PresentationBuilder({
         </p>
       )}
 
-      {/* Metadata */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-3">
         <div>
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Title</label>
@@ -266,7 +280,6 @@ export default function PresentationBuilder({
         </div>
       </div>
 
-      {/* Pages */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -298,7 +311,7 @@ export default function PresentationBuilder({
                     disabled={i === 0}
                     className="rounded-md px-2 py-1 text-xs border border-slate-300 dark:border-slate-700 disabled:opacity-40"
                   >
-                    ↑
+                    &uarr;
                   </button>
                   <button
                     type="button"
@@ -306,7 +319,7 @@ export default function PresentationBuilder({
                     disabled={i === pages.length - 1}
                     className="rounded-md px-2 py-1 text-xs border border-slate-300 dark:border-slate-700 disabled:opacity-40"
                   >
-                    ↓
+                    &darr;
                   </button>
                   <button
                     type="button"
@@ -372,7 +385,6 @@ export default function PresentationBuilder({
         })}
       </div>
 
-      {/* Assignees */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">

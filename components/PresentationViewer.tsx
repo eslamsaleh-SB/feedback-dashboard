@@ -14,10 +14,14 @@ export default function PresentationViewer({
   title,
   description,
   pages,
+  backHref = "/my-presentations",
+  backLabel = "Back to My Presentations",
 }: {
   title: string;
   description: string | null;
   pages: Page[];
+  backHref?: string;
+  backLabel?: string;
 }) {
   const [idx, setIdx] = useState(0);
   const total = pages.length;
@@ -37,10 +41,10 @@ export default function PresentationViewer({
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <Link
-            href="/my-presentations"
+            href={backHref}
             className="text-xs text-slate-500 dark:text-slate-400 hover:underline"
           >
-            &larr; Back to My Presentations
+            &larr; {backLabel}
           </Link>
           <h1 className="text-2xl font-bold mt-1">{title}</h1>
           {description && (

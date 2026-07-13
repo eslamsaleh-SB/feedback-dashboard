@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isViewingAs } from "@/lib/effective";
+import { notifyPresentationAssignees } from "@/lib/presentation-notify";
 
 export const runtime = "nodejs";
 
@@ -80,6 +81,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: pagesErr.message }, { status: 400 });
   }
 
+  let emailSent = 0;
+  let emailFailed: string[] = [];
   if (assigneeHrCodes.length > 0) {
     const rows = assigneeHrCodes.map((hr) => ({
       presentation_id: presentationId,
@@ -87,7 +90,24 @@ export async function POST(req: NextRequest) {
       assigned_by: auth.user.id,
     }));
     await supabase.from("presentation_assignments").insert(rows);
+
+    try {
+      const notify = await notifyPresentationAssignees({
+        hrCodes: assigneeHrCodes,
+        presentationId,
+        presentationTitle: title,
+      });
+      emailSent = notify.sent;
+      emailFailed = notify.failed;
+    } catch (e: any) {
+      console.warn("[presentations/create] notify failed:", e?.message ?? e);
+    }
   }
 
-  return NextResponse.json({ ok: true, id: presentationId });
+  return NextResponse.json({
+    ok: true,
+    id: presentationId,
+    email_sent: emailSent,
+    email_failed: emailFailed,
+  });
 }

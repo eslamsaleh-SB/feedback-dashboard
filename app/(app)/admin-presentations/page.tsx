@@ -52,20 +52,22 @@ export default async function AdminPresentationsPage() {
       ) : (
         <div className="space-y-2">
           {presentations.map((p) => (
-            <Link
+            <div
               key={p.id}
-              href={`/admin-presentations/${p.id}`}
-              className="block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
             >
-              <div className="flex items-start justify-between flex-wrap gap-2">
-                <div className="min-w-0">
+              <div className="flex items-start justify-between flex-wrap gap-3">
+                <Link
+                  href={`/admin-presentations/${p.id}`}
+                  className="min-w-0 flex-1"
+                >
                   <p className="font-semibold text-slate-800 dark:text-slate-100">{p.title}</p>
                   {p.description && (
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
                       {p.description}
                     </p>
                   )}
-                </div>
+                </Link>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5">
                     {p.page_count} page(s)
@@ -78,9 +80,21 @@ export default async function AdminPresentationsPage() {
                       Exported to Slides
                     </span>
                   )}
+                  <Link
+                    href={`/admin-presentations/${p.id}/preview`}
+                    className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
+                  >
+                    Preview
+                  </Link>
+                  <Link
+                    href={`/admin-presentations/${p.id}`}
+                    className="rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-3 py-1 text-xs font-medium hover:bg-slate-800 dark:hover:bg-slate-200"
+                  >
+                    Edit
+                  </Link>
                 </div>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}
