@@ -275,7 +275,7 @@ export default function AnalyticsDashboard({
                     </span>
                     <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-6 overflow-hidden">
                       <div
-                        className="h-6 bg-slate-900 rounded-full transition-all"
+                        className="h-6 bg-slate-900 dark:bg-emerald-500 rounded-full transition-all"
                         style={{ width: `${c === 0 ? 0 : Math.max(pct, 4)}%` }}
                       />
                     </div>
