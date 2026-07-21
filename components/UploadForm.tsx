@@ -28,6 +28,8 @@ export default function UploadForm({
   // shared
   const [collectorId, setCollectorId] = useState("");
   const [folderUrl, setFolderUrl] = useState("");
+  const [sendToAll, setSendToAll] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   // new-session fields
   const [matchId, setMatchId] = useState("");
@@ -65,7 +67,10 @@ export default function UploadForm({
     e.preventDefault();
     setMsg(null);
 
-    if (!collectorId) return setMsg({ type: "err", text: "Pick a collector." });
+    if (sendToAll && mode !== "new") {
+      return setMsg({ type: "err", text: "\"Send to all collectors\" only works in Create-new-session mode." });
+    }
+    if (!sendToAll && !collectorId) return setMsg({ type: "err", text: "Pick a collector." });
     if (mode === "new" && !matchId.trim())
       return setMsg({ type: "err", text: "Enter a Match ID." });
     if (mode === "existing" && !sessionId)
@@ -73,6 +78,60 @@ export default function UploadForm({
     if (!folderUrl.trim())
       return setMsg({ type: "err", text: "Paste the Google Drive folder link." });
 
+    // -----------------------------------------------------------------------
+    // BULK path: send the same report to every collector.
+    // -----------------------------------------------------------------------
+    if (sendToAll) {
+      const targets = collectors.filter((c) => c.hr_code); // must have hr_code
+      if (targets.length === 0) {
+        return setMsg({ type: "err", text: "No collectors with an HR code found." });
+      }
+      setLoading(true);
+      setBulkProgress({ done: 0, total: targets.length });
+      let ok = 0;
+      let failed = 0;
+      const errors: string[] = [];
+      for (let i = 0; i < targets.length; i++) {
+        const c = targets[i];
+        try {
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: "new",
+              folder_url: folderUrl.trim(),
+              collector_id: c.id,
+              match_name: matchId,
+              review_date: reviewDate,
+              overall_notes: overallNotes,
+            }),
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || "failed");
+          ok++;
+        } catch (err: any) {
+          failed++;
+          errors.push(`${c.hr_code ?? c.name}: ${err?.message ?? "failed"}`);
+        }
+        setBulkProgress({ done: i + 1, total: targets.length });
+      }
+      setBulkProgress(null);
+      if (failed === 0) {
+        setMsg({ type: "ok", text: `Sent to ${ok} collectors. Redirecting...` });
+        setTimeout(() => router.push("/dashboard"), 1500);
+      } else {
+        setMsg({
+          type: "err",
+          text: `Sent to ${ok} collectors, ${failed} failed. First error: ${errors[0]}`,
+        });
+        setLoading(false);
+      }
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+    // Single-collector path (original behavior).
+    // -----------------------------------------------------------------------
     setLoading(true);
     const payload: Record<string, unknown> = {
       mode,
@@ -80,7 +139,7 @@ export default function UploadForm({
     };
     if (mode === "new") {
       payload.collector_id = collectorId;
-      payload.match_name = matchId; // stored in match_sessions.match_name
+      payload.match_name = matchId;
       payload.review_date = reviewDate;
       payload.overall_notes = overallNotes;
     } else {
@@ -96,8 +155,6 @@ export default function UploadForm({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Import failed");
 
-      // Build a friendly message that reflects whether the report was merged
-      // into an existing one, and whether duplicate videos were skipped.
       const parts: string[] = [];
       if (json.merged) {
         parts.push(
@@ -148,20 +205,41 @@ export default function UploadForm({
         onSubmit={handleSubmit}
         className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5"
       >
-        {/* Collector - always shown, searchable (by code) */}
-        <div>
-          <label className="block text-sm font-medium mb-1">Collector</label>
-          <Combobox
-            options={collectorOptions}
-            value={collectorId}
-            onChange={(v) => {
-              setCollectorId(v);
-              setSessionId("");
-            }}
-            placeholder="Select a collector (code)..."
-            searchPlaceholder="Search by code or name..."
-          />
-        </div>
+        {/* Send-to-all toggle (only meaningful in new-session mode) */}
+        {mode === "new" && (
+          <label className="flex items-center gap-2 text-sm select-none">
+            <input
+              type="checkbox"
+              checked={sendToAll}
+              onChange={(e) => {
+                setSendToAll(e.target.checked);
+                if (e.target.checked) setCollectorId("");
+              }}
+              className="h-4 w-4"
+            />
+            <span className="font-medium">Send to all collectors</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              ({collectors.filter((c) => c.hr_code).length} collectors will each get their own report)
+            </span>
+          </label>
+        )}
+
+        {/* Collector picker - hidden when Send to all is on */}
+        {!sendToAll && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Collector</label>
+            <Combobox
+              options={collectorOptions}
+              value={collectorId}
+              onChange={(v) => {
+                setCollectorId(v);
+                setSessionId("");
+              }}
+              placeholder="Select a collector (code)..."
+              searchPlaceholder="Search by code or name..."
+            />
+          </div>
+        )}
 
         {mode === "new" ? (
           <>
@@ -240,7 +318,11 @@ export default function UploadForm({
             <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
           )}
           {loading
-            ? "Importing..."
+            ? bulkProgress
+              ? `Sending... (${bulkProgress.done}/${bulkProgress.total})`
+              : "Importing..."
+            : sendToAll
+            ? "Send to all collectors"
             : mode === "new"
             ? "Create session & import videos"
             : "Import videos to session"}

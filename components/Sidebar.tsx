@@ -40,7 +40,9 @@ function buildNav(role: AppRole): NavEntry[] {
       { type: "link", href: "/my-matches", label: "My Match Details" },
       { type: "link", href: "/my-inquiries", label: "Ask a Question" },
       { type: "link", href: "/my-presentations", label: "Presentations" },
+      { type: "link", href: "/my-quizzes", label: "Quizzes" },
       { type: "link", href: "/quality-score", label: "Quality Score" },
+      { type: "link", href: "/weekly-quality-score", label: "Weekly Quality Score" },
     ];
   }
 
@@ -54,6 +56,7 @@ function buildNav(role: AppRole): NavEntry[] {
         { href: "/analytics", label: "Collectors Performance" },
         { href: "/match-totals", label: "Match Total Per Module" },
         { href: "/quality-score", label: "Quality Score" },
+        { href: "/weekly-quality-score", label: "Weekly Quality Score" },
         { href: "/performance-thresholds", label: "Performance Thresholds" },
       ],
     },
@@ -62,9 +65,13 @@ function buildNav(role: AppRole): NavEntry[] {
   const uploadItems: NavItem[] = [];
   if (role === "Admin" || role === "Uploader") uploadItems.push({ href: "/module-upload", label: "Module Data" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
+  if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/weekly-quality-upload", label: "Weekly Quality Score Upload" });
   if (role === "Admin" || role === "Uploader") uploadItems.push({ href: "/upload", label: "Send Report" });
   if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
     uploadItems.push({ href: "/admin-presentations", label: "Presentations" });
+  }
+  if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
+    uploadItems.push({ href: "/admin-quizzes", label: "Quizzes" });
   }
   if (uploadItems.length > 0) {
     entries.push({ type: "group", key: "upload", label: "Upload Data", items: uploadItems });

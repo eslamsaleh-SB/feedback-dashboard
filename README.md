@@ -1,104 +1,221 @@
-# v51 - Presentations Feature (Final Push Bundle)
+# v52 - Quizzes, Weekly Quality Scores, Reports "All Collectors", Thresholds Filters
 
-Single consolidated folder with every file needed to ship the presentation builder end-to-end. Push these exact paths and the feature is live.
+Big release. Four items in one bundle:
 
-## Push order
+1. **Reports** - new "Send to all collectors" checkbox on `/upload`.
+2. **Performance Thresholds** - new Team + Collector filters.
+3. **Weekly Quality Scores** - new upload page + view page + DB table.
+4. **Quiz feature** - full Google-Forms-like quiz builder, taker, per-collector analytics, auto-grading, manual grading, assignment emails, resend, CSV export.
 
-**1. Run SQL (once, in Supabase SQL editor)**
+tsc noEmit clean.
+
+## Deploy order
+
+### 1) Run SQL (in Supabase SQL editor, once)
+
 ```
-sql/01_presentations_schema.sql
-```
-Skip if already run in an earlier session.
-
-**2. Ensure env vars in Vercel Production**
-
-| Key | Value |
-| --- | --- |
-| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | `client_email` from the JSON service-account key |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | `private_key` from the JSON key (paste as-is, keep the `\n` sequences) |
-| `GOOGLE_SLIDES_SHARE_WITH` | optional, comma-separated Google-account emails to grant EDIT access to each generated deck |
-| `GMAIL_USER` + `GMAIL_APP_PASSWORD` | already set from previous versions - needed for assignment email |
-| `SUPABASE_SERVICE_ROLE_KEY` + `NEXT_PUBLIC_SUPABASE_URL` | already set - needed for email routing |
-
-**3. Push these files (mirror the same relative paths)**
-
-Root config:
-```
-package.json                                           # adds googleapis, restored from truncation
+sql/01_weekly_quality_scores.sql
+sql/02_quizzes.sql
 ```
 
-Sidebar (Presentations under "Upload Data"):
+Verify in Table Editor:
+- `weekly_quality_scores`
+- `quizzes`, `quiz_questions`, `quiz_assignments`, `quiz_submissions`, `quiz_answers`
+
+### 2) Confirm env vars in Vercel Production
+
+Nothing new. These already exist from earlier versions:
+- `GMAIL_USER`, `GMAIL_APP_PASSWORD` (for quiz assignment / resend emails)
+- `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_APP_URL`
+
+### 3) Push these files (same relative paths as in this folder)
+
+**Sidebar + shared components:**
 ```
 components/Sidebar.tsx
+components/UploadForm.tsx
+components/PerformanceThresholdsView.tsx
 ```
 
-Feature components:
+**Weekly Quality Scores:**
 ```
-components/PresentationBuilder.tsx                     # Preview button + safe JSON parse
-components/PresentationViewer.tsx                      # backHref/backLabel props
-```
-
-Feature helper:
-```
-lib/presentation-notify.ts                             # NEW - assignment email helper
+app/api/weekly-quality-upload/route.ts
+app/(app)/weekly-quality-upload/page.tsx
+app/(app)/weekly-quality-score/page.tsx
+components/WeeklyQualityScoreView.tsx
 ```
 
-Feature pages:
+**Quiz:**
 ```
-app/(app)/admin-presentations/page.tsx                 # Preview + Edit buttons on each row
-app/(app)/admin-presentations/new/page.tsx
-app/(app)/admin-presentations/[id]/page.tsx
-app/(app)/admin-presentations/[id]/preview/page.tsx    # NEW - reviewer preview page
-app/(app)/my-presentations/page.tsx
-app/(app)/my-presentations/[id]/page.tsx
+lib/quiz-notify.ts
+app/api/admin/quizzes/route.ts
+app/api/admin/quizzes/[id]/route.ts
+app/api/admin/quizzes/[id]/assignments/route.ts
+app/api/admin/quizzes/[id]/resend/route.ts
+app/api/admin/quizzes/answers/[id]/route.ts
+app/api/quizzes/[id]/submit/route.ts
+app/(app)/admin-quizzes/page.tsx
+app/(app)/admin-quizzes/new/page.tsx
+app/(app)/admin-quizzes/[id]/page.tsx
+app/(app)/admin-quizzes/[id]/submissions/[submissionId]/page.tsx
+app/(app)/my-quizzes/page.tsx
+app/(app)/my-quizzes/[id]/page.tsx
+components/QuizBuilder.tsx
+components/QuizAnalytics.tsx
+components/QuizTaker.tsx
+components/QuizResult.tsx
+components/SubmissionReview.tsx
 ```
 
-Feature API routes:
+Commit + push. Vercel builds. Green.
+
+---
+
+## 1) Reports - Send to all collectors
+
+`/upload` (Send Report) now has a checkbox above the collector picker: **Send to all collectors**. When ON:
+- The single-collector dropdown is hidden.
+- On submit, the client loops over every collector that has an `hr_code` and POSTs `/api/upload` once per collector using the same match name + review date + folder link + notes.
+- A progress line shows `Sending... (done/total)`.
+- Any failures are counted and the first error is surfaced. The submit does NOT stop on the first error - every collector is attempted.
+
+This only works in "Create new match session" mode (existing sessions are per-collector).
+
+## 2) Performance Thresholds - filters
+
+Two new dropdowns in the top-right control bar (next to Top N):
+- **Team** - filters to a single team.
+- **Collector** - filters to a single hr_code (respects the Team filter above it).
+
+Both apply BEFORE the threshold logic runs, so the resulting tables and Top N ranking already reflect the filter.
+
+## 3) Weekly Quality Scores
+
+New DB table `weekly_quality_scores` with columns:
+- `hr_code`, `week_start_date` (Sunday), `players`, `event`, `formation_tactical`, `location`, `impact`, `extras`, `freeze_frame_score`
+
+Unique on `(hr_code, week_start_date)` so re-uploading the same week overwrites.
+
+Weeks run **Sunday - Saturday**. The upload page snaps any chosen date to the Sunday of that week.
+
+CSV upload: any column named like `hr_code` is required. Optional columns:
 ```
-app/api/admin/presentations/route.ts                   # POST create + email initial assignees
-app/api/admin/presentations/[id]/route.ts              # PUT update, DELETE
-app/api/admin/presentations/[id]/assignments/route.ts  # PUT diff + email new assignees
-app/api/admin/presentations/[id]/export-slides/route.ts # maxDuration=60 + try/catch + anyone-with-link
+players, event, formation_tactical, location, impact, extras, freeze_frame_score
+```
+Percent signs, commas, and quotes are stripped. Both `,` and tab separators are supported.
+
+Two new sidebar entries:
+- **Upload Data -> Weekly Quality Score Upload** (Admin, QualityLeader)
+- **Performance -> Weekly Quality Score** (all reviewer roles)
+- **Collector sidebar -> Weekly Quality Score** (Viewer sees their own rows only)
+
+View page has Week + Team + Collector filters + Export CSV.
+
+## 4) Quiz feature
+
+### Reviewer flow
+
+1. Sidebar -> **Upload Data -> Quizzes** -> `/admin-quizzes`.
+2. Click **New quiz**. The builder page opens.
+3. Fill title + description. Toggle **Published** when ready (draft mode is hidden from collectors).
+4. Add questions. For each: choose a type, prompt, points, options (for MC / Checkbox / MC+Other), correct answer(s), optional Drive video link (renders in the taker), Required flag.
+   - Types: `Multiple Choice`, `Checkboxes`, `Short Answer`, `Paragraph`, `Multiple Choice + Other`.
+5. Assign collectors - checkboxes plus a **Select all** button and a search box.
+6. Save. If Published + assignments exist, every assignee receives an email:
+   > **New quiz assigned: {title}** with a CTA that links to `/my-quizzes/{id}`.
+7. Open the quiz's detail page. Below the builder you see:
+   - **Analytics cards** - Assigned, Completed, Pending, Completion %, Average score, Highest / Lowest.
+   - **Filter bar** - Team, Collector, Status (all / completed / pending), From, To, Min score, Max score.
+   - **Submissions table** - one row per assignee, filtered by the filters above.
+     - Completed rows: **View** link -> `/admin-quizzes/{id}/submissions/{submissionId}`
+     - Pending rows: **Resend email** link
+   - **Resend to all pending** button (top-right).
+   - **Export CSV** of the filtered set.
+8. Submission viewer:
+   - Shows collector info, timestamp, auto/manual/total scores, %.
+   - Per question: prompt, embedded Drive preview (if any), collector's answer, expected correct answer for MC/CB, correct/incorrect badge.
+   - For Short Answer / Paragraph questions: reviewer sets **Points awarded** (bounded by max) and **Reviewer notes** - saves on blur, recomputes `manual_score` immediately.
+
+### Collector flow
+
+1. Sidebar -> **Quizzes** -> `/my-quizzes`.
+2. Sees only published quizzes assigned to them. Each row shows To do / Completed + score.
+3. Open a quiz -> `QuizTaker` renders every question with the right widget type + embedded video preview for questions that have a Drive link.
+4. Submit once. Confirmation dialog first. Auto-grade runs server-side. Screen re-renders with results (score, correct/incorrect badges, manual-review notice for text answers).
+5. Trying to open a completed quiz again shows the results page, not the taker (single-attempt enforced by unique index + API check).
+
+### Auto-grading rules
+
+- **Multiple Choice** - correct if `selected_options[0] === correct_answers` (string).
+- **Multiple Choice + Other** - correct if `selected_options[0] === correct_answers`. If the correct answer is `"Other"`, it counts as correct only when the collector selected `Other` AND provided text.
+- **Checkboxes** - correct if the sets match exactly (order-independent).
+- **Short Answer / Paragraph** - never auto-graded. `is_correct` stays `null`. Reviewer awards points manually.
+
+Points come from `quiz_questions.points`. `quiz_submissions.total_score = auto_score + manual_score`.
+
+### Email / notification behavior
+
+- **On create with Published=true + assignees** -> notify everyone.
+- **On edit that flips draft -> published** -> notify every existing assignee.
+- **On adding new assignees while Published** -> notify only the newly added ones.
+- **Resend endpoint** (`POST /api/admin/quizzes/[id]/resend`) accepts `{hr_codes: [...]}` or, if omitted, sends to every assignee who has NOT yet submitted.
+- All emails use the same Gmail helper as Inquiries + Presentations. Stamps `quiz_assignments.last_notified_at` after send.
+
+### CSV export
+
+`Export CSV` in the analytics view downloads the filtered submissions table with columns:
+```
+HR Code, Name, Team, Status, Submitted At, Auto Score, Manual Score, Total Score, Max Score
 ```
 
-**4. Install googleapis locally, then commit**
-```
-npm install
-git add package.json package-lock.json
-git commit -m "feat: presentation builder"
-git push
-```
-(Or push package.json alone; Vercel installs on next deploy.)
+### RLS summary
 
-## Verify
+- Reviewers (Admin, Uploader, Supervisor): CRUD on every quiz table.
+- Collectors: SELECT on quizzes / questions / assignments where their `hr_code` is on the assignment; INSERT their own submission + answers; SELECT their own results.
+- Enforced by `is_reviewer()` helper + `profiles.hr_code = ...` predicate.
 
-1. Vercel deploy green.
-2. Sign in as Admin -> **Upload Data -> Presentations -> New presentation**.
-3. Fill title + 1 page (Header, Description, Drive video link). Add a collector as assignee. Click **Create**.
-4. The assignee receives **"New presentation assigned: {title}"** email within ~10 seconds.
-5. On the edit page, click **Preview** -> opens the exact collector viewer in a new tab.
-6. Click **Convert to Google Slides** -> new tab opens with a real Google Slides deck. Copy the URL, open in an incognito window -> deck loads without sign-in and can be downloaded as PDF/PPTX.
+---
 
-## Fallback if "Convert to Google Slides" errors
-
-The client now surfaces the exact server error. If you see:
-- `Export crashed: error:0909006C:PEM routines...` -> `GOOGLE_SERVICE_ACCOUNT_KEY` env var is malformed. Repaste the full `private_key` value from the JSON, including `-----BEGIN...` through `-----END PRIVATE KEY-----\n`.
-- `Access Not Configured. Google Slides API has not been used in project ...` -> Cloud Console -> APIs & Services -> Library -> enable **Google Slides API** and **Google Drive API**.
-- `Server returned 504 with no body.` -> Function still timed out; check Vercel Runtime Logs for the true stack trace under `[export-slides] uncaught:`.
-
-## What's in each file (quick reference)
+## Files at a glance
 
 | File | Purpose |
 | --- | --- |
-| `sql/01_presentations_schema.sql` | 3 tables + RLS + updated_at trigger |
-| `package.json` | adds `googleapis`, restores previously-truncated JSON |
-| `components/Sidebar.tsx` | Presentations link moved from Administration -> Upload Data |
-| `components/PresentationBuilder.tsx` | Editor with pages + assignee picker + Preview / Save / Delete / Convert-to-Slides |
-| `components/PresentationViewer.tsx` | Paginated viewer with iframe + Prev/Next/pills; accepts `backHref`/`backLabel` |
-| `lib/presentation-notify.ts` | `notifyPresentationAssignees()` - Gmail via `lib/email.ts` |
-| `app/(app)/admin-presentations/*` | Reviewer list + new + edit + **preview** pages |
-| `app/(app)/my-presentations/*` | Collector list + viewer (marks `viewed_at`) |
-| `app/api/admin/presentations/route.ts` | POST create + send assignment email |
-| `app/api/admin/presentations/[id]/route.ts` | PUT update, DELETE |
-| `app/api/admin/presentations/[id]/assignments/route.ts` | PUT diff, email only newly-added `hr_codes` |
-| `app/api/admin/presentations/[id]/export-slides/route.ts` | Service-account Slides + Drive; anyone-with-link viewer; 60s maxDuration; global try/catch |
+| `sql/01_weekly_quality_scores.sql` | Weekly scores table + RLS. |
+| `sql/02_quizzes.sql` | 5 quiz tables + RLS + `is_reviewer()` helper. |
+| `components/UploadForm.tsx` | Send Report + "Send to all collectors" toggle. |
+| `components/PerformanceThresholdsView.tsx` | Threshold view + Team / Collector filters. |
+| `components/Sidebar.tsx` | New links: Weekly Quality Score (upload + view), Quizzes (admin + collector). |
+| `components/WeeklyQualityScoreView.tsx` | Table view with Week / Team / Collector filters + CSV export. |
+| `app/(app)/weekly-quality-upload/page.tsx` | CSV upload page. |
+| `app/(app)/weekly-quality-score/page.tsx` | View page (server; paginates rows). |
+| `app/api/weekly-quality-upload/route.ts` | Parses CSV/TSV, upserts by `(hr_code, week_start_date)`. |
+| `lib/quiz-notify.ts` | Gmail helper for quiz assign / reminder. |
+| `app/api/admin/quizzes/*` | Reviewer CRUD + assignments + resend + manual grading. |
+| `app/api/quizzes/[id]/submit/route.ts` | Collector submit + auto-grade. |
+| `app/(app)/admin-quizzes/*` | Reviewer list + new + detail (builder + analytics) + submission review. |
+| `app/(app)/my-quizzes/*` | Collector list + taker + result. |
+| `components/QuizBuilder.tsx` | Full builder UI. |
+| `components/QuizAnalytics.tsx` | Analytics cards + filters + submissions table + resend + CSV. |
+| `components/QuizTaker.tsx` | Collector taker. |
+| `components/QuizResult.tsx` | Collector result view after submit. |
+| `components/SubmissionReview.tsx` | Reviewer per-submission grading. |
+
+## Verify checklist
+
+- [ ] Run both SQLs.
+- [ ] Push files, wait for Vercel green.
+- [ ] Reports: open `/upload`, tick "Send to all collectors", pick a Match ID + folder link, submit -> every collector gets their own session.
+- [ ] Thresholds: `/performance-thresholds` shows Team + Collector dropdowns.
+- [ ] Weekly Quality Scores:
+  - Upload a small CSV via `/weekly-quality-upload` (hr_code + a few score columns).
+  - Open `/weekly-quality-score` as admin -> row appears with the right week.
+  - As collector, open `/weekly-quality-score` -> only that collector's rows show.
+- [ ] Quiz end-to-end:
+  - Admin `/admin-quizzes -> New` -> add 1 MC + 1 Short Answer + 1 Checkbox question. Select 2 collectors. Publish + Create.
+  - Each of the 2 collectors gets an assignment email.
+  - Collector `/my-quizzes` shows the quiz -> take + submit -> result page shows.
+  - Admin `/admin-quizzes/{id}` shows 1/2 completed (avg + highest/lowest visible).
+  - Admin clicks View on the completed row -> grade the short-answer question -> manual_score updates.
+  - Admin clicks Resend email on the pending row -> other collector receives a reminder.
+  - Admin Export CSV -> file downloads with the filtered rows.

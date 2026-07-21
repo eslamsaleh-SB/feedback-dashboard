@@ -107,6 +107,14 @@ export default function PerformanceThresholdsView({
   const [fromInput, setFromInput] = useState(from);
   const [toInput, setToInput] = useState(to);
   const [topN, setTopN] = useState<string>("");
+  const [teamFilter, setTeamFilter] = useState<string>("all");
+  const [collectorFilter, setCollectorFilter] = useState<string>("all");
+
+  const teams = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of collectors) if (c.team) s.add(c.team);
+    return Array.from(s).sort();
+  }, [collectors]);
   function applyDateRange() {
     const params = new URLSearchParams();
     params.set("from", fromInput);
@@ -158,6 +166,9 @@ export default function PerformanceThresholdsView({
       return [] as Collector[];
     }
     return collectors.filter((c) => {
+      // Team + Collector filters (applied first, then threshold logic).
+      if (teamFilter !== "all" && (c.team ?? "") !== teamFilter) return false;
+      if (collectorFilter !== "all" && c.hr_code !== collectorFilter) return false;
       const errRow = moduleErrorsByHr.get(c.hr_code);
       const scoreRow = avgScoreByHrAndKey[c.hr_code];
 
@@ -190,6 +201,8 @@ export default function PerformanceThresholdsView({
     errThresh,
     scoreThresh,
     matchLogic,
+    teamFilter,
+    collectorFilter,
   ]);
 
   const errorColumns = activeErrCriteria;
@@ -325,7 +338,37 @@ export default function PerformanceThresholdsView({
         >
           Apply date range
         </button>
-        <div className="ml-auto flex items-end gap-3">
+        <div className="ml-auto flex items-end gap-3 flex-wrap">
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
+            <select
+              value={teamFilter}
+              onChange={(e) => setTeamFilter(e.target.value)}
+              className={inputCls}
+            >
+              <option value="all">All teams</option>
+              {teams.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
+            <select
+              value={collectorFilter}
+              onChange={(e) => setCollectorFilter(e.target.value)}
+              className={inputCls}
+            >
+              <option value="all">All collectors</option>
+              {collectors
+                .filter((c) => teamFilter === "all" || (c.team ?? "") === teamFilter)
+                .map((c) => (
+                  <option key={c.hr_code} value={c.hr_code}>
+                    {c.hr_code} - {c.name}
+                  </option>
+                ))}
+            </select>
+          </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
               Top N (leave empty = all)
