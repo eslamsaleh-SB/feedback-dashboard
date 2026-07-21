@@ -50,6 +50,62 @@ select count(*) from public.users where email is null or email = '';
 Then open `/users` as Admin and confirm every column shows real data and is
 editable.
 
+## v57b - critical access-control bug + role rename
+
+**`lib/effective.ts` was never patched in v56/v57 and still queried the
+dropped `profiles` table.** Every page that gates on `profile?.role !== "Admin"`
+(and every `getEffective()` call, which is most of the app) silently got a
+`null` row back and fell through to the `role: "Viewer"` fallback. Result:
+every real Admin was treated as a Collector app-wide - not a cosmetic sidebar
+bug, an actual access-control failure. Fixed directly in `lib/effective.ts`:
+now selects from `users`, derives `full_name` from `first_name`/`last_name`,
+and reads `team` from `squad` (keeps the same `EffProfile` shape so no other
+file needs to change).
+
+**Role rename: `Uploader` -> `Reviewer`.** Swept all 36 live files under
+`app/`, `components/`, `lib/` that referenced the `"Uploader"` string literal
+(role comparisons, type unions, nav gating) and replaced it with
+`"Reviewer"`. Files touched directly in the repo (already edited, need
+`git commit` + push):
+
+```
+lib/effective.ts
+components/Sidebar.tsx
+components/UsersManager.tsx
+components/AccountsManager.tsx
+components/AnalyticsDashboard.tsx
+components/DashboardClient.tsx
+components/NavBar.tsx
+app/(app)/admin-inquiries/page.tsx
+app/(app)/admin-presentations/**  (4 files)
+app/(app)/admin-quizzes/**  (4 files)
+app/(app)/admin-sessions/page.tsx
+app/(app)/analytics/page.tsx
+app/(app)/feedback-progress/page.tsx
+app/(app)/feedback-reservation/page.tsx
+app/(app)/match-totals/page.tsx
+app/(app)/module-upload/page.tsx
+app/(app)/performance-thresholds/page.tsx
+app/(app)/upload/page.tsx
+app/api/admin/inquiries/**  (2 files)
+app/api/admin/note-reply/route.ts
+app/api/admin/presentations/**  (4 files)
+app/api/admin/quizzes/**  (5 files)
+app/api/modules/upload/route.ts
+app/api/upload/route.ts
+```
+
+**Deploy order for this part:**
+
+1. Commit + push the 36 edited files above (code side of the rename + the
+   critical `effective.ts` fix). Deploy to Vercel.
+2. Only after that's live, run `sql/02_rename_role_uploader_to_reviewer.sql`.
+   `ALTER TYPE ... RENAME VALUE` updates the enum AND every existing row
+   atomically - no data migration step needed. Running it before the code
+   deploys would break every `role === "Reviewer"` check until the deploy
+   catches up (they'd still be stored as `Uploader` in a stale deploy, or
+   vice versa) - keep the order.
+
 ## Notes
 
 - `is_active` stays a generated column (`squad is not null and squad <> 'Resigned'`)
