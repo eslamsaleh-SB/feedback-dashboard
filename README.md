@@ -106,6 +106,113 @@ app/api/upload/route.ts
    catches up (they'd still be stored as `Uploader` in a stale deploy, or
    vice versa) - keep the order.
 
+## v57c - the actual reason "nothing happened" after your deploy
+
+**This mounted folder is not connected to your git repo.** `git status` here
+returns "not a git repository." Every fix I made earlier by editing files
+directly (the `effective.ts` patch, the Uploader->Reviewer sweep) only
+existed in this scratch copy - your deploy pipeline pulls from a separate
+repo you push to yourself, so "Admin Access" (the deployment that ran 8 min
+after you said you deployed) shipped your repo's untouched code. Nothing
+changed on the live site because the fix never left this folder.
+
+**Second, bigger discovery:** `lib/effective.ts` wasn't the only broken file.
+`app/(app)/layout.tsx` - the file that actually builds the `role` prop passed
+to `<Sidebar>` - had two of its own direct `.from("profiles")` queries,
+completely bypassing `getEffective()`. Beyond that, **25 more live files**
+(every admin-gate check in Presentations, Quizzes, Inquiries, uploads, notify
+routes, and view-as) still queried the dropped `profiles` table directly.
+Every one of those has been checking `role` against a query that silently
+returned nothing since v56 shipped - not just the sidebar label, actual
+authorization on ~25 endpoints.
+
+All of it is fixed now, directly in this workspace, and verified with
+`tsc --noEmit` (zero errors). **You need to copy these 52 files into your
+real repo and push:**
+
+```
+app/(app)/accounts/page.tsx                                          # now redirects to /users (old page queried dropped columns)
+app/(app)/admin-inquiries/page.tsx                                    # Uploader -> Reviewer
+app/(app)/admin-presentations/page.tsx                                 # Uploader -> Reviewer
+app/(app)/admin-presentations/new/page.tsx                             # Uploader -> Reviewer
+app/(app)/admin-presentations/[id]/page.tsx                            # Uploader -> Reviewer
+app/(app)/admin-presentations/[id]/preview/page.tsx                    # profiles -> users, Uploader -> Reviewer
+app/(app)/admin-quizzes/page.tsx                                       # Uploader -> Reviewer
+app/(app)/admin-quizzes/new/page.tsx                                   # Uploader -> Reviewer
+app/(app)/admin-quizzes/[id]/page.tsx                                  # Uploader -> Reviewer
+app/(app)/admin-quizzes/[id]/submissions/[submissionId]/page.tsx       # Uploader -> Reviewer
+app/(app)/admin-sessions/page.tsx                                      # Uploader -> Reviewer
+app/(app)/analytics/page.tsx                                           # Uploader -> Reviewer
+app/(app)/feedback-progress/page.tsx                                   # Uploader -> Reviewer
+app/(app)/feedback-reservation/page.tsx                                # Uploader -> Reviewer
+app/(app)/layout.tsx                                                  # profiles -> users (THE sidebar-role bug), dropped dead signup auto-provision code
+app/(app)/match-totals/page.tsx                                        # Uploader -> Reviewer
+app/(app)/module-upload/page.tsx                                       # Uploader -> Reviewer
+app/(app)/performance-thresholds/page.tsx                              # Uploader -> Reviewer
+app/(app)/upload/page.tsx                                              # Uploader -> Reviewer
+app/(app)/users/page.tsx                                               # v57 rewrite - reads `users` directly
+app/api/admin/inquiries/complete/route.ts                              # profiles -> users
+app/api/admin/inquiries/reply/route.ts                                 # profiles -> users
+app/api/admin/note-reply/route.ts                                      # profiles -> users
+app/api/admin/presentations/route.ts                                   # profiles -> users
+app/api/admin/presentations/[id]/route.ts                              # profiles -> users
+app/api/admin/presentations/[id]/assignments/route.ts                  # profiles -> users
+app/api/admin/presentations/[id]/export-slides/route.ts                # profiles -> users
+app/api/admin/quizzes/route.ts                                         # profiles -> users
+app/api/admin/quizzes/[id]/route.ts                                    # profiles -> users
+app/api/admin/quizzes/[id]/assignments/route.ts                        # profiles -> users
+app/api/admin/quizzes/[id]/resend/route.ts                             # profiles -> users
+app/api/admin/quizzes/answers/[id]/route.ts                            # profiles -> users
+app/api/admin/users/route.ts                                           # v57 rewrite - full CRUD on `users`
+app/api/admin/users-import/route.ts                                    # v57 rewrite - adds email, drops staging insert
+app/api/feedback-notify/route.ts                                       # profiles -> users
+app/api/inquiries/create/route.ts                                      # profiles -> users
+app/api/modules/upload/route.ts                                        # profiles -> users
+app/api/quality-upload/route.ts                                        # profiles -> users
+app/api/quizzes/[id]/submit/route.ts                                   # profiles -> users
+app/api/report-notify/route.ts                                         # profiles -> users
+app/api/session-notify/route.ts                                        # profiles -> users
+app/api/upload/route.ts                                                # profiles -> users
+app/api/view-as/route.ts                                                # profiles -> users
+app/api/weekly-quality-upload/route.ts                                 # profiles -> users
+components/AccountsManager.tsx                                        # now orphaned/unused (safe to delete later)
+components/AnalyticsDashboard.tsx                                      # Uploader -> Reviewer
+components/DashboardClient.tsx                                        # Uploader -> Reviewer
+components/NavBar.tsx                                                 # Uploader -> Reviewer (dead component, not imported anywhere - safe to delete later)
+components/Sidebar.tsx                                                # Uploader -> Reviewer
+components/UsersManager.tsx                                            # v57 rewrite + Uploader -> Reviewer
+lib/effective.ts                                                      # profiles -> users (the original fix)
+lib/presentation-notify.ts                                             # profiles -> users
+lib/quiz-notify.ts                                                    # profiles -> users
+```
+
+Copy the whole `app/`, `components/`, and `lib/` folders from this workspace
+into your actual repo (overwrites are safe - every file above compiles clean)
+if that's easier than 52 individual copies. Then:
+
+```
+git add -A
+git commit -m "fix: repoint profiles->users across auth gates, rename Uploader role to Reviewer"
+git push
+```
+
+**Already fixed live, no deploy needed:** the forgot-password bug. Root
+cause was unrelated to code - your Supabase **Site URL** and **Redirect
+URLs** (Authentication -> URL Configuration) were still set to
+`https://feedback-dashboard-v966.onrender.com`, a dead domain from an earlier
+hosting setup, not your Vercel app. Every password-reset email was linking
+there instead of `/reset-password`. Updated Site URL to
+`https://feedback-dashboard-7i8h.vercel.app` and added
+`https://feedback-dashboard-7i8h.vercel.app/**` to the redirect allow-list.
+New reset emails will land correctly - test it again whenever.
+
+**Still to do, in order, after you push:**
+
+1. Confirm the new Vercel deployment is Ready.
+2. Sign out and back in - Sidebar should show Admin nav + "Admin" badge.
+3. Run `sql/02_rename_role_uploader_to_reviewer.sql` (only after the deploy
+   above is live - the enum rename and the code rename must land together).
+
 ## Notes
 
 - `is_active` stays a generated column (`squad is not null and squad <> 'Resigned'`)

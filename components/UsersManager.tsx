@@ -5,7 +5,7 @@ import Combobox, { type ComboOption } from "@/components/Combobox";
 
 type AppRole =
   | "Admin"
-  | "Uploader"
+  | "Reviewer"
   | "Viewer"
   | "TeamLeader"
   | "Supervisor"
@@ -27,7 +27,7 @@ export type UserRow = {
 
 const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
   { value: "Admin", label: "Admin" },
-  { value: "Uploader", label: "Reviewer" },
+  { value: "Reviewer", label: "Reviewer" },
   { value: "Viewer", label: "Collector" },
   { value: "TeamLeader", label: "Team Leader" },
   { value: "Supervisor", label: "Supervisor" },
