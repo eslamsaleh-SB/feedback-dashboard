@@ -2,15 +2,15 @@ import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type AppRole =
-  | "Admin" | "Uploader" | "Viewer" | "TeamLeader" | "Supervisor" | "QualityLeader";
+  | "Admin" | "Reviewer" | "Viewer" | "TeamLeader" | "Supervisor" | "QualityLeader";
 
 export type EffProfile = {
   id: string;
   role: AppRole;
   hr_code: string | null;
-  collector_id: string | null;
-  team: string | null;
-  full_name: string | null;
+  collector_id: string | null; // deprecated - v56 dropped users.collector_id; kept null for type compat
+  team: string | null; // sourced from users.squad
+  full_name: string | null; // derived from first_name + last_name
   email: string | null;
 };
 
@@ -23,16 +23,20 @@ export type Effective = {
 };
 
 export const VIEW_AS_COOKIE = "view_as";
-const SEL = "id, role, hr_code, collector_id, team, full_name, email";
+// v57 fix: `profiles` was renamed to `users` back in v56 and this file never
+// got updated - every lookup here silently failed and fell back to role
+// "Viewer", which is why Admins were being treated as Collectors app-wide.
+const SEL = "id, role, hr_code, first_name, last_name, squad, email";
 
 function toProfile(row: any, fallbackId: string, fallbackEmail: string | null): EffProfile {
+  const fullName = row ? [row.first_name, row.last_name].filter(Boolean).join(" ").trim() : "";
   return {
     id: (row?.id as string) ?? fallbackId,
     role: ((row?.role as AppRole) ?? "Viewer"),
     hr_code: row?.hr_code ?? null,
-    collector_id: row?.collector_id ?? null,
-    team: row?.team ?? null,
-    full_name: row?.full_name ?? null,
+    collector_id: null,
+    team: row?.squad ?? null,
+    full_name: fullName || null,
     email: row?.email ?? fallbackEmail,
   };
 }
@@ -48,7 +52,7 @@ export async function getEffective(
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: meRow } = await supabase.from("profiles").select(SEL).eq("id", user.id).single();
+  const { data: meRow } = await supabase.from("users").select(SEL).eq("id", user.id).single();
   const me = toProfile(meRow, user.id, user.email ?? null);
   const isAdmin = me.role === "Admin";
 
@@ -57,7 +61,7 @@ export async function getEffective(
 
   const target = cookies().get(VIEW_AS_COOKIE)?.value;
   if (isAdmin && target && target !== user.id) {
-    const { data: tRow } = await supabase.from("profiles").select(SEL).eq("id", target).single();
+    const { data: tRow } = await supabase.from("users").select(SEL).eq("id", target).single();
     if (tRow) {
       profile = toProfile(tRow, target, null);
       const code = profile.hr_code ? `${profile.hr_code} ` : "";
