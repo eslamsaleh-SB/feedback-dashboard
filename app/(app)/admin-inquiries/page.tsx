@@ -15,9 +15,9 @@ export default async function AdminInquiriesPage() {
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
   const role = profile?.role ?? "Viewer";
-  if (!["Admin", "Uploader", "Supervisor"].includes(role)) redirect("/my-inquiries");
+  if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/my-inquiries");
 
-  const [{ data: rows }, { data: collectorRows }] = await Promise.all([
+  const [{ data: rows }, { data: usersDirRaw }] = await Promise.all([
     supabase
       .from("match_inquiries")
       .select(
@@ -25,18 +25,19 @@ export default async function AdminInquiriesPage() {
       )
       .order("created_at", { ascending: false }),
     supabase
-      .from("collectors")
-      .select("hr_code, name, team")
+      .from("users")
+      .select("hr_code, first_name, last_name, squad")
       .not("hr_code", "is", null)
-      .order("name"),
+      .order("hr_code"),
   ]);
 
   const collectorByHr = new Map<string, { name: string; team: string | null }>();
-  for (const c of collectorRows ?? []) {
-    if ((c as any).hr_code) {
-      collectorByHr.set((c as any).hr_code, {
-        name: ((c as any).name ?? (c as any).hr_code) as string,
-        team: ((c as any).team ?? null) as string | null,
+  for (const u of usersDirRaw ?? []) {
+    if ((u as any).hr_code) {
+      const name = [(u as any).first_name, (u as any).last_name].filter(Boolean).join(" ").trim();
+      collectorByHr.set((u as any).hr_code, {
+        name: (name || (u as any).hr_code) as string,
+        team: ((u as any).squad ?? null) as string | null,
       });
     }
   }
@@ -64,10 +65,13 @@ export default async function AdminInquiriesPage() {
   return (
     <AdminInquiriesView
       inquiries={inquiries}
-      collectors={(collectorRows ?? []).map((c: any) => ({
-        hr_code: c.hr_code as string,
-        name: (c.name ?? c.hr_code) as string,
-      }))}
+      collectors={(usersDirRaw ?? []).map((u: any) => {
+        const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+        return {
+          hr_code: u.hr_code as string,
+          name: (name || u.hr_code) as string,
+        };
+      })}
     />
   );
 }
