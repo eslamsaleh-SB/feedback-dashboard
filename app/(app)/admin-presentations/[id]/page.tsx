@@ -11,7 +11,7 @@ export default async function EditPresentationPage({ params }: { params: { id: s
   if (!user) redirect("/login");
   const eff = await getEffective(supabase);
   const role = eff?.profile?.role ?? "Viewer";
-  if (!["Admin", "Uploader", "Supervisor"].includes(role)) redirect("/my-presentations");
+  if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/my-presentations");
 
   const [{ data: pres }, { data: pageRows }, { data: assignRows }, { data: collectors }] =
     await Promise.all([
@@ -30,10 +30,10 @@ export default async function EditPresentationPage({ params }: { params: { id: s
         .select("hr_code")
         .eq("presentation_id", params.id),
       supabase
-        .from("collectors")
-        .select("hr_code, name, team")
+        .from("users")
+        .select("hr_code, first_name, last_name, squad")
         .not("hr_code", "is", null)
-        .order("name"),
+        .order("hr_code"),
     ]);
 
   if (!pres) notFound();
@@ -43,8 +43,8 @@ export default async function EditPresentationPage({ params }: { params: { id: s
       mode="edit"
       collectors={(collectors ?? []).map((c: any) => ({
         hr_code: c.hr_code as string,
-        name: (c.name ?? c.hr_code) as string,
-        team: (c.team ?? null) as string | null,
+        name: ([c.first_name, c.last_name].filter(Boolean).join(" ").trim() || c.hr_code) as string,
+        team: (c.squad ?? null) as string | null,
       }))}
       initial={{
         id: pres.id as string,
