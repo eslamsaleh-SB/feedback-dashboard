@@ -30,7 +30,7 @@ export default async function TakeQuizPage({ params }: { params: { id: string } 
 
   const { data: questions } = await supabase
     .from("quiz_questions")
-    .select("id, question_order, question_type, prompt, options, points, video_link, drive_file_id, required")
+    .select("id, question_order, question_type, prompt, options, correct_answers, points, video_link, drive_file_id, required")
     .eq("quiz_id", params.id)
     .order("question_order");
 

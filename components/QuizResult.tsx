@@ -8,7 +8,10 @@ type Question = {
   question_type: string;
   prompt: string;
   options: string[] | null;
+  correct_answers: any;              // string | string[] | null
   points: number;
+  video_link?: string | null;
+  drive_file_id?: string | null;
 };
 
 type Answer = {
@@ -20,6 +23,13 @@ type Answer = {
   is_correct: boolean | null;
   points_awarded: number;
 };
+
+function correctToArray(v: any): string[] {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.filter((s) => typeof s === "string");
+  if (typeof v === "string") return [v];
+  return [];
+}
 
 export default function QuizResult({
   quiz,
@@ -85,6 +95,9 @@ export default function QuizResult({
       {questions.map((q) => {
         const a = byQ.get(q.id);
         const isText = q.question_type === "short_answer" || q.question_type === "paragraph";
+        const expected = correctToArray(q.correct_answers);
+        const picked = a?.selected_options ?? [];
+
         return (
           <div key={q.id} className={cardCls}>
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -95,31 +108,72 @@ export default function QuizResult({
                 {(a?.points_awarded ?? 0)} / {q.points} pts
               </span>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Your answer</p>
-              {isText ? (
+
+            {isText ? (
+              /* Text answer: single-column layout - no correct answer to show. */
+              <div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Your answer</p>
                 <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-100">
                   {a?.answer_text?.trim() ? a.answer_text : <span className="text-slate-400">(no answer)</span>}
                 </p>
-              ) : (
-                <ul className="list-disc pl-5 text-slate-800 dark:text-slate-100">
-                  {(a?.selected_options ?? []).map((o) => <li key={o}>{o}</li>)}
-                  {q.question_type === "multiple_choice_other" && a?.other_text && (
-                    <li><em>Other: {a.other_text}</em></li>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  Text answers are reviewed manually.
+                </p>
+              </div>
+            ) : (
+              /* MC / Checkbox / MC+Other: your answer on the left, correct answer on the right. */
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Your answer</p>
+                  {picked.length === 0 && !a?.other_text ? (
+                    <p className="text-slate-400">(no answer)</p>
+                  ) : (
+                    <ul className="list-disc pl-5 text-slate-800 dark:text-slate-100">
+                      {picked.map((o) => {
+                        const good = expected.includes(o);
+                        return (
+                          <li key={o} className={good ? "text-emerald-700" : "text-red-600"}>
+                            {o}
+                          </li>
+                        );
+                      })}
+                      {q.question_type === "multiple_choice_other" && a?.other_text && (
+                        <li className="italic">Other: {a.other_text}</li>
+                      )}
+                    </ul>
                   )}
-                </ul>
-              )}
-            </div>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Correct answer</p>
+                  {expected.length === 0 ? (
+                    <p className="text-slate-400 text-sm">(no correct answer defined)</p>
+                  ) : (
+                    <ul className="list-disc pl-5 text-emerald-700">
+                      {expected.map((o) => <li key={o}>{o}</li>)}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+
             {a?.is_correct === true && (
-              <p className="text-xs text-emerald-700">Correct</p>
+              <p className="text-xs text-emerald-700 font-medium">Correct</p>
             )}
             {a?.is_correct === false && (
-              <p className="text-xs text-red-600">Incorrect</p>
+              <p className="text-xs text-red-600 font-medium">Incorrect</p>
             )}
-            {isText && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Text answers are reviewed manually.
-              </p>
+
+            {/* Case video, shown below the answers - same style as the admin view. */}
+            {q.drive_file_id && (
+              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+                <iframe
+                  src={`https://drive.google.com/file/d/${q.drive_file_id}/preview`}
+                  className="w-full"
+                  style={{ height: "300px" }}
+                  allow="autoplay; fullscreen"
+                  allowFullScreen
+                />
+              </div>
             )}
           </div>
         );
