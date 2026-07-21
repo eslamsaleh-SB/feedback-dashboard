@@ -25,11 +25,12 @@ const rowKey = (p: EnrichedPart) => `${p.matchid}|${p.partid}|${p.hr_code ?? ""}
 
 const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
 
+// v58 fix: always render "Code - Name - Squad" with "-" for whatever's
+// missing, instead of conditionally hiding fields (which is what produced
+// "Code - Code" when name fell back to the hr_code itself).
 function clabel(hr: string | null, name: string | null, team: string | null) {
-  const parts = [hr || "—"];
-  if (name && name !== hr) parts.push(first3(name));
-  if (team) parts.push(team);
-  return parts.join(" - ");
+  const displayName = name && name !== hr ? first3(name) : "-";
+  return `${hr || "-"} - ${displayName} - ${team || "-"}`;
 }
 
 export default function MatchTotals({
@@ -348,9 +349,13 @@ export default function MatchTotals({
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-slate-500 dark:text-slate-400 align-top">{m.date ? m.date.slice(0, 10) : "—"}</td>
                       <td className="px-4 py-2.5 whitespace-nowrap align-top">
-                        <span className="font-medium">{p.hr_code ?? "—"}</span>
-                        {p.name && <span className="text-slate-500 dark:text-slate-400 ml-1">{first3(p.name)}</span>}
-                        {p.team && <span className="ml-1 text-xs text-slate-400 dark:text-slate-500">({p.team})</span>}
+                        <span className="font-medium">{p.hr_code ?? "-"}</span>
+                        <span className="text-slate-500 dark:text-slate-400 ml-1">
+                          {p.name && p.name !== p.hr_code ? first3(p.name) : "-"}
+                        </span>
+                        <span className="ml-1 text-xs text-slate-400 dark:text-slate-500">
+                          ({p.team || "-"})
+                        </span>
                       </td>
                       <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 align-top">{p.partid}</td>
                       {moduleFilter ? (

@@ -16,7 +16,7 @@ export default async function AdminSubmissionPage({
   if (!user) redirect("/login");
   const eff = await getEffective(supabase);
   const role = eff?.profile?.role ?? "Viewer";
-  if (!["Admin", "Uploader", "Supervisor"].includes(role)) redirect("/my-quizzes");
+  if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/my-quizzes");
 
   const [{ data: quiz }, { data: sub }, { data: questions }, { data: answers }] = await Promise.all([
     supabase.from("quizzes").select("id, title").eq("id", params.id).single(),
@@ -34,11 +34,18 @@ export default async function AdminSubmissionPage({
   if (!quiz || !sub) notFound();
 
   // Look up collector display info.
-  const { data: collector } = await supabase
-    .from("collectors")
-    .select("hr_code, name, team")
+  const { data: userRow } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name, squad")
     .eq("hr_code", (sub as any).hr_code)
     .maybeSingle();
+  const collector = userRow
+    ? {
+        hr_code: userRow.hr_code,
+        name: [userRow.first_name, userRow.last_name].filter(Boolean).join(" ").trim() || null,
+        team: userRow.squad ?? null,
+      }
+    : null;
 
   return (
     <div className="space-y-6">

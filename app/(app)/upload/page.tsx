@@ -15,17 +15,24 @@ export default async function UploadPage() {
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
 
-  if (!profile || !["Admin", "Uploader"].includes(profile.role)) {
+  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) {
     redirect("/dashboard");
   }
 
-  const [{ data: collectors }, { data: sessions }] = await Promise.all([
-    supabase.from("collectors").select("id, name, hr_code, team").order("hr_code"),
+  const [{ data: usersDirRaw }, { data: sessions }] = await Promise.all([
+    supabase.from("users").select("hr_code, first_name, last_name, squad").order("hr_code"),
     supabase
       .from("match_sessions")
       .select("id, match_name, review_date, collector_id")
       .order("review_date", { ascending: false }),
   ]);
+  // v58 fix: `collectors` is stale/orphaned since v56 moved identity onto
+  // `users`. Remap to the shape the rest of this file expects.
+  const collectors = (usersDirRaw ?? []).map((u: any) => ({
+    hr_code: u.hr_code,
+    name: [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || null,
+    team: u.squad ?? null,
+  }));
 
   const existing: ExistingSession[] = (sessions ?? []).map((s: any) => ({
     id: s.id,

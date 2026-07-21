@@ -9,11 +9,11 @@ async function requireReviewer(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", status: 401 as const };
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!profile || !["Admin", "Uploader", "Supervisor"].includes(profile.role)) {
+  if (!profile || !["Admin", "Reviewer", "Supervisor"].includes(profile.role)) {
     return { error: "Reviewers only", status: 403 as const };
   }
   return { user };

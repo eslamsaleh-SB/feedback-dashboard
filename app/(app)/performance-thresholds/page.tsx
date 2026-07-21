@@ -57,7 +57,7 @@ export default async function PerformanceThresholdsPage({
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
   const role = profile?.role ?? "Viewer";
-  if (!["Admin", "Uploader", "Supervisor"].includes(role)) redirect("/analytics");
+  if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/analytics");
 
   const from = isoOk(searchParams.from) ?? yearStart();
   const to = isoOk(searchParams.to) ?? todayIso();
@@ -65,12 +65,12 @@ export default async function PerformanceThresholdsPage({
   const monthFromIso = `${from.slice(0, 7)}-01`;
   const monthToIso = `${to.slice(0, 7)}-01`;
 
-  const [{ data: collectorRows }, { data: moduleRows }, qualityRows, freezeFrameRows] = await Promise.all([
+  const [{ data: usersDirRaw }, { data: moduleRows }, qualityRows, freezeFrameRows] = await Promise.all([
     supabase
-      .from("collectors")
-      .select("hr_code, name, team")
+      .from("users")
+      .select("hr_code, first_name, last_name, squad")
       .not("hr_code", "is", null)
-      .order("name"),
+      .order("hr_code"),
     supabase.rpc("collector_module_totals", { p_from: from, p_to: to }),
     fetchAllInMonthRange<any>(
       supabase,
@@ -92,11 +92,14 @@ export default async function PerformanceThresholdsPage({
     <PerformanceThresholdsView
       from={from}
       to={to}
-      collectors={(collectorRows ?? []).map((c: any) => ({
-        hr_code: c.hr_code as string,
-        name: (c.name ?? c.hr_code) as string,
-        team: (c.team ?? null) as string | null,
-      }))}
+      collectors={(usersDirRaw ?? []).map((u: any) => {
+        const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+        return {
+          hr_code: u.hr_code as string,
+          name: (name || u.hr_code) as string,
+          team: (u.squad ?? null) as string | null,
+        };
+      })}
       moduleErrors={(moduleRows ?? []).map((r: any) => ({
         hr_code: r.hr_code as string,
         players: Number(r.players ?? 0),

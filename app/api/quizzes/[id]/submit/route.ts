@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("users")
     .select("hr_code, role")
     .eq("id", user.id)
     .single();

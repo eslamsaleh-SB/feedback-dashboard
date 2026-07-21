@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     { auth: { persistSession: false } }
   );
 
-  let profileQuery = admin.from("profiles").select("id, hr_code").eq("role", "Viewer");
+  let profileQuery = admin.from("users").select("id, hr_code").eq("role", "Viewer");
   if (hr_code) profileQuery = profileQuery.eq("hr_code", hr_code);
   const { data: profileRows } = await profileQuery;
 

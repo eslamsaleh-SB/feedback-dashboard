@@ -27,11 +27,16 @@ export default async function ReportMonitoringPage() {
     .select("report_id, hr_code, acked_at");
 
   // All collectors
-  const { data: collectorRows } = await supabase
-    .from("collectors")
-    .select("hr_code, name, team")
+  const { data: usersDirRaw } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name, squad")
     .not("hr_code", "is", null)
     .order("hr_code");
+  const collectorRows = (usersDirRaw ?? []).map((u: any) => ({
+    hr_code: u.hr_code,
+    name: [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.hr_code,
+    team: u.squad ?? null,
+  }));
 
   const ackMap = new Map<string, Set<string>>();
   for (const a of ackRows ?? []) {

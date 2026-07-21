@@ -14,7 +14,7 @@ export default async function FeedbackProgressPage() {
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
+  const role = (profile?.role ?? "Viewer") as "Admin" | "Reviewer" | "Viewer";
   if (role === "Viewer") redirect("/analytics");
 
   const { data: reservations } = await supabase
@@ -26,12 +26,14 @@ export default async function FeedbackProgressPage() {
     .order("session_time", { ascending: true });
 
   // Collector directory for names/teams.
-  const { data: collectors } = await supabase
-    .from("collectors")
-    .select("hr_code, name, team");
+  const { data: usersDirRaw } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name, squad");
   const byHr = new Map<string, { name: string | null; team: string | null }>();
-  (collectors ?? []).forEach((c: any) => {
-    if (c.hr_code) byHr.set(c.hr_code, { name: c.name ?? null, team: c.team ?? null });
+  (usersDirRaw ?? []).forEach((u: any) => {
+    if (!u.hr_code) return;
+    const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+    byHr.set(u.hr_code, { name: name || null, team: u.squad ?? null });
   });
 
   const sessions: Session[] = (reservations ?? []).map((r: any) => ({

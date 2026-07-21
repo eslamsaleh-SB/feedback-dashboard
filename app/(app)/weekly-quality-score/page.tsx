@@ -27,11 +27,16 @@ export default async function WeeklyQualityScorePage() {
   const profile = eff?.profile ?? null;
   const role = profile?.role ?? "Viewer";
 
-  const { data: collectors } = await supabase
-    .from("collectors")
-    .select("hr_code, name, team")
+  const { data: usersDirRaw } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name, squad")
     .not("hr_code", "is", null)
     .order("hr_code");
+  const collectors = (usersDirRaw ?? []).map((u: any) => ({
+    hr_code: u.hr_code,
+    name: [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || null,
+    team: u.squad ?? null,
+  }));
 
   // Try the v53 column set (with base + squad). If the DB is still on v52
   // (missing those columns), fall back to the older set + surface a clear

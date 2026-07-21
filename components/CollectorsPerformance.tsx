@@ -10,11 +10,12 @@ const NO_TEAM = "__noteam__";
 
 const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
 
+// v58 fix: always render "Code - Name - Squad" with "-" for whatever's
+// missing, instead of conditionally hiding fields (which produced
+// "Code - Code" when name fell back to the hr_code itself).
 function clabel(hr: string | null, name: string | null, team: string | null) {
-  const parts = [hr || "—"];
-  if (name && name !== hr) parts.push(first3(name));
-  if (team) parts.push(team);
-  return parts.join(" - ");
+  const displayName = name && name !== hr ? first3(name) : "-";
+  return `${hr || "-"} - ${displayName} - ${team || "-"}`;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");

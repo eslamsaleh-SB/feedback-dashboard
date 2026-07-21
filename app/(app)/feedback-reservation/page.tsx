@@ -14,19 +14,19 @@ export default async function FeedbackReservationPage() {
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
+  const role = (profile?.role ?? "Viewer") as "Admin" | "Reviewer" | "Viewer";
   if (role === "Viewer") redirect("/analytics");
 
-  const { data: collectors } = await supabase
-    .from("collectors")
-    .select("hr_code, name, team")
+  const { data: usersDirRaw } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name, squad")
     .not("hr_code", "is", null)
-    .order("name");
+    .order("hr_code");
 
-  const opts = (collectors ?? []).map((c: any) => ({
-    hr_code: c.hr_code as string,
-    name: (c.name ?? null) as string | null,
-    team: (c.team ?? null) as string | null,
+  const opts = (usersDirRaw ?? []).map((u: any) => ({
+    hr_code: u.hr_code as string,
+    name: ([u.first_name, u.last_name].filter(Boolean).join(" ").trim() || null) as string | null,
+    team: (u.squad ?? null) as string | null,
   }));
 
   return <FeedbackReservationForm collectors={opts} />;

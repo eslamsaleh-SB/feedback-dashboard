@@ -48,38 +48,38 @@ export default async function AnalyticsPage({
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
+  const role = (profile?.role ?? "Viewer") as "Admin" | "Reviewer" | "Viewer";
 
   const from = isoOk(searchParams.from);
   const to = isoOk(searchParams.to);
 
-  const { data: collectors } = await supabase
-    .from("collectors")
-    .select("id, name, hr_code, team, title")
-    .order("name");
+  // v58 fix: this used to join against `collectors`, which is stale/orphaned
+  // since the v56 users refactor (identity data now lives on `users` -
+  // first_name/last_name/squad/job_title). That's why the team filter showed
+  // null and names fell back to the hr_code itself.
+  const { data: usersDir } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name, squad, job_title")
+    .order("hr_code");
   const byHr = new Map<
     string,
-    { name: string; team: string | null; title: string | null }
+    { name: string | null; team: string | null; title: string | null }
   >();
-  (collectors ?? []).forEach((c: any) => {
-    if (c.hr_code)
-      byHr.set(c.hr_code, {
-        name: c.name,
-        team: c.team ?? null,
-        title: c.title ?? null,
-      });
+  (usersDir ?? []).forEach((u: any) => {
+    if (!u.hr_code) return;
+    const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+    byHr.set(u.hr_code, {
+      name: name || null,
+      team: u.squad ?? null,
+      title: u.job_title ?? null,
+    });
   });
 
   // =================== COLLECTOR (Viewer) ===================
   if (role === "Viewer") {
-    const isLinked = !!profile?.collector_id || !!profile?.hr_code;
+    const isLinked = !!profile?.hr_code;
     const meInfo = profile?.hr_code ? byHr.get(profile.hr_code) : undefined;
-    let myName = meInfo?.name ?? null;
-    if (!myName && profile?.collector_id)
-      myName =
-        (collectors ?? []).find((c: any) => c.id === profile.collector_id)?.name ??
-        null;
-    if (!myName) myName = profile?.hr_code ?? null;
+    const myName = meInfo?.name ?? profile?.hr_code ?? null;
 
     const { data: partRows } = await supabase.rpc("match_part_summary_fast", {
       p_from: from,
@@ -110,17 +110,13 @@ export default async function AnalyticsPage({
       });
     }
 
-    // Find collector record to get their sessions
-    const { data: collectorRow } = await supabase
-      .from("collectors")
-      .select("id")
-      .eq("hr_code", profile?.hr_code ?? "")
-      .single();
-
+    // v56 repointed match_sessions off collector_id (uuid, dropped) onto
+    // hr_code (text) - this used to look up collectors.id first and would
+    // now error since that column is gone.
     let rq = supabase
       .from("match_sessions")
       .select("id, match_name, review_date, overall_notes")
-      .eq("collector_id", collectorRow?.id ?? "00000000-0000-0000-0000-000000000000")
+      .eq("hr_code", profile?.hr_code ?? "")
       .order("review_date", { ascending: false });
     if (from) rq = rq.gte("review_date", from);
     if (to) rq = rq.lte("review_date", to);
@@ -178,7 +174,7 @@ export default async function AnalyticsPage({
     const info = byHr.get(r.hr_code);
     return {
       hr_code: r.hr_code,
-      name: info?.name ?? r.hr_code,
+      name: info?.name ?? "-",
       team: info?.team ?? null,
       title: info?.title ?? null,
       counts: numCounts(r),
@@ -194,10 +190,10 @@ export default async function AnalyticsPage({
   const matchCount = typeof mc === "number" ? mc : Number(mc ?? 0);
 
   const teams = Array.from(
-    new Set((collectors ?? []).map((c: any) => c.team).filter(Boolean) as string[])
+    new Set((usersDir ?? []).map((u: any) => u.squad).filter(Boolean) as string[])
   ).sort();
   const titles = Array.from(
-    new Set((collectors ?? []).map((c: any) => c.title).filter(Boolean) as string[])
+    new Set((usersDir ?? []).map((u: any) => u.job_title).filter(Boolean) as string[])
   ).sort();
 
   return (

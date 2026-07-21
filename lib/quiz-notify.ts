@@ -34,7 +34,7 @@ export async function notifyQuizAssignees(params: {
 
   const a = adminClient();
   const { data: profiles, error: profErr } = await a
-    .from("profiles")
+    .from("users")
     .select("id, hr_code")
     .in("hr_code", codes);
   if (profErr || !profiles) {

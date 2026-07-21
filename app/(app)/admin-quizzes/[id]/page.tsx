@@ -13,7 +13,7 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
   if (!user) redirect("/login");
   const eff = await getEffective(supabase);
   const role = eff?.profile?.role ?? "Viewer";
-  if (!["Admin", "Uploader", "Supervisor"].includes(role)) redirect("/my-quizzes");
+  if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/my-quizzes");
 
   const [
     { data: quiz },
@@ -34,8 +34,8 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
     supabase.from("quiz_submissions")
       .select("id, hr_code, submitted_at, auto_score, manual_score, total_score, max_score")
       .eq("quiz_id", params.id).order("submitted_at", { ascending: false }),
-    supabase.from("collectors")
-      .select("hr_code, name, team").not("hr_code", "is", null).order("name"),
+    supabase.from("users")
+      .select("hr_code, first_name, last_name, squad").not("hr_code", "is", null).order("hr_code"),
   ]);
 
   if (!quiz) notFound();
@@ -48,11 +48,14 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
     <div className="space-y-8">
       <QuizBuilder
         mode="edit"
-        collectors={(collectors ?? []).map((c: any) => ({
-          hr_code: c.hr_code as string,
-          name: (c.name ?? c.hr_code) as string,
-          team: (c.team ?? null) as string | null,
-        }))}
+        collectors={(collectors ?? []).map((u: any) => {
+          const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+          return {
+            hr_code: u.hr_code as string,
+            name: (name || u.hr_code) as string,
+            team: (u.squad ?? null) as string | null,
+          };
+        })}
         initial={{
           id: (quiz as any).id,
           title: (quiz as any).title,
@@ -76,11 +79,14 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
         quizId={(quiz as any).id}
         title={(quiz as any).title}
         maxScore={totalPoints}
-        collectors={(collectors ?? []).map((c: any) => ({
-          hr_code: c.hr_code as string,
-          name: (c.name ?? c.hr_code) as string,
-          team: (c.team ?? null) as string | null,
-        }))}
+        collectors={(collectors ?? []).map((u: any) => {
+          const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+          return {
+            hr_code: u.hr_code as string,
+            name: (name || u.hr_code) as string,
+            team: (u.squad ?? null) as string | null,
+          };
+        })}
         assignments={(assign ?? []).map((a: any) => ({
           hr_code: a.hr_code as string,
           assigned_at: a.assigned_at as string,

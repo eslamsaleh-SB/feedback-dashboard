@@ -16,8 +16,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { data: profile } = await supabase
-    .from("profiles").select("role").eq("id", user.id).single();
-  if (!profile || !["Admin", "Uploader", "Supervisor"].includes((profile as any).role)) {
+    .from("users").select("role").eq("id", user.id).single();
+  if (!profile || !["Admin", "Reviewer", "Supervisor"].includes((profile as any).role)) {
     return NextResponse.json({ error: "Reviewers only" }, { status: 403 });
   }
 

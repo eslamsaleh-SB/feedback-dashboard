@@ -68,7 +68,7 @@ async function notifyCollectorReport(opts: {
   if (!collector?.hr_code) return;
 
   const { data: profile } = await admin
-    .from("profiles")
+    .from("users")
     .select("id")
     .eq("hr_code", collector.hr_code)
     .single();
@@ -123,11 +123,11 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!profile || !["Admin", "Uploader"].includes(profile.role)) {
+  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) {
     return NextResponse.json({ error: "Not allowed to upload" }, { status: 403 });
   }
 

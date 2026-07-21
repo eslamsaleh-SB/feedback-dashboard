@@ -8,7 +8,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 
 export type AppRole =
   | "Admin"
-  | "Uploader"
+  | "Reviewer"
   | "Viewer"
   | "TeamLeader"
   | "Supervisor"
@@ -17,7 +17,7 @@ export type AppRole =
 const roleLabel = (role: AppRole): string => {
   const map: Record<AppRole, string> = {
     Admin: "Admin",
-    Uploader: "Reviewer",
+    Reviewer: "Reviewer",
     Viewer: "Collector",
     TeamLeader: "Team Leader",
     Supervisor: "Supervisor",
@@ -63,21 +63,21 @@ function buildNav(role: AppRole): NavEntry[] {
   ];
 
   const uploadItems: NavItem[] = [];
-  if (role === "Admin" || role === "Uploader") uploadItems.push({ href: "/module-upload", label: "Module Data" });
+  if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/module-upload", label: "Module Data" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/weekly-quality-upload", label: "Weekly Quality Score Upload" });
-  if (role === "Admin" || role === "Uploader") uploadItems.push({ href: "/upload", label: "Send Report" });
-  if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
+  if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/upload", label: "Send Report" });
+  if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
     uploadItems.push({ href: "/admin-presentations", label: "Presentations" });
   }
-  if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
+  if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
     uploadItems.push({ href: "/admin-quizzes", label: "Quizzes" });
   }
   if (uploadItems.length > 0) {
     entries.push({ type: "group", key: "upload", label: "Upload Data", items: uploadItems });
   }
 
-  if (role === "Admin" || role === "Uploader" || role === "Supervisor") {
+  if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
     const feedbackItems: NavItem[] = [];
     if (role !== "Admin") feedbackItems.push({ href: "/feedback-progress", label: "Feedback Progress" });
     feedbackItems.push({ href: "/feedback-reservation", label: "Feedback Reservations" });

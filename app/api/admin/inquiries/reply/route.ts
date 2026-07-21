@@ -29,11 +29,11 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const { data: me } = await supabase
-    .from("profiles")
+    .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!me || !["Admin", "Uploader", "Supervisor"].includes(me.role)) {
+  if (!me || !["Admin", "Reviewer", "Supervisor"].includes(me.role)) {
     return NextResponse.json({ error: "Reviewers only" }, { status: 403 });
   }
 

@@ -9,11 +9,11 @@ export default function NavBar({
   role,
 }: {
   email: string;
-  role: "Admin" | "Uploader" | "Viewer";
+  role: "Admin" | "Reviewer" | "Viewer";
 }) {
   const router = useRouter();
   const supabase = createClient();
-  const canUpload = role === "Admin" || role === "Uploader";
+  const canUpload = role === "Admin" || role === "Reviewer";
 
   async function signOut() {
     await supabase.auth.signOut();

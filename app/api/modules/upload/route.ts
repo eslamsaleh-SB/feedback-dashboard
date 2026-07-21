@@ -126,11 +126,11 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!profile || !["Admin", "Uploader"].includes(profile.role)) {
+  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) {
     return NextResponse.json({ error: "Only Admins/Uploaders can upload" }, { status: 403 });
   }
 

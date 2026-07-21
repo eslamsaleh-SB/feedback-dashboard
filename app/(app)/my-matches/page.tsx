@@ -29,15 +29,19 @@ export default async function MyMatchesPage({ searchParams }: { searchParams: { 
     location: Number(r.location), impact: Number(r.impact), extras: Number(r.extras), freeze_frame: Number(r.freeze_frame),
   });
 
-  const { data: collectors } = await supabase.from("collectors").select("hr_code, name, team");
+  const { data: usersDirRaw } = await supabase.from("users").select("hr_code, first_name, last_name, squad");
   const byHr = new Map<string, { name: string; team: string | null }>();
-  (collectors ?? []).forEach((c: any) => { if (c.hr_code) byHr.set(c.hr_code, { name: c.name, team: c.team }); });
+  (usersDirRaw ?? []).forEach((u: any) => {
+    if (!u.hr_code) return;
+    const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+    byHr.set(u.hr_code, { name: name || u.hr_code, team: u.squad ?? null });
+  });
 
   const enriched: EnrichedPart[] = (rows ?? [])
     .filter((r: any) => !matchId || String(r.matchid).includes(matchId))
     .map((r: any) => {
       const info = r.hr_code ? byHr.get(r.hr_code) : undefined;
-      return { matchid: r.matchid, partid: r.partid, hr_code: r.hr_code, name: info?.name ?? r.hr_code ?? "—", team: info?.team ?? null, date: r.date, counts: numCounts(r), total: Number(r.total) };
+      return { matchid: r.matchid, partid: r.partid, hr_code: r.hr_code, name: info?.name ?? r.hr_code ?? "-", team: info?.team ?? null, date: r.date, counts: numCounts(r), total: Number(r.total) };
     });
 
   return <CollectorMatchDetails rows={enriched} from={from} to={to} matchId={matchId} module={moduleParam || undefined} />;

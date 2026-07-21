@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   );
 
   const { data: profileRows } = await admin
-    .from("profiles")
+    .from("users")
     .select("hr_code, id")
     .in("hr_code", hr_codes);
 

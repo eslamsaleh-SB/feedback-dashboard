@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const { data: me } = await supabase.from("users").select("role").eq("id", user.id).single();
   if (me?.role !== "Admin") {
     return NextResponse.json({ error: "Admins only" }, { status: 403 });
   }

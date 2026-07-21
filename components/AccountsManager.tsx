@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type AppRole = "Admin"|"Uploader"|"Viewer"|"TeamLeader"|"Supervisor"|"QualityLeader";
+type AppRole = "Admin"|"Reviewer"|"Viewer"|"TeamLeader"|"Supervisor"|"QualityLeader";
 export type Account = {
   id: string;
   email: string | null;
@@ -14,7 +14,7 @@ export type Account = {
 
 const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
   { value: "Admin", label: "Admin" },
-  { value: "Uploader", label: "Reviewer" },
+  { value: "Reviewer", label: "Reviewer" },
   { value: "Viewer", label: "Collector" },
   { value: "TeamLeader", label: "Team Leader" },
   { value: "Supervisor", label: "Supervisor" },

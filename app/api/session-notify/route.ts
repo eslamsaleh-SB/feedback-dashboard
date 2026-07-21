@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   if (!collector?.hr_code) return NextResponse.json({ ok: true, sent: 0 });
 
   const { data: profile } = await admin
-    .from("profiles")
+    .from("users")
     .select("id")
     .eq("hr_code", collector.hr_code)
     .single();

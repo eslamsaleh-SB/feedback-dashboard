@@ -21,9 +21,12 @@ export default async function AdminReportsPage() {
     { data: videoRows },
     { data: collectorRows },
   ] = await Promise.all([
+    // v58 fix: this embedded a `collectors(hr_code, name)` relation via
+    // match_sessions.collector_id - that FK was dropped and the table
+    // repointed onto hr_code back in v56. The embed silently broke.
     supabase
       .from("match_sessions")
-      .select("id, match_name, review_date, overall_notes, collector_id, collectors(hr_code, name)")
+      .select("id, match_name, review_date, overall_notes, hr_code")
       .order("review_date", { ascending: false }),
     supabase
       .from("session_notes")
@@ -38,10 +41,10 @@ export default async function AdminReportsPage() {
       .from("session_videos")
       .select("id, match_session_id, drive_file_id, file_name"),
     supabase
-      .from("collectors")
-      .select("hr_code, name, team")
+      .from("users")
+      .select("hr_code, first_name, last_name, squad")
       .not("hr_code", "is", null)
-      .order("name"),
+      .order("hr_code"),
   ]);
 
   const ackedIds = new Set((ackRows ?? []).map((a: any) => a.session_id as string));
@@ -72,21 +75,35 @@ export default async function AdminReportsPage() {
     });
   }
 
+  const collectorByHr = new Map<string, { name: string; team: string | null }>();
+  for (const c of collectorRows ?? []) {
+    if ((c as any).hr_code) {
+      const name = [(c as any).first_name, (c as any).last_name].filter(Boolean).join(" ").trim();
+      collectorByHr.set((c as any).hr_code, {
+        name: name || (c as any).hr_code,
+        team: (c as any).squad ?? null,
+      });
+    }
+  }
+
   return (
     <AdminReportsView
-      collectors={(collectorRows ?? []).map((c: any) => ({
-        hr_code: c.hr_code as string,
-        name: (c.name ?? c.hr_code) as string,
-        team: (c.team ?? null) as string | null,
-      }))}
+      collectors={(collectorRows ?? []).map((c: any) => {
+        const name = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
+        return {
+          hr_code: c.hr_code as string,
+          name: (name || c.hr_code) as string,
+          team: (c.squad ?? null) as string | null,
+        };
+      })}
       sessions={(sessions ?? []).map((s: any) => {
-        const c = Array.isArray(s.collectors) ? s.collectors[0] : s.collectors;
+        const c = s.hr_code ? collectorByHr.get(s.hr_code) : undefined;
         return {
           id: s.id,
           match_name: s.match_name,
           review_date: s.review_date,
           overall_notes: s.overall_notes,
-          hr_code: c?.hr_code ?? null,
+          hr_code: s.hr_code ?? null,
           collector_name: c?.name ?? null,
           acknowledged: ackedIds.has(s.id),
           notes: notesBySession[s.id] ?? [],

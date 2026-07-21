@@ -38,11 +38,11 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const { data: me } = await supabase
-    .from("profiles")
+    .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!me || !["Admin", "Uploader"].includes(me.role)) {
+  if (!me || !["Admin", "Reviewer"].includes(me.role)) {
     return NextResponse.json({ error: "Admins only" }, { status: 403 });
   }
 
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
 
   let emailSent = false;
   const { data: profile } = await a
-    .from("profiles")
+    .from("users")
     .select("id")
     .eq("hr_code", note.hr_code)
     .single();

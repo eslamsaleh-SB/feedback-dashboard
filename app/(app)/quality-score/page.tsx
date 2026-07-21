@@ -76,10 +76,15 @@ export default async function QualityScorePage({
       ? searchParams.collector
       : null;
 
-  const { data: collectors } = await supabase
-    .from("collectors")
-    .select("hr_code, name, team")
-    .order("name");
+  const { data: usersDirRaw } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name, squad")
+    .order("hr_code");
+  const collectors = (usersDirRaw ?? []).map((u: any) => ({
+    hr_code: u.hr_code,
+    name: [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.hr_code,
+    team: u.squad ?? null,
+  }));
   const teams = Array.from(
     new Set((collectors ?? []).map((c: any) => c.team).filter(Boolean) as string[])
   ).sort();

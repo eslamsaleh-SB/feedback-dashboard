@@ -10,7 +10,7 @@ import {
 } from "@/lib/modules";
 
 type CollectorOpt = { hr_code: string; name: string };
-type Role = "Admin" | "Uploader" | "Viewer";
+type Role = "Admin" | "Reviewer" | "Viewer";
 type Tab = "matches" | "modules" | "collectors";
 type SortKey = ModuleValue | "total";
 
