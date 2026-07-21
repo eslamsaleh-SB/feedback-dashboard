@@ -1,20 +1,16 @@
 // POST /api/admin/users-import
-// Admin-only bulk onboarding endpoint. Accepts a CSV/TSV with header row:
-//   email, hr_code, first_name, last_name, mobile_number, legacy_id, squad, job_title
+// Admin-only bulk onboarding. Accepts EITHER:
+//   - multipart file (small CSV, one shot)
+//   - application/json body: { rows: [{email, hr_code, ...}, ...], send_recovery? }
+// The JSON path is what the admin page uses in 50-row chunks so we never hit
+// Vercel's 60s serverless limit.
 //
-// For each row:
-//   1. Upsert into public.users_import (staging).
-//   2. If no auth.users row exists for that email, call auth.admin.createUser
-//      with email_confirm=true + a random password.
-//   3. Trigger a password-recovery email (auth.admin.generateLink) so the
-//      person picks their own password on first login.
-//   4. Upsert the enriched row into public.users (hr_code + legacy_id serve
-//      as business keys; is_active recomputes automatically from squad).
-//
-// Returns a summary: {created, updated, skipped, failed:[{row, reason}]}
-//
-// Requires SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL, and the
-// caller's session role must be Admin.
+// Perf notes:
+//   - We fetch auth.admin.listUsers ONCE at the top and build an email->id map
+//     covering the current page. For a 490-user Supabase project this is one
+//     HTTP call, not 490.
+//   - Batches upserts into public.users_import + public.users.
+//   - Recovery emails are optional and, when off, we skip that call entirely.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -60,22 +56,60 @@ function parseCsv(text: string): string[][] {
     .filter((r) => r.some((c) => c));
 }
 
+type Row = {
+  email: string;
+  hr_code: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  mobile_number?: string | null;
+  legacy_id?: string | null;
+  squad?: string | null;
+  job_title?: string | null;
+};
+
 function randomPassword(): string {
   return Array.from({ length: 4 })
     .map(() => Math.random().toString(36).slice(2, 10))
     .join("") + "!Aa1";
 }
 
+async function loadAllAuthUsers(a: ReturnType<typeof adminClient>) {
+  // Paginated list. Supabase caps at 1000/page.
+  const map = new Map<string, string>(); // lowercase email -> auth user id
+  let page = 1;
+  const perPage = 1000;
+  while (true) {
+    const { data, error } = await a.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    const users = data?.users ?? [];
+    for (const u of users) {
+      const em = (u.email ?? "").toLowerCase();
+      if (em) map.set(em, u.id);
+    }
+    if (users.length < perPage) break;
+    page++;
+  }
+  return map;
+}
+
 export async function POST(req: NextRequest) {
+  try {
+    return await handle(req);
+  } catch (e: any) {
+    console.error("[users-import] uncaught:", e?.message ?? e, e?.stack);
+    return NextResponse.json(
+      { error: `Import crashed: ${e?.message ?? String(e)}` },
+      { status: 500 }
+    );
+  }
+}
+
+async function handle(req: NextRequest) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const { data: me } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const { data: me } = await supabase.from("users").select("role").eq("id", user.id).single();
   if ((me as any)?.role !== "Admin") {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
@@ -83,131 +117,153 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY not set" }, { status: 500 });
   }
 
-  const form = await req.formData();
-  const file = form.get("file") as File | null;
-  const sendRecovery = String(form.get("send_recovery") ?? "true") !== "false";
-  if (!file) return NextResponse.json({ error: "file is required" }, { status: 400 });
+  const ct = (req.headers.get("content-type") ?? "").toLowerCase();
+  let rows: Row[] = [];
+  let sendRecovery = true;
 
-  const buf = await file.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  const text = (bytes[0] === 0xff && bytes[1] === 0xfe)
-    ? new TextDecoder("utf-16le").decode(buf)
-    : new TextDecoder("utf-8").decode(buf);
-
-  const rows = parseCsv(text);
-  if (rows.length < 2) return NextResponse.json({ error: "empty file" }, { status: 400 });
-
-  const headers = rows[0].map((h) => h.toLowerCase().replace(/\s+/g, "_"));
-  function idx(...names: string[]) {
-    for (const n of names) {
-      const i = headers.findIndex((h) => h === n);
-      if (i >= 0) return i;
+  if (ct.includes("application/json")) {
+    const body = await req.json().catch(() => null);
+    if (!body || !Array.isArray(body.rows)) {
+      return NextResponse.json({ error: "Expected JSON { rows: [...] }" }, { status: 400 });
     }
-    return -1;
-  }
-  const iEmail  = idx("email");
-  const iHr     = idx("hr_code", "hr");
-  const iFirst  = idx("first_name", "firstname");
-  const iLast   = idx("last_name", "lastname");
-  const iMobile = idx("mobile_number", "mobile", "phone");
-  const iLegacy = idx("legacy_id", "legacyid", "legacy");
-  const iSquad  = idx("squad", "team");
-  const iTitle  = idx("job_title");
+    rows = body.rows as Row[];
+    if (typeof body.send_recovery === "boolean") sendRecovery = body.send_recovery;
+  } else {
+    // multipart file (small imports only).
+    const form = await req.formData();
+    const file = form.get("file") as File | null;
+    sendRecovery = String(form.get("send_recovery") ?? "true") !== "false";
+    if (!file) return NextResponse.json({ error: "file is required" }, { status: 400 });
 
-  if (iEmail < 0 || iHr < 0) {
-    return NextResponse.json(
-      { error: "Missing required columns: email and hr_code" },
-      { status: 400 }
-    );
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    const text = (bytes[0] === 0xff && bytes[1] === 0xfe)
+      ? new TextDecoder("utf-16le").decode(buf)
+      : new TextDecoder("utf-8").decode(buf);
+    const parsed = parseCsv(text);
+    if (parsed.length < 2) return NextResponse.json({ error: "empty file" }, { status: 400 });
+
+    const headers = parsed[0].map((h) => h.toLowerCase().replace(/\s+/g, "_"));
+    const idx = (...names: string[]) => {
+      for (const n of names) {
+        const i = headers.findIndex((h) => h === n);
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+    const iEmail  = idx("email");
+    const iHr     = idx("hr_code", "hr");
+    const iFirst  = idx("first_name", "firstname");
+    const iLast   = idx("last_name", "lastname");
+    const iMobile = idx("mobile_number", "mobile", "phone");
+    const iLegacy = idx("legacy_id", "legacyid", "legacy");
+    const iSquad  = idx("squad", "team");
+    const iTitle  = idx("job_title", "jobtitle", "title");
+
+    if (iEmail < 0 || iHr < 0) {
+      return NextResponse.json(
+        { error: "Missing required columns: email and hr_code" },
+        { status: 400 }
+      );
+    }
+    for (let i = 1; i < parsed.length; i++) {
+      const r = parsed[i];
+      rows.push({
+        email: (r[iEmail] ?? "").trim().toLowerCase(),
+        hr_code: (r[iHr] ?? "").trim(),
+        first_name: iFirst >= 0 ? (r[iFirst] ?? "").trim() || null : null,
+        last_name: iLast >= 0 ? (r[iLast] ?? "").trim() || null : null,
+        mobile_number: iMobile >= 0 ? (r[iMobile] ?? "").trim() || null : null,
+        legacy_id: iLegacy >= 0 ? (r[iLegacy] ?? "").trim() || null : null,
+        squad: iSquad >= 0 ? (r[iSquad] ?? "").trim() || null : null,
+        job_title: iTitle >= 0 ? (r[iTitle] ?? "").trim() || null : null,
+      });
+    }
   }
 
   const a = adminClient();
-  const failed: { row: number; reason: string }[] = [];
+  const authByEmail = await loadAllAuthUsers(a);
+
+  const failed: { row: number; email: string; reason: string }[] = [];
   let created = 0;
   let updated = 0;
   let recoveryEmailsSent = 0;
+  const usersUpserts: any[] = [];
+  const stagingRows: any[] = [];
 
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const email        = (r[iEmail] ?? "").trim().toLowerCase();
-    const hr_code      = (r[iHr]    ?? "").trim();
-    if (!email || !hr_code) {
-      failed.push({ row: i + 1, reason: "missing email or hr_code" });
+    const email = (r.email ?? "").toLowerCase().trim();
+    const hr    = (r.hr_code ?? "").trim();
+    if (!email || !hr) {
+      failed.push({ row: i + 1, email, reason: "missing email or hr_code" });
       continue;
     }
-    const first_name    = iFirst  >= 0 ? (r[iFirst]  ?? "").trim() : null;
-    const last_name     = iLast   >= 0 ? (r[iLast]   ?? "").trim() : null;
-    const mobile_number = iMobile >= 0 ? (r[iMobile] ?? "").trim() : null;
-    const legacy_id     = iLegacy >= 0 ? (r[iLegacy] ?? "").trim() : null;
-    const squad         = iSquad  >= 0 ? (r[iSquad]  ?? "").trim() : null;
-    const job_title         = iTitle  >= 0 ? (r[iTitle]  ?? "").trim() : null;
-
-    // 1) Staging
-    await a.from("users_import").insert({
-      email, hr_code, first_name, last_name,
-      mobile_number, legacy_id, squad, job_title,
-    });
-
     try {
-      // 2) auth.users - look up first, then create if missing.
-      let authUserId: string | null = null;
-      const { data: list } = await a.auth.admin.listUsers({ page: 1, perPage: 1000 });
-      const existing = list?.users?.find((u) => (u.email ?? "").toLowerCase() === email);
-      if (existing) {
-        authUserId = existing.id;
-      } else {
+      let authId = authByEmail.get(email);
+      if (!authId) {
         const { data: ins, error: cErr } = await a.auth.admin.createUser({
           email,
           email_confirm: true,
           password: randomPassword(),
         });
         if (cErr || !ins?.user) throw cErr ?? new Error("createUser failed");
-        authUserId = ins.user.id;
+        authId = ins.user.id;
+        authByEmail.set(email, authId);
         created++;
+      } else {
+        updated++;
       }
+      usersUpserts.push({
+        id: authId,
+        hr_code: hr,
+        first_name: r.first_name || null,
+        last_name: r.last_name || null,
+        mobile_number: r.mobile_number || null,
+        legacy_id: r.legacy_id || null,
+        squad: r.squad || null,
+        job_title: r.job_title || null,
+      });
+      stagingRows.push({
+        email, hr_code: hr,
+        first_name: r.first_name || null,
+        last_name: r.last_name || null,
+        mobile_number: r.mobile_number || null,
+        legacy_id: r.legacy_id || null,
+        squad: r.squad || null,
+        job_title: r.job_title || null,
+        processed_at: new Date().toISOString(),
+      });
 
-      // 3) public.users upsert.
-      const { error: uErr } = await a
-        .from("users")
-        .upsert({
-          id: authUserId,
-          hr_code,
-          first_name: first_name || null,
-          last_name:  last_name  || null,
-          mobile_number: mobile_number || null,
-          legacy_id: legacy_id || null,
-          squad:     squad || null,
-          job_title:     job_title || null,
-        }, { onConflict: "id" });
-      if (uErr) throw uErr;
-      if (!existing) {} else updated++;
-
-      // 4) Password recovery email (optional).
-      if (sendRecovery) {
+      if (sendRecovery && created && authByEmail.has(email)) {
         try {
-          await a.auth.admin.generateLink({
-            type: "recovery",
-            email,
-          });
+          await a.auth.admin.generateLink({ type: "recovery", email });
           recoveryEmailsSent++;
         } catch (e: any) {
-          failed.push({ row: i + 1, reason: `recovery link: ${e?.message ?? e}` });
+          failed.push({ row: i + 1, email, reason: `recovery: ${e?.message ?? e}` });
         }
       }
-
-      await a.from("users_import").update({ processed_at: new Date().toISOString() })
-        .eq("email", email).eq("hr_code", hr_code);
     } catch (e: any) {
-      failed.push({ row: i + 1, reason: e?.message ?? String(e) });
-      await a.from("users_import")
-        .update({ processed_at: new Date().toISOString(), process_error: e?.message ?? String(e) })
-        .eq("email", email).eq("hr_code", hr_code);
+      failed.push({ row: i + 1, email, reason: e?.message ?? String(e) });
+    }
+  }
+
+  if (stagingRows.length > 0) {
+    // Fire-and-forget staging insert; if it fails don't kill the whole run.
+    await a.from("users_import").insert(stagingRows).select("id").limit(1);
+  }
+  if (usersUpserts.length > 0) {
+    const { error: uErr } = await a
+      .from("users")
+      .upsert(usersUpserts, { onConflict: "id" });
+    if (uErr) {
+      return NextResponse.json({ error: `users upsert failed: ${uErr.message}` }, { status: 500 });
     }
   }
 
   return NextResponse.json({
     ok: failed.length === 0,
-    total_rows: rows.length - 1,
+    total_rows: rows.length,
     created,
     updated,
     recovery_emails_sent: recoveryEmailsSent,

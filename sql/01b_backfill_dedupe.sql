@@ -1,36 +1,46 @@
--- v56c - Copy legacy columns into the new ones, then drop the duplicates.
--- Old columns still on `users`: team, title, full_name.
--- New columns (already created in 01_users_add_columns.sql): squad, job_title,
--- first_name, last_name.
---
--- After this file:
---   squad     <- team
---   job_title <- title
---   first_name<- first word of full_name
---   last_name <- rest of full_name
---   is_active flips to true for everyone whose squad is not null/empty/Resigned.
+-- v56c backfill (defensive) - only touches legacy columns that actually exist.
+-- Handles any mix of team, title, full_name being present or absent.
 
-update public.users
-   set squad     = coalesce(nullif(trim(squad),     ''), team),
-       job_title = coalesce(nullif(trim(job_title), ''), title),
-       first_name = coalesce(nullif(trim(first_name), ''),
-                              nullif(split_part(coalesce(full_name, ''), ' ', 1), '')),
-       last_name  = coalesce(nullif(trim(last_name),  ''),
-                              nullif(
-                                trim(substr(
-                                  coalesce(full_name, ''),
-                                  length(split_part(coalesce(full_name, ''), ' ', 1)) + 2
-                                )),
-                                ''
-                              ));
+do $$
+declare
+  has_team      boolean;
+  has_title     boolean;
+  has_fullname  boolean;
+  sql_upd       text;
+begin
+  select exists(select 1 from information_schema.columns
+                where table_schema='public' and table_name='users' and column_name='team')
+    into has_team;
+  select exists(select 1 from information_schema.columns
+                where table_schema='public' and table_name='users' and column_name='title')
+    into has_title;
+  select exists(select 1 from information_schema.columns
+                where table_schema='public' and table_name='users' and column_name='full_name')
+    into has_fullname;
 
--- Sanity check: expect every row now has squad populated (or was intentionally
--- resigned). Uncomment to see who's still inactive.
--- select id, hr_code, full_name, team, squad, is_active
---   from public.users
---  order by is_active, hr_code;
+  sql_upd := 'update public.users set ';
+  if has_team then
+    sql_upd := sql_upd || ' squad = coalesce(nullif(trim(squad), ''''), team),';
+  end if;
+  if has_title then
+    sql_upd := sql_upd || ' job_title = coalesce(nullif(trim(job_title), ''''), title),';
+  end if;
+  if has_fullname then
+    sql_upd := sql_upd ||
+      ' first_name = coalesce(nullif(trim(first_name), ''''), nullif(split_part(coalesce(full_name, ''''), '' '', 1), '''')),' ||
+      ' last_name = coalesce(nullif(trim(last_name), ''''), nullif(trim(substr(coalesce(full_name, ''''), length(split_part(coalesce(full_name, ''''), '' '', 1)) + 2)), '''')),';
+  end if;
 
--- Drop the legacy duplicate columns.
-alter table public.users drop column if exists team      cascade;
-alter table public.users drop column if exists title     cascade;
-alter table public.users drop column if exists full_name cascade;
+  if sql_upd = 'update public.users set ' then
+    raise notice 'No legacy columns (team / title / full_name) found. Nothing to backfill.';
+  else
+    -- strip trailing comma + space
+    sql_upd := left(sql_upd, length(sql_upd) - 1);
+    raise notice 'Running backfill: %', sql_upd;
+    execute sql_upd;
+  end if;
+
+  if has_team      then execute 'alter table public.users drop column team      cascade'; end if;
+  if has_title     then execute 'alter table public.users drop column title     cascade'; end if;
+  if has_fullname  then execute 'alter table public.users drop column full_name cascade'; end if;
+end$$;
