@@ -1,85 +1,62 @@
-# v56 - Users Refactor (single source of truth)
+# v57 - Users admin CRUD + blank-email fix + single-table consolidation
 
-## Reality check (from live introspection)
+## What was broken
 
-- `profiles` was already renamed to `users` in a prior migration.
-- `collectors` still exists with 950 rows.
-- `users` has 15 rows (mostly admins).
-- 99% of `module_totals`, `quality_scores`, `freeze_frame_scores` rows are orphans against the current `users` (because 935 employees never had a login).
-- **Critical:** the "delete orphans" step in Requirement 4 must run AFTER you onboard the CSV, otherwise it nukes 99% of your metrics.
+1. **Blank emails.** The v56 `users-import` route wrote `email` into `auth.users`
+   and into the `users_import` staging table, but never into `public.users`
+   itself. Every collector imported via CSV ended up with `email = null` on
+   their `users` row.
+2. **Broken self-update trigger.** `users_self_update_guard()` (from v56
+   `sql/04_rls_users.sql`) still checked `old.title` / `new.title`, but that
+   column was renamed to `job_title` in v56b. Any update to `users` where
+   `new.id = auth.uid()` would throw `column "title" does not exist`.
+3. **Users admin page was fully broken.** `app/(app)/users/page.tsx` and
+   `app/api/admin/users/route.ts` still queried `.from("profiles")` (renamed
+   to `users` in v56) and joined against `.from("collectors")` for name/team.
+   Since `profiles` no longer exists, every query silently returned nothing -
+   that's why the whole page rendered blank, not just email.
+4. **Two tables for one concept.** `users_import` was a write-only staging
+   table the app never read. Consolidated into `users` alone.
 
 ## Deploy order
 
-**Safe first — additive changes only (steps 1-2):**
-
-1. Run `sql/01_users_add_columns.sql` — adds `first_name`, `last_name`, `mobile_number`, `legacy_id`, `squad`, `title`, generated `is_active` column + unique constraints on `hr_code` and `legacy_id`.
-2. Run `sql/02_users_import_staging.sql` — creates `users_import` staging table + Admin-only RLS.
-
-**Then push the code files:**
+**1. Run the SQL first:**
 
 ```
-app/api/admin/users-import/route.ts       # NEW - CSV -> auth.users + public.users
-app/api/auth/signup/route.ts              # OVERWRITES existing - returns 410
-middleware.ts                             # OVERWRITES existing - kills /signup, adds is_active gate
+sql/01_fix_and_consolidate.sql
 ```
 
-**Then onboard from your CSV:**
+This backfills `email` from `auth.users`, fixes the trigger, and drops
+`users_import`. Safe to run once the code below is deployed (so nothing
+tries to write to `users_import` afterward).
 
-3. Curl or admin-UI a POST to `/api/admin/users-import` with the CSV as multipart `file`. Every row that has `email` and `hr_code` gets:
-   - An `auth.users` row (email_confirm=true).
-   - A `public.users` row (upserted by id).
-   - A password-recovery email (unless you send `send_recovery=false`).
-   - A `users_import` staging row for audit.
-   - Failed rows are returned in the response, first 25 shown.
-
-4. Verify `select count(*) from users` returns ~950 (or however many CSV rows). If it's still ~15, DO NOT proceed - re-check the import.
-
-**Only after step 4 verified (destructive from here):**
-
-5. Run `sql/03_repoint_fks.sql` — drops `actor_id` on 4 metrics tables, drops `users.collector_id`, repoints `match_sessions.collector_id` at `users.id`.
-6. Run `sql/04_rls_users.sql` — adds active-directory SELECT policy + self-update guard trigger.
-7. Run `sql/05_orphan_delete_guarded.sql` — deletes hr_code-orphans from metrics tables. Guard clause aborts if users count < 800.
-8. Run `sql/06_drop_collectors.sql` — drops the `collectors` table.
-
-**UI cleanup (safe anytime after step 3):**
-
-Delete these files manually (Windows read-only mount):
+**2. Push the code files (overwrite in place):**
 
 ```
-app/(auth)/signup/page.tsx          # if it exists
-app/signup/page.tsx                 # if it exists
-app/register/page.tsx               # if it exists
-components/SignupForm.tsx           # if it exists
+app/api/admin/users-import/route.ts     # OVERWRITES v56 version - adds email, drops staging insert
+app/(app)/users/page.tsx                # OVERWRITES - reads `users` directly, no more `profiles`/`collectors` join
+app/api/admin/users/route.ts            # OVERWRITES - full CRUD on `users`, no more `profiles`/`collectors`
+components/UsersManager.tsx             # OVERWRITES - every column editable: hr_code, legacy_id,
+                                         #   first_name, last_name, email, mobile_number, squad, job_title, role
 ```
 
-Remove any `<Link href="/signup">Sign up</Link>` from `app/(auth)/login/page.tsx` or wherever. Middleware will redirect them anyway.
+**3. Verify:**
 
-## What the migration guarantees
-
-- `users` becomes the single source of truth (email + hr_code + first/last + mobile + legacy_id + squad + title).
-- `is_active` auto-flips based on `squad`. Squad = null / empty / "Resigned" -> inactive. Middleware signs the user out on their next request.
-- Public signup is closed. `POST /api/auth/signup` returns HTTP 410 Gone. `/signup` and `/register` URLs redirect to `/login`.
-- Admin can still create users manually via `/admin/users` (existing page) or bulk via the new `/api/admin/users-import` route.
-- Metrics tables (module_totals, quality_scores, freeze_frame_scores, weekly_quality_scores) drop rows for hr_codes not present in `users`.
-- `collectors` is gone. Every FK that pointed at it is either dropped (denormalized `actor_id` columns) or repointed at `users.id` (`match_sessions.collector_id`).
-
-## Not in this bundle (follow-ups)
-
-- Repointing every `.from("collectors")` in the codebase to `.from("users")`. ~30-40 files. Deliberately deferred so this bundle only touches the database + import route + auth. Feature routes still read collectors until the code sweep, which will be v57.
-- Deleting the SignupForm / signup page files - blocked by the Windows mount, need to be removed manually.
-- Rewriting `UsersManager.tsx` to expose the new fields (`first_name`, `last_name`, `mobile_number`, `legacy_id`, `squad`, `title`) - deferred to v57 as well.
-
-## Files in this bundle
-
+```sql
+select count(*) from public.users where email is null or email = '';
+-- should be 0 (or very close - anyone with no auth email at all)
 ```
-sql/01_users_add_columns.sql            # additive
-sql/02_users_import_staging.sql         # additive
-sql/03_repoint_fks.sql                  # DESTRUCTIVE - after CSV import
-sql/04_rls_users.sql                    # additive
-sql/05_orphan_delete_guarded.sql        # DESTRUCTIVE - guarded (aborts if users < 800)
-sql/06_drop_collectors.sql              # DESTRUCTIVE - very last
-app/api/admin/users-import/route.ts     # NEW - CSV import
-app/api/auth/signup/route.ts            # 410 Gone
-middleware.ts                           # active-user gate + kill /signup
-README.md                               # this file
-```
+
+Then open `/users` as Admin and confirm every column shows real data and is
+editable.
+
+## Notes
+
+- `is_active` stays a generated column (`squad is not null and squad <> 'Resigned'`)
+  - not directly editable. The UI shows it as a read-only badge; edit `squad`
+    to change it.
+- `collectors` table is still not dropped - other app pages (Reports, Quiz
+  assignment, etc.) still read from it. That code sweep is a separate,
+  larger v58 effort (~30-40 files), unrelated to this fix.
+- Email changes made via the Users admin page update `auth.users` too
+  (`auth.admin.updateUserById`), so login stays in sync with the directory.

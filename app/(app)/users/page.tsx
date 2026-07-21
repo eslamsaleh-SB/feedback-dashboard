@@ -5,6 +5,11 @@ import UsersManager, { type UserRow } from "@/components/UsersManager";
 
 export const dynamic = "force-dynamic";
 
+// v57: reads straight from `users` - the single source of truth. No more
+// join against `profiles` (renamed away in v56, this page never got updated)
+// or `collectors` (being phased out). That stale join is why every column
+// on this page rendered blank.
+
 export default async function UsersPage() {
   const supabase = createClient();
   const {
@@ -16,47 +21,30 @@ export default async function UsersPage() {
   const profile = eff?.profile ?? null;
   if (profile?.role !== "Admin") redirect("/dashboard");
 
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, email, full_name, role, hr_code")
-    .order("email");
-
-  const { data: collectors } = await supabase
-    .from("collectors")
-    .select("id, hr_code, name, team");
-
-  const byHr = new Map<string, { id: string; name: string | null; team: string | null }>();
-  (collectors ?? []).forEach((c: any) => {
-    if (c.hr_code)
-      byHr.set(String(c.hr_code).trim().toUpperCase(), {
-        id: c.id,
-        name: c.name,
-        team: c.team ?? null,
-      });
-  });
+  const { data: users } = await supabase
+    .from("users")
+    .select(
+      "id, email, role, hr_code, legacy_id, first_name, last_name, mobile_number, squad, job_title, is_active"
+    )
+    .order("hr_code");
 
   const teams = Array.from(
-    new Set((collectors ?? []).map((c: any) => c.team).filter(Boolean) as string[])
+    new Set((users ?? []).map((u: any) => u.squad).filter(Boolean) as string[])
   ).sort();
 
-  const rows: UserRow[] = (profiles ?? []).map((p: any) => {
-    const c = p.hr_code ? byHr.get(String(p.hr_code).trim().toUpperCase()) : undefined;
-    const realName =
-      c?.name && c.name !== p.hr_code
-        ? c.name
-        : p.full_name && p.full_name !== p.hr_code
-        ? p.full_name
-        : "";
-    return {
-      profileId: p.id,
-      email: p.email,
-      role: p.role,
-      hr_code: p.hr_code ?? null,
-      collectorId: c?.id ?? null,
-      name: realName,
-      team: c?.team ?? null,
-    };
-  });
+  const rows: UserRow[] = (users ?? []).map((u: any) => ({
+    id: u.id,
+    email: u.email ?? null,
+    role: u.role,
+    hr_code: u.hr_code ?? null,
+    legacy_id: u.legacy_id ?? null,
+    first_name: u.first_name ?? null,
+    last_name: u.last_name ?? null,
+    mobile_number: u.mobile_number ?? null,
+    squad: u.squad ?? null,
+    job_title: u.job_title ?? null,
+    is_active: !!u.is_active,
+  }));
 
   return <UsersManager rows={rows} teams={teams} currentUserId={user.id} />;
 }

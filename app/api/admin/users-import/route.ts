@@ -5,12 +5,16 @@
 // The JSON path is what the admin page uses in 50-row chunks so we never hit
 // Vercel's 60s serverless limit.
 //
-// Perf notes:
-//   - We fetch auth.admin.listUsers ONCE at the top and build an email->id map
-//     covering the current page. For a 490-user Supabase project this is one
-//     HTTP call, not 490.
-//   - Batches upserts into public.users_import + public.users.
-//   - Recovery emails are optional and, when off, we skip that call entirely.
+// v57 changes (fixes the "blank email" bug from v56):
+//   - usersUpserts now includes `email`. v56 wrote email to auth.users and to
+//     the users_import staging table, but never to public.users itself.
+//   - Staging-table insert removed. users_import has been dropped (v57 SQL) -
+//     `users` is now the single source of truth, so there's nothing to stage.
+//
+// Perf notes (unchanged from v56):
+//   - We fetch auth.admin.listUsers ONCE at the top and build an email->id map.
+//   - Upserts one-by-one so a single bad row (e.g. hr_code collision) doesn't
+//     abort the whole batch.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -189,7 +193,6 @@ async function handle(req: NextRequest) {
   let updated = 0;
   let recoveryEmailsSent = 0;
   const usersUpserts: any[] = [];
-  const stagingRows: any[] = [];
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -216,6 +219,7 @@ async function handle(req: NextRequest) {
       }
       usersUpserts.push({
         id: authId,
+        email, // <-- v57 fix: this was missing in v56, causing blank emails.
         hr_code: hr,
         first_name: r.first_name || null,
         last_name: r.last_name || null,
@@ -223,16 +227,6 @@ async function handle(req: NextRequest) {
         legacy_id: r.legacy_id || null,
         squad: r.squad || null,
         job_title: r.job_title || null,
-      });
-      stagingRows.push({
-        email, hr_code: hr,
-        first_name: r.first_name || null,
-        last_name: r.last_name || null,
-        mobile_number: r.mobile_number || null,
-        legacy_id: r.legacy_id || null,
-        squad: r.squad || null,
-        job_title: r.job_title || null,
-        processed_at: new Date().toISOString(),
       });
 
       if (sendRecovery && created && authByEmail.has(email)) {
@@ -248,16 +242,20 @@ async function handle(req: NextRequest) {
     }
   }
 
-  if (stagingRows.length > 0) {
-    // Fire-and-forget staging insert; if it fails don't kill the whole run.
-    await a.from("users_import").insert(stagingRows).select("id").limit(1);
-  }
+  // Upsert one-by-one so a single bad row (e.g. hr_code collision) doesn't
+  // abort the whole batch. Slower but safer.
   if (usersUpserts.length > 0) {
-    const { error: uErr } = await a
-      .from("users")
-      .upsert(usersUpserts, { onConflict: "id" });
-    if (uErr) {
-      return NextResponse.json({ error: `users upsert failed: ${uErr.message}` }, { status: 500 });
+    for (const u of usersUpserts) {
+      const { error: uErr } = await a
+        .from("users")
+        .upsert([u], { onConflict: "id" });
+      if (uErr) {
+        failed.push({
+          row: -1,
+          email: u.email || "",
+          reason: `upsert(${u.hr_code}): ${uErr.message}`,
+        });
+      }
     }
   }
 

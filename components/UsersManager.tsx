@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import Combobox, { type ComboOption } from "@/components/Combobox";
 
 type AppRole =
@@ -14,13 +12,17 @@ type AppRole =
   | "QualityLeader";
 
 export type UserRow = {
-  profileId: string;
+  id: string;
   email: string | null;
   role: AppRole;
   hr_code: string | null;
-  collectorId: string | null;
-  name: string;
-  team: string | null;
+  legacy_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  mobile_number: string | null;
+  squad: string | null;
+  job_title: string | null;
+  is_active: boolean;
 };
 
 const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
@@ -34,6 +36,23 @@ const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
 const roleLabel = (r: AppRole) => ROLE_OPTIONS.find((o) => o.value === r)?.label ?? r;
 const NO_TEAM = "__noteam__";
 
+type Draft = {
+  email: string;
+  hr_code: string;
+  legacy_id: string;
+  first_name: string;
+  last_name: string;
+  mobile_number: string;
+  squad: string;
+  job_title: string;
+  role: AppRole;
+};
+
+const emptyDraft: Draft = {
+  email: "", hr_code: "", legacy_id: "", first_name: "", last_name: "",
+  mobile_number: "", squad: "", job_title: "", role: "Viewer",
+};
+
 export default function UsersManager({
   rows,
   teams,
@@ -43,29 +62,23 @@ export default function UsersManager({
   teams: string[];
   currentUserId: string;
 }) {
-  const supabase = createClient();
-  const router = useRouter();
   const [items, setItems] = useState<UserRow[]>(rows);
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState<"" | AppRole>("");
+  const [activeFilter, setActiveFilter] = useState<"" | "active" | "inactive">("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ name: string; hr: string; team: string; role: AppRole; email: string }>(
-    { name: "", hr: "", team: "", role: "Viewer", email: "" }
-  );
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  // Add-user form
   const [showAdd, setShowAdd] = useState(false);
-  const [add, setAdd] = useState<{ email: string; name: string; hr: string; team: string; role: AppRole }>(
-    { email: "", name: "", hr: "", team: "", role: "Viewer" }
-  );
+  const [add, setAdd] = useState<Draft>(emptyDraft);
 
   const teamOptions = useMemo(() => {
     const s = new Set<string>(teams);
-    items.forEach((r) => r.team && s.add(r.team));
+    items.forEach((r) => r.squad && s.add(r.squad));
     return Array.from(s).sort();
   }, [teams, items]);
 
@@ -82,22 +95,34 @@ export default function UsersManager({
     const q = search.trim().toLowerCase();
     return items.filter((r) => {
       if (q) {
-        const hay = `${r.hr_code ?? ""} ${r.name ?? ""} ${r.email ?? ""} ${r.team ?? ""}`.toLowerCase();
+        const hay = `${r.hr_code ?? ""} ${r.legacy_id ?? ""} ${r.first_name ?? ""} ${r.last_name ?? ""} ${r.email ?? ""} ${r.squad ?? ""} ${r.job_title ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       if (roleFilter && r.role !== roleFilter) return false;
+      if (activeFilter === "active" && !r.is_active) return false;
+      if (activeFilter === "inactive" && r.is_active) return false;
       if (teamFilter) {
         if (teamFilter === NO_TEAM) {
-          if (r.team) return false;
-        } else if ((r.team ?? "") !== teamFilter) return false;
+          if (r.squad) return false;
+        } else if ((r.squad ?? "") !== teamFilter) return false;
       }
       return true;
     });
-  }, [items, search, teamFilter, roleFilter]);
+  }, [items, search, teamFilter, roleFilter, activeFilter]);
 
   function startEdit(r: UserRow) {
-    setEditingId(r.profileId);
-    setDraft({ name: r.name, hr: r.hr_code ?? "", team: r.team ?? "", role: r.role, email: r.email ?? "" });
+    setEditingId(r.id);
+    setDraft({
+      email: r.email ?? "",
+      hr_code: r.hr_code ?? "",
+      legacy_id: r.legacy_id ?? "",
+      first_name: r.first_name ?? "",
+      last_name: r.last_name ?? "",
+      mobile_number: r.mobile_number ?? "",
+      squad: r.squad ?? "",
+      job_title: r.job_title ?? "",
+      role: r.role,
+    });
     setMsg(null);
     setOk(null);
   }
@@ -106,87 +131,54 @@ export default function UsersManager({
     setBusy(true);
     setMsg(null);
     setOk(null);
-    let finalCode = r.hr_code;
-    let finalCollectorId = r.collectorId;
-    let finalName = draft.name.trim();
-    let finalTeam = draft.team.trim() || null;
 
-    const newCode = draft.hr.trim().toUpperCase();
-    const codeChanged = !!newCode && newCode !== (r.hr_code ?? "").toUpperCase();
+    const patch: Record<string, unknown> = {};
+    const fields: (keyof Draft)[] = [
+      "email", "hr_code", "legacy_id", "first_name", "last_name",
+      "mobile_number", "squad", "job_title", "role",
+    ];
+    for (const f of fields) {
+      const before = (r as any)[f] ?? "";
+      const after = draft[f];
+      if (String(before) !== String(after)) patch[f] = after;
+    }
+    if (Object.keys(patch).length === 0) {
+      setEditingId(null);
+      setBusy(false);
+      return;
+    }
 
-    // 1) Code change = RE-LINK to the existing collector with that code (create
-    // it if missing). Never rename another collector, so no "already used" error.
-    if (codeChanged) {
-      const { data: existing, error: selErr } = await supabase
-        .from("collectors")
-        .select("id, name, team")
-        .eq("hr_code", newCode)
-        .maybeSingle();
-      if (selErr) { setMsg(selErr.message); setBusy(false); return; }
-      let colId: string;
-      if (existing) {
-        colId = existing.id as string;
-        finalName = existing.name && existing.name !== newCode ? (existing.name as string) : "";
-        finalTeam = (existing.team as string | null) ?? null;
-      } else {
-        const ins = await supabase
-          .from("collectors")
-          .insert({ hr_code: newCode, name: finalName || newCode, team: finalTeam })
-          .select("id")
-          .single();
-        if (ins.error || !ins.data) { setMsg(ins.error?.message || "Could not create collector"); setBusy(false); return; }
-        colId = ins.data.id as string;
-      }
-      const { error } = await supabase
-        .from("profiles")
-        .update({ hr_code: newCode, collector_id: colId })
-        .eq("id", r.profileId);
-      if (error) { setMsg(error.message); setBusy(false); return; }
-      finalCode = newCode;
-      finalCollectorId = colId;
-    } else if (r.collectorId) {
-      // Code unchanged: just update the linked collector's name/team.
-      const { error } = await supabase.rpc("admin_update_collector", {
-        p_id: r.collectorId,
-        p_name: draft.name,
-        p_hr: r.hr_code,
-        p_team: draft.team,
-      });
-      if (error) { setMsg(error.message); setBusy(false); return; }
-    }
-    // 2) Role.
-    if (draft.role !== r.role) {
-      const { error } = await supabase.from("profiles").update({ role: draft.role }).eq("id", r.profileId);
-      if (error) { setMsg(error.message); setBusy(false); return; }
-    }
-    // 3) Login email (secure server update).
-    const newEmail = draft.email.trim().toLowerCase();
-    if (newEmail && newEmail !== (r.email ?? "").toLowerCase()) {
-      const res = await fetch("/api/admin/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "updateEmail", profileId: r.profileId, email: newEmail }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) { setMsg(j.error || "Could not update email"); setBusy(false); return; }
-    }
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update", id: r.id, patch }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) { setMsg(j.error || "Could not save changes"); return; }
+
     setItems((p) =>
       p.map((x) =>
-        x.profileId === r.profileId
+        x.id === r.id
           ? {
               ...x,
-              name: finalName,
-              hr_code: finalCode,
-              team: finalTeam,
-              collectorId: finalCollectorId,
+              email: draft.email || null,
+              hr_code: draft.hr_code || null,
+              legacy_id: draft.legacy_id || null,
+              first_name: draft.first_name || null,
+              last_name: draft.last_name || null,
+              mobile_number: draft.mobile_number || null,
+              squad: draft.squad || null,
+              job_title: draft.job_title || null,
               role: draft.role,
-              email: newEmail || x.email,
+              // is_active is a generated column driven by squad - mirror the
+              // same rule client-side so the badge updates without a refetch.
+              is_active: !!(draft.squad && draft.squad.trim() && draft.squad.trim().toLowerCase() !== "resigned"),
             }
           : x
       )
     );
     setEditingId(null);
-    setBusy(false);
     setOk("Saved.");
   }
 
@@ -198,12 +190,12 @@ export default function UsersManager({
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "delete", profileId: r.profileId }),
+      body: JSON.stringify({ action: "delete", id: r.id }),
     });
     const j = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setMsg(j.error || "Could not delete user"); return; }
-    setItems((p) => p.filter((x) => x.profileId !== r.profileId));
+    setItems((p) => p.filter((x) => x.id !== r.id));
     setOk("User deleted.");
   }
 
@@ -215,7 +207,7 @@ export default function UsersManager({
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "resetPassword", profileId: r.profileId }),
+      body: JSON.stringify({ action: "resetPassword", id: r.id }),
     });
     const j = await res.json().catch(() => ({}));
     setBusy(false);
@@ -231,38 +223,36 @@ export default function UsersManager({
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "create",
-        email: add.email,
-        full_name: add.name,
-        hr_code: add.hr,
-        team: add.team || null,
-        role: add.role,
-      }),
+      body: JSON.stringify({ action: "create", ...add }),
     });
     const j = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setMsg(j.error || "Could not create user"); return; }
     setItems((p) => [
       {
-        profileId: j.id,
+        id: j.id,
         email: add.email.trim().toLowerCase(),
         role: add.role,
-        hr_code: add.hr.trim().toUpperCase(),
-        collectorId: j.collectorId ?? null,
-        name: add.name.trim(),
-        team: add.team || null,
+        hr_code: add.hr_code.trim() || null,
+        legacy_id: add.legacy_id.trim() || null,
+        first_name: add.first_name.trim() || null,
+        last_name: add.last_name.trim() || null,
+        mobile_number: add.mobile_number.trim() || null,
+        squad: add.squad.trim() || null,
+        job_title: add.job_title.trim() || null,
+        is_active: !!(add.squad && add.squad.trim().toLowerCase() !== "resigned"),
       },
       ...p,
     ]);
     setOk(
       `User created. Temporary password: ${j.tempPassword} — share it with them and have them change it via "Forgot password".`
     );
-    setAdd({ email: "", name: "", hr: "", team: "", role: "Viewer" });
+    setAdd(emptyDraft);
     setShowAdd(false);
   }
 
-  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-slate-900";
+  const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1 text-sm bg-white dark:bg-slate-900 w-full";
+  const thCls = "text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-3 whitespace-nowrap";
 
   return (
     <div className="space-y-6">
@@ -270,69 +260,94 @@ export default function UsersManager({
         <div>
           <h1 className="text-2xl font-bold">Users</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            People with a login account. Edit name, code, team, role, and email — or add / remove users.
+            Single source of truth. Every column below is editable — HR code, legacy ID, name,
+            mobile, squad, job title, role, and email. Active status follows squad automatically
+            (empty or &quot;Resigned&quot; squad = inactive).
           </p>
         </div>
         <button
           type="button"
           onClick={() => { setShowAdd((s) => !s); setMsg(null); setOk(null); }}
-          className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium"
+          className="rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 text-sm font-medium"
         >
           {showAdd ? "Close" : "+ Add user"}
         </button>
       </div>
 
       {showAdd && (
-        <form onSubmit={createUser} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap items-end gap-3">
-          <div className="w-56">
+        <form onSubmit={createUser} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Email *</label>
-            <input type="email" required value={add.email} onChange={(e) => setAdd((d) => ({ ...d, email: e.target.value }))} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full" />
+            <input type="email" required value={add.email} onChange={(e) => setAdd((d) => ({ ...d, email: e.target.value }))} className={inputCls} />
           </div>
-          <div className="w-40">
+          <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">HR code *</label>
-            <input required value={add.hr} onChange={(e) => setAdd((d) => ({ ...d, hr: e.target.value.replace(/\s/g, "") }))} placeholder="A-1234" className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full" />
+            <input required value={add.hr_code} onChange={(e) => setAdd((d) => ({ ...d, hr_code: e.target.value }))} placeholder="A-1234" className={inputCls} />
           </div>
-          <div className="w-48">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Full name</label>
-            <input value={add.name} onChange={(e) => setAdd((d) => ({ ...d, name: e.target.value }))} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full" />
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Legacy ID</label>
+            <input value={add.legacy_id} onChange={(e) => setAdd((d) => ({ ...d, legacy_id: e.target.value }))} className={inputCls} />
           </div>
-          <div className="w-44">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
-            <select value={add.team} onChange={(e) => setAdd((d) => ({ ...d, team: e.target.value }))} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 w-full">
-              <option value="">(no team)</option>
-              {teamOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">First name</label>
+            <input value={add.first_name} onChange={(e) => setAdd((d) => ({ ...d, first_name: e.target.value }))} className={inputCls} />
           </div>
-          <div className="w-40">
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Last name</label>
+            <input value={add.last_name} onChange={(e) => setAdd((d) => ({ ...d, last_name: e.target.value }))} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Mobile</label>
+            <input value={add.mobile_number} onChange={(e) => setAdd((d) => ({ ...d, mobile_number: e.target.value }))} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Squad</label>
+            <input value={add.squad} onChange={(e) => setAdd((d) => ({ ...d, squad: e.target.value }))} placeholder="(blank = inactive)" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Job title</label>
+            <input value={add.job_title} onChange={(e) => setAdd((d) => ({ ...d, job_title: e.target.value }))} className={inputCls} />
+          </div>
+          <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Role</label>
-            <select value={add.role} onChange={(e) => setAdd((d) => ({ ...d, role: e.target.value as AppRole }))} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 w-full">
+            <select value={add.role} onChange={(e) => setAdd((d) => ({ ...d, role: e.target.value as AppRole }))} className={inputCls}>
               {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <button disabled={busy} className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium disabled:opacity-50">
-            {busy ? "Creating..." : "Create user"}
-          </button>
+          <div className="flex items-end">
+            <button disabled={busy} className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium disabled:opacity-50 w-full">
+              {busy ? "Creating..." : "Create user"}
+            </button>
+          </div>
         </form>
       )}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-52">
-          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Filter by team</label>
-          <Combobox options={teamCombo} value={teamFilter} onChange={setTeamFilter} placeholder="All teams" />
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Filter by squad</label>
+          <Combobox options={teamCombo} value={teamFilter} onChange={setTeamFilter} placeholder="All squads" />
         </div>
         <div className="w-48">
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Filter by role</label>
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as "" | AppRole)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 w-full">
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as "" | AppRole)} className={inputCls}>
             <option value="">All roles</option>
             {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
+        <div className="w-40">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Status</label>
+          <select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as any)} className={inputCls}>
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
         <div className="flex-1 min-w-[200px]">
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Search</label>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code / name / email / team..." className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 w-full" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Code / legacy ID / name / email / squad / title..." className={inputCls} />
         </div>
-        {(teamFilter || roleFilter || search) && (
-          <button type="button" onClick={() => { setTeamFilter(""); setRoleFilter(""); setSearch(""); }} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+        {(teamFilter || roleFilter || activeFilter || search) && (
+          <button type="button" onClick={() => { setTeamFilter(""); setRoleFilter(""); setActiveFilter(""); setSearch(""); }} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
             Clear
           </button>
         )}
@@ -346,73 +361,107 @@ export default function UsersManager({
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 dark:bg-slate-800">
             <tr>
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Code</th>
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Name</th>
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Team</th>
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Email</th>
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Role</th>
-              <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-3">Actions</th>
+              <th className={thCls}>HR Code</th>
+              <th className={thCls}>Legacy ID</th>
+              <th className={thCls}>First name</th>
+              <th className={thCls}>Last name</th>
+              <th className={thCls}>Email</th>
+              <th className={thCls}>Mobile</th>
+              <th className={thCls}>Squad</th>
+              <th className={thCls}>Job title</th>
+              <th className={thCls}>Role</th>
+              <th className={thCls}>Active</th>
+              <th className={`${thCls} text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="p-4 text-slate-500 dark:text-slate-400">No users.</td></tr>
+              <tr><td colSpan={11} className="p-4 text-slate-500 dark:text-slate-400">No users.</td></tr>
             )}
             {filtered.map((r) => {
-              const editing = editingId === r.profileId;
-              const isSelf = r.profileId === currentUserId;
-              const noCollector = !r.collectorId;
+              const editing = editingId === r.id;
+              const isSelf = r.id === currentUserId;
               return (
-                <tr key={r.profileId} className="border-t border-slate-100 dark:border-slate-800">
-                  <td className="px-4 py-2.5 whitespace-nowrap">
-                    {editing && !noCollector ? (
-                      <input value={draft.hr} onChange={(e) => setDraft((d) => ({ ...d, hr: e.target.value }))} placeholder="HR code" className={`${inputCls} w-28`} />
+                <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    {editing ? (
+                      <input value={draft.hr_code} onChange={(e) => setDraft((d) => ({ ...d, hr_code: e.target.value }))} className={inputCls} />
                     ) : (
                       <span className="font-medium text-slate-800 dark:text-slate-100">{r.hr_code ?? "-"}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
-                    {editing && !noCollector ? (
-                      <input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Name" className={`${inputCls} w-48`} />
-                    ) : r.name ? (
-                      <>
-                        {r.name}
-                        {isSelf && <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">(you)</span>}
-                      </>
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    {editing ? (
+                      <input value={draft.legacy_id} onChange={(e) => setDraft((d) => ({ ...d, legacy_id: e.target.value }))} className={inputCls} />
                     ) : (
-                      <span className="text-slate-400 dark:text-slate-500">- no name -{isSelf && <span className="ml-2">(you)</span>}</span>
+                      <span className="text-slate-600 dark:text-slate-300">{r.legacy_id ?? "-"}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
-                    {editing && !noCollector ? (
-                      <select value={draft.team} onChange={(e) => setDraft((d) => ({ ...d, team: e.target.value }))} className={inputCls}>
-                        <option value="">(no team)</option>
-                        {teamOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                  <td className="px-3 py-2.5">
+                    {editing ? (
+                      <input value={draft.first_name} onChange={(e) => setDraft((d) => ({ ...d, first_name: e.target.value }))} className={inputCls} />
                     ) : (
-                      <span className={r.team ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}>{r.team ?? "- no team -"}</span>
+                      <span>{r.first_name ?? <span className="text-slate-400 dark:text-slate-500">-</span>}{isSelf && <span className="ml-1 text-xs text-slate-400 dark:text-slate-500">(you)</span>}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap">
-                    {editing && !isSelf ? (
-                      <input type="email" value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} className={`${inputCls} w-56`} />
+                  <td className="px-3 py-2.5">
+                    {editing ? (
+                      <input value={draft.last_name} onChange={(e) => setDraft((d) => ({ ...d, last_name: e.target.value }))} className={inputCls} />
+                    ) : (
+                      <span>{r.last_name ?? <span className="text-slate-400 dark:text-slate-500">-</span>}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    {editing ? (
+                      <input type="email" value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} className={inputCls} />
                     ) : (
                       <span className="text-slate-600 dark:text-slate-300">{r.email ?? "(no email)"}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
-                    {editing && !isSelf ? (
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    {editing ? (
+                      <input value={draft.mobile_number} onChange={(e) => setDraft((d) => ({ ...d, mobile_number: e.target.value }))} className={inputCls} />
+                    ) : (
+                      <span className="text-slate-600 dark:text-slate-300">{r.mobile_number ?? "-"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {editing ? (
+                      <input value={draft.squad} onChange={(e) => setDraft((d) => ({ ...d, squad: e.target.value }))} placeholder="(blank = inactive)" className={inputCls} />
+                    ) : (
+                      <span className={r.squad ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}>{r.squad ?? "- no squad -"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {editing ? (
+                      <input value={draft.job_title} onChange={(e) => setDraft((d) => ({ ...d, job_title: e.target.value }))} className={inputCls} />
+                    ) : (
+                      <span className="text-slate-600 dark:text-slate-300">{r.job_title ?? "-"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {editing ? (
                       <select value={draft.role} onChange={(e) => setDraft((d) => ({ ...d, role: e.target.value as AppRole }))} className={inputCls}>
                         {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     ) : (
-                      <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium">{roleLabel(r.role)}</span>
+                      <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium whitespace-nowrap">{roleLabel(r.role)}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                    {isSelf ? (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">your account</span>
-                    ) : editing ? (
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        r.is_active
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          : "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300"
+                      }`}
+                      title="Derived from squad - not directly editable"
+                    >
+                      {r.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                    {editing ? (
                       <div className="flex gap-3 justify-end text-sm">
                         <button onClick={() => save(r)} disabled={busy} className="text-emerald-700 hover:text-emerald-900 font-medium disabled:opacity-50">Save</button>
                         <button onClick={() => setEditingId(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-800">Cancel</button>
@@ -420,8 +469,8 @@ export default function UsersManager({
                     ) : (
                       <div className="flex gap-3 justify-end text-sm">
                         <button onClick={() => startEdit(r)} className="text-slate-600 dark:text-slate-300 hover:text-slate-900">Edit</button>
-                        <button onClick={() => resetPw(r)} disabled={busy} className="text-blue-600 hover:text-blue-800 disabled:opacity-50">Reset PW</button>
-                        <button onClick={() => remove(r)} disabled={busy} className="text-red-600 hover:text-red-800 disabled:opacity-50">Delete</button>
+                        <button onClick={() => resetPw(r)} disabled={busy || isSelf} className="text-blue-600 hover:text-blue-800 disabled:opacity-50">Reset PW</button>
+                        <button onClick={() => remove(r)} disabled={busy || isSelf} className="text-red-600 hover:text-red-800 disabled:opacity-50">Delete</button>
                       </div>
                     )}
                   </td>
@@ -433,8 +482,9 @@ export default function UsersManager({
       </div>
 
       <p className="text-xs text-slate-400 dark:text-slate-500">
-        Changing a user&rsquo;s <span className="font-medium">Code</span> re-points their account to the collector
-        with that code (it never renames another collector). Deleting a user removes their login only — their collected data stays.
+        <span className="font-medium">Active</span> is computed automatically from <span className="font-medium">Squad</span> -
+        clear the squad or set it to &quot;Resigned&quot; to deactivate someone; they&rsquo;re signed out on their next request.
+        Deleting a user removes their login only.
       </p>
     </div>
   );
