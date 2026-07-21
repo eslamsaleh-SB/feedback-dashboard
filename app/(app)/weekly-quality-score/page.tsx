@@ -40,7 +40,7 @@ export default async function WeeklyQualityScorePage() {
     supabase
       .from("weekly_quality_scores")
       .select(
-        "hr_code, week_start_date, players, event, formation_tactical, location, impact, extras, freeze_frame_score"
+        "hr_code, week_start_date, base, players, formation_tactical, location, impact, extras, squad, freeze_frame_score"
       )
       .order("week_start_date", { ascending: false })
   );

@@ -20,7 +20,7 @@ export default async function UploadPage() {
   }
 
   const [{ data: collectors }, { data: sessions }] = await Promise.all([
-    supabase.from("collectors").select("id, name, hr_code").order("hr_code"),
+    supabase.from("collectors").select("id, name, hr_code, team").order("hr_code"),
     supabase
       .from("match_sessions")
       .select("id, match_name, review_date, collector_id")

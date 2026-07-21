@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import AssignmentPicker from "@/components/AssignmentPicker";
 
 export type QuestionType =
   | "multiple_choice"
@@ -453,65 +454,13 @@ export default function QuizBuilder({
         })}
       </div>
 
-      {/* Assignees */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Assign to collectors ({assigned.size})
-          </h2>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={selectAllCollectors}
-              className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
-              Select all
-            </button>
-            <button
-              type="button"
-              onClick={clearAssigned}
-              className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
-              Clear
-            </button>
-            <input
-              value={assigneeSearch}
-              onChange={(e) => setAssigneeSearch(e.target.value)}
-              placeholder="Search by code / name / team..."
-              className="w-64 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
-        <div className="max-h-72 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg divide-y divide-slate-100 dark:divide-slate-800">
-          {filteredCollectors.length === 0 ? (
-            <p className="p-3 text-sm text-slate-500 dark:text-slate-400">
-              No collectors match "{assigneeSearch}".
-            </p>
-          ) : (
-            filteredCollectors.map((c) => (
-              <label
-                key={c.hr_code}
-                className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={assigned.has(c.hr_code)}
-                  onChange={() => toggleAssigned(c.hr_code)}
-                  className="h-4 w-4"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                    {c.hr_code} <span className="text-slate-400 dark:text-slate-500">-</span> {c.name}
-                  </p>
-                  {c.team && (
-                    <p className="text-xs text-slate-400 dark:text-slate-500">{c.team}</p>
-                  )}
-                </div>
-              </label>
-            ))
-          )}
-        </div>
-      </div>
+      {/* Assignees - unified picker (All / Teams / Individuals) */}
+      <AssignmentPicker
+        collectors={collectors}
+        value={assigned}
+        onChange={setAssigned}
+        title="Assign to collectors"
+      />
     </div>
   );
 }

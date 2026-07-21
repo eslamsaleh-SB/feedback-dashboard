@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 
+type FileType = "module" | "freeze_frame";
+
 function toIsoDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-
-// Snap a date to the Sunday that begins its week.
 function sundayOf(d: Date): Date {
   const copy = new Date(d);
   copy.setDate(copy.getDate() - copy.getDay());
@@ -19,6 +19,7 @@ function sundayOf(d: Date): Date {
 
 export default function WeeklyQualityUploadPage() {
   const [week, setWeek] = useState<string>("");
+  const [type, setType] = useState<FileType>("module");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<{
@@ -37,10 +38,10 @@ export default function WeeklyQualityUploadPage() {
     if (!file) return;
     setUploading(true);
     setResult(null);
-    // Snap chosen date to Sunday for safety.
     const snapped = toIsoDate(sundayOf(new Date(week)));
 
     const fd = new FormData();
+    fd.append("type", type);
     fd.append("week", snapped);
     fd.append("file", file);
 
@@ -59,8 +60,9 @@ export default function WeeklyQualityUploadPage() {
       <div>
         <h1 className="text-2xl font-bold">Weekly Quality Score Upload</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1">
-          Upload a weekly quality score file. The week is defined as Sunday - Saturday.
-          Re-uploading the same week overwrites previous data.
+          Upload the same two files as the monthly Quality Score, but per week
+          (Sunday - Saturday). Upload each file separately - Module first, then
+          Freeze Frame (or the reverse). Re-uploading the same week overwrites.
         </p>
       </div>
 
@@ -68,6 +70,20 @@ export default function WeeklyQualityUploadPage() {
         onSubmit={handleSubmit}
         className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-5"
       >
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+            File type
+          </label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as FileType)}
+            className={inputCls}
+          >
+            <option value="module">Collector Module Score</option>
+            <option value="freeze_frame">Freeze Frame Score</option>
+          </select>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
             Week start (Sunday)
@@ -80,7 +96,7 @@ export default function WeeklyQualityUploadPage() {
             required
           />
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            Any date is accepted and will be snapped to the Sunday of that week.
+            Any date works - it will snap to the Sunday of that week.
           </p>
         </div>
 
@@ -98,9 +114,9 @@ export default function WeeklyQualityUploadPage() {
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{file.name}</p>
           )}
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-            Required column: <code>hr_code</code>. Recognized score columns: <code>players</code>,{" "}
-            <code>event</code>, <code>formation_tactical</code>, <code>location</code>,{" "}
-            <code>impact</code>, <code>extras</code>, <code>freeze_frame_score</code>.
+            {type === "module"
+              ? "Module file - expected columns: hr_code, module, collector_score. Modules recognized: base, players, formation_tactical, location, impact, extras, squad."
+              : "Freeze Frame file - expected columns: collector_hr_code, Avg. ff_score."}
           </p>
         </div>
 
@@ -109,7 +125,7 @@ export default function WeeklyQualityUploadPage() {
           disabled={!file || uploading}
           className="w-full rounded-lg bg-slate-900 text-white py-2 font-medium disabled:opacity-50"
         >
-          {uploading ? "Uploading..." : `Upload for week of ${week}`}
+          {uploading ? "Uploading..." : `Upload ${type === "module" ? "Module" : "Freeze Frame"} for week of ${week}`}
         </button>
 
         {result && (
