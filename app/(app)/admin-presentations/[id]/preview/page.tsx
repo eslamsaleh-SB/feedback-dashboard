@@ -16,12 +16,12 @@ export default async function PreviewPresentationPage({
   if (!user) redirect("/login");
 
   const { data: me } = await supabase
-    .from("profiles")
+    .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
   const role = (me as any)?.role;
-  if (!["Admin", "Uploader", "Supervisor"].includes(role)) {
+  if (!["Admin", "Reviewer", "Supervisor"].includes(role)) {
     redirect("/dashboard");
   }
 
