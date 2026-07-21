@@ -21,7 +21,7 @@ export type MatchSession = {
 };
 
 type Collector = { id: string; name: string };
-type Role = "Admin" | "Uploader" | "Viewer";
+type Role = "Admin" | "Reviewer" | "Viewer";
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -49,7 +49,7 @@ export default function DashboardClient({
   const [filter, setFilter] = useState("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Admin/Uploader can filter by collector; Viewers are already scoped by RLS.
+  // Admin/Reviewer can filter by collector; Viewers are already scoped by RLS.
   const filtered = useMemo(
     () =>
       isPersonal || filter === "all"
