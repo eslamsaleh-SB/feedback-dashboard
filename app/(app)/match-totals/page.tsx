@@ -27,7 +27,7 @@ export default async function MatchTotalsPage({
   } = await supabase.auth.getUser();
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  const role = (profile?.role ?? "Viewer") as "Admin" | "Uploader" | "Viewer";
+  const role = (profile?.role ?? "Viewer") as "Admin" | "Reviewer" | "Viewer";
   // Collectors (Viewer) are not allowed on this page
   if (role === "Viewer") redirect("/analytics");
 
@@ -46,13 +46,18 @@ export default async function MatchTotalsPage({
   const errRaw = searchParams.errval?.trim();
   const errVal = errRaw && /^\d+$/.test(errRaw) ? parseInt(errRaw, 10) : null;
 
-  const { data: collectors } = await supabase
-    .from("collectors")
-    .select("name, hr_code, team")
-    .order("name");
-  const byHr = new Map<string, { name: string; team: string | null }>();
-  (collectors ?? []).forEach((c: any) => {
-    if (c.hr_code) byHr.set(c.hr_code, { name: c.name, team: c.team ?? null });
+  // v58 fix: was joining against the stale `collectors` table (orphaned
+  // since v56 moved identity onto `users`). That's why names fell back to
+  // the hr_code itself (rendering as "Code - Code") and team was blank.
+  const { data: usersDir } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name, squad")
+    .order("hr_code");
+  const byHr = new Map<string, { name: string | null; team: string | null }>();
+  (usersDir ?? []).forEach((u: any) => {
+    if (!u.hr_code) return;
+    const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+    byHr.set(u.hr_code, { name: name || null, team: u.squad ?? null });
   });
 
   // The DB function ranks/filters across ALL data and returns the top 250
@@ -72,8 +77,8 @@ export default async function MatchTotalsPage({
     matchid: r.matchid,
     partid: r.partid,
     hr_code: r.hr_code,
-    name: r.hr_code ? (byHr.get(r.hr_code)?.name ?? r.hr_code) : "—",
-    team: r.hr_code ? (byHr.get(r.hr_code)?.team ?? null) : null,
+    name: r.hr_code ? (byHr.get(r.hr_code)?.name ?? "-") : "-",
+    team: r.hr_code ? (byHr.get(r.hr_code)?.team ?? "-") : "-",
     date: r.date,
     counts: {
       players: Number(r.players),
@@ -87,13 +92,16 @@ export default async function MatchTotalsPage({
     total: Number(r.total),
   }));
 
-  const collectorOptions = (collectors ?? [])
-    .filter((c: any) => c.hr_code)
-    .map((c: any) => ({
-      hr_code: c.hr_code as string,
-      name: c.name as string,
-      team: (c.team ?? null) as string | null,
-    }));
+  const collectorOptions = (usersDir ?? [])
+    .filter((u: any) => u.hr_code)
+    .map((u: any) => {
+      const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+      return {
+        hr_code: u.hr_code as string,
+        name: (name || "-") as string,
+        team: (u.squad ?? "-") as string,
+      };
+    });
 
   return (
     <MatchTotals
