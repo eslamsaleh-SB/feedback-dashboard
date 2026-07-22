@@ -67,9 +67,8 @@ function buildNav(role: AppRole): NavEntry[] {
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/weekly-quality-upload", label: "Weekly Quality Score Upload" });
   if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/upload", label: "Send Report" });
-  if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
-    uploadItems.push({ href: "/admin-presentations", label: "Presentations" });
-  }
+  // v59: Presentations moved out of Upload Data and into the
+  // Administration group per product request.
   if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
     uploadItems.push({ href: "/admin-quizzes", label: "Quizzes" });
   }
@@ -92,6 +91,7 @@ function buildNav(role: AppRole): NavEntry[] {
       items: [
         { href: "/admin-reports", label: "Reports" },
         { href: "/admin-inquiries", label: "Inquiries" },
+        { href: "/admin-presentations", label: "Presentations" },
         { href: "/admin-quizzes", label: "Quiz Analytics" },
         { href: "/feedback-progress", label: "Feedback Progress" },
         { href: "/users", label: "Users" },
