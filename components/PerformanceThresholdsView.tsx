@@ -49,25 +49,32 @@ const MODULE_LABEL: Record<ModuleKey, string> = {
   freeze_frame: "Freeze Frame",
 };
 
+// v59: `event` was a legacy alias for `base` in the CSV parser
+// (weekly-quality-upload/route.ts: `if (n === "event") return "base"`), so
+// exposing both here surfaced two rows for the same underlying score.
+// Removed `event`. Added `pressure` and `squad` to line up with the module
+// set the Weekly Quality Score view already tracks.
 const SCORE_KEYS = [
   "base",
   "players",
-  "event",
   "formation_tactical",
   "location",
   "impact",
   "extras",
+  "pressure",
+  "squad",
   "freeze_frame_score",
 ] as const;
 type ScoreKey = (typeof SCORE_KEYS)[number];
 const SCORE_LABEL: Record<ScoreKey, string> = {
   base: "Base",
   players: "Players",
-  event: "Event",
   formation_tactical: "Formation / Tactical",
   location: "Location",
   impact: "Impact",
   extras: "Extras",
+  pressure: "Pressure",
+  squad: "Squad",
   freeze_frame_score: "Freeze Frame",
 };
 

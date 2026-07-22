@@ -44,6 +44,14 @@ Files:
   directly (falls back to `matches` if the SQL hasn't been applied yet)
 - `components/PerformanceThresholdsView.tsx` — new Parts column + CSV field
 
+### 4. Performance Thresholds: Quality Scores filter list
+- Added `Pressure` + `Squad` to the score-filter checkboxes to match the
+  module set stored in `quality_scores` (monthly upload).
+- Removed the duplicate `Event` row — the monthly upload parser aliases
+  `event` → `base`, so both mapped to the same underlying score.
+
+Same file: `components/PerformanceThresholdsView.tsx`.
+
 ## Deploy order
 
 1. Upload all code files under `app/...` and `components/...` to GitHub
