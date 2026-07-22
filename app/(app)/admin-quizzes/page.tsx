@@ -13,10 +13,28 @@ export default async function AdminQuizzesPage() {
   const role = eff?.profile?.role ?? "Viewer";
   if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/my-quizzes");
 
-  const { data: rows } = await supabase
+  // v59: try SELECT with assigned_date. Fall back to legacy shape if the DB
+  // migration (sql/04) hasn't been applied yet — otherwise the query errors
+  // with `column "assigned_date" does not exist` and the whole list renders
+  // as "No quizzes yet."
+  let rows: any[] | null = null;
+  const withDate = await supabase
     .from("quizzes")
-    .select("id, title, description, published, assigned_date, created_at, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)")
-    .order("assigned_date", { ascending: false, nullsFirst: false });
+    .select(
+      "id, title, description, published, assigned_date, created_at, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)"
+    )
+    .order("created_at", { ascending: false });
+  if (withDate.error) {
+    const legacy = await supabase
+      .from("quizzes")
+      .select(
+        "id, title, description, published, created_at, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)"
+      )
+      .order("created_at", { ascending: false });
+    rows = legacy.data ?? [];
+  } else {
+    rows = withDate.data ?? [];
+  }
 
   const quizzes = (rows ?? []).map((r: any) => ({
     id: r.id as string,

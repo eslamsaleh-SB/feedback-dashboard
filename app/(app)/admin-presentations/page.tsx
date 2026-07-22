@@ -15,10 +15,26 @@ export default async function AdminPresentationsPage() {
   const role = profile?.role ?? "Viewer";
   if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/my-presentations");
 
-  const { data: rows } = await supabase
+  // v59: same fallback as admin-quizzes — tolerate assigned_date being absent
+  // from the DB until sql/04 runs.
+  let rows: any[] | null = null;
+  const withDate = await supabase
     .from("presentations")
-    .select("id, title, description, assigned_date, created_at, google_slides_url, presentation_pages(count), presentation_assignments(count)")
-    .order("assigned_date", { ascending: false, nullsFirst: false });
+    .select(
+      "id, title, description, assigned_date, created_at, google_slides_url, presentation_pages(count), presentation_assignments(count)"
+    )
+    .order("created_at", { ascending: false });
+  if (withDate.error) {
+    const legacy = await supabase
+      .from("presentations")
+      .select(
+        "id, title, description, created_at, google_slides_url, presentation_pages(count), presentation_assignments(count)"
+      )
+      .order("created_at", { ascending: false });
+    rows = legacy.data ?? [];
+  } else {
+    rows = withDate.data ?? [];
+  }
 
   const presentations = (rows ?? []).map((r: any) => ({
     id: r.id as string,

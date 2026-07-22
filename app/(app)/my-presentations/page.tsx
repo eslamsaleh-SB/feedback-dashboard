@@ -15,11 +15,22 @@ export default async function MyPresentationsPage() {
   if (profile?.role !== "Viewer") redirect("/admin-presentations");
 
   // RLS scopes presentations to those assigned to the current collector.
-  // v59: also pull assigned_date to display next to the title.
-  const { data: rows } = await supabase
+  // v59: try SELECT with assigned_date; fall back to legacy shape if the DB
+  // migration (sql/04) hasn't been applied yet.
+  let rows: any[] | null = null;
+  const withDate = await supabase
     .from("presentations")
     .select("id, title, description, assigned_date, created_at, presentation_pages(count)")
-    .order("assigned_date", { ascending: false, nullsFirst: false });
+    .order("created_at", { ascending: false });
+  if (withDate.error) {
+    const legacy = await supabase
+      .from("presentations")
+      .select("id, title, description, created_at, presentation_pages(count)")
+      .order("created_at", { ascending: false });
+    rows = legacy.data ?? [];
+  } else {
+    rows = withDate.data ?? [];
+  }
 
   const items = (rows ?? []).map((r: any) => ({
     id: r.id as string,

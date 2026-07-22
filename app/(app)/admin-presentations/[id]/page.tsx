@@ -15,11 +15,22 @@ export default async function EditPresentationPage({ params }: { params: { id: s
 
   const [{ data: pres }, { data: pageRows }, { data: assignRows }, { data: collectors }] =
     await Promise.all([
-      supabase
-        .from("presentations")
-        .select("id, title, description, assigned_date, google_slides_url")
-        .eq("id", params.id)
-        .single(),
+      // v59: fall back if assigned_date column not yet applied.
+      (async () => {
+        const r = await supabase
+          .from("presentations")
+          .select("id, title, description, assigned_date, google_slides_url")
+          .eq("id", params.id)
+          .single();
+        if (r.error && /assigned_date/i.test(r.error.message ?? "")) {
+          return supabase
+            .from("presentations")
+            .select("id, title, description, google_slides_url")
+            .eq("id", params.id)
+            .single();
+        }
+        return r;
+      })(),
       supabase
         .from("presentation_pages")
         .select("id, page_order, header, description, video_link, drive_file_id")

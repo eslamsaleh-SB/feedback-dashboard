@@ -14,13 +14,24 @@ export default async function MyQuizzesPage() {
   if (!hr) redirect("/dashboard");
 
   // Assignments joined with quiz + my submission (if any).
-  // v59: also pull quizzes.assigned_date so we can show it as the display
-  // "date" the admin picked for the quiz.
-  const { data: assign } = await supabase
+  // v59: try SELECT with quizzes.assigned_date; fall back if the DB
+  // migration (sql/04) hasn't been applied yet.
+  let assign: any[] | null = null;
+  const withDate = await supabase
     .from("quiz_assignments")
     .select("assigned_at, quizzes!inner(id, title, description, published, assigned_date)")
     .eq("hr_code", hr)
     .order("assigned_at", { ascending: false });
+  if (withDate.error) {
+    const legacy = await supabase
+      .from("quiz_assignments")
+      .select("assigned_at, quizzes!inner(id, title, description, published)")
+      .eq("hr_code", hr)
+      .order("assigned_at", { ascending: false });
+    assign = legacy.data ?? [];
+  } else {
+    assign = withDate.data ?? [];
+  }
 
   const quizIds = (assign ?? [])
     .map((a: any) => a.quizzes?.id as string)

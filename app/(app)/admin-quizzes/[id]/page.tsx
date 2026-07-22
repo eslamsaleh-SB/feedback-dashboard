@@ -22,9 +22,21 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
     { data: subs },
     { data: collectors },
   ] = await Promise.all([
-    supabase.from("quizzes")
-      .select("id, title, description, published, assigned_date, created_at")
-      .eq("id", params.id).single(),
+    // v59: assigned_date may not exist yet; the fallback below re-queries
+    // without it. Kept inline via a promise so Promise.all still works.
+    (async () => {
+      const r = await supabase
+        .from("quizzes")
+        .select("id, title, description, published, assigned_date, created_at")
+        .eq("id", params.id).single();
+      if (r.error && /assigned_date/i.test(r.error.message ?? "")) {
+        return supabase
+          .from("quizzes")
+          .select("id, title, description, published, created_at")
+          .eq("id", params.id).single();
+      }
+      return r;
+    })(),
     supabase.from("quiz_questions")
       .select("id, question_order, question_type, prompt, options, correct_answers, points, video_link, drive_file_id, required")
       .eq("quiz_id", params.id).order("question_order"),

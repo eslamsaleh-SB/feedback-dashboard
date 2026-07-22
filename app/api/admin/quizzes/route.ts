@@ -66,11 +66,29 @@ export async function POST(req: NextRequest) {
   if (questions.length === 0)
     return NextResponse.json({ error: "At least one question is required." }, { status: 400 });
 
-  const { data: created, error: createErr } = await supabase
-    .from("quizzes")
-    .insert({ title, description, created_by: auth.user.id, published, assigned_date: assignedDate })
-    .select("id")
-    .single();
+  // v59: retry without assigned_date if the column doesn't exist yet
+  // (sql/04 migration not applied). Same guard on the presentations create.
+  let created: any = null;
+  let createErr: any = null;
+  {
+    const r = await supabase
+      .from("quizzes")
+      .insert({ title, description, created_by: auth.user.id, published, assigned_date: assignedDate })
+      .select("id")
+      .single();
+    if (r.error && /assigned_date/i.test(r.error.message)) {
+      const r2 = await supabase
+        .from("quizzes")
+        .insert({ title, description, created_by: auth.user.id, published })
+        .select("id")
+        .single();
+      created = r2.data;
+      createErr = r2.error;
+    } else {
+      created = r.data;
+      createErr = r.error;
+    }
+  }
   if (createErr || !created) {
     return NextResponse.json({ error: createErr?.message || "Create failed" }, { status: 400 });
   }
