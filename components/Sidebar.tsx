@@ -39,8 +39,7 @@ function buildNav(role: AppRole): NavEntry[] {
       { type: "link", href: "/my-sessions", label: "My Sessions" },
       { type: "link", href: "/my-matches", label: "My Match Details" },
       { type: "link", href: "/my-inquiries", label: "Ask a Question" },
-      // v59: Presentations link scoped out of the sidebar per product request.
-      // The page still exists at /my-presentations for direct access.
+      { type: "link", href: "/my-presentations", label: "Presentations" },
       { type: "link", href: "/my-quizzes", label: "Quizzes" },
       { type: "link", href: "/quality-score", label: "Quality Score" },
       { type: "link", href: "/weekly-quality-score", label: "Weekly Quality Score" },
@@ -68,8 +67,9 @@ function buildNav(role: AppRole): NavEntry[] {
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/weekly-quality-upload", label: "Weekly Quality Score Upload" });
   if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/upload", label: "Send Report" });
-  // v59: admin Presentations link scoped out of the sidebar per product
-  // request. The page still exists at /admin-presentations for direct access.
+  if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
+    uploadItems.push({ href: "/admin-presentations", label: "Presentations" });
+  }
   if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
     uploadItems.push({ href: "/admin-quizzes", label: "Quizzes" });
   }
