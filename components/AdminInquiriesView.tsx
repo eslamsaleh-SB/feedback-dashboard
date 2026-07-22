@@ -258,15 +258,15 @@ export default function AdminInquiriesView({
                       {q.created_at.slice(0, 10)}
                     </span>
                     {q.completed_at ? (
-                      <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">
+                      <span className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full px-2 py-0.5 font-medium">
                         Completed
                       </span>
                     ) : allReplied ? (
-                      <span className="text-xs bg-sky-100 text-sky-700 rounded-full px-2 py-0.5 font-medium">
+                      <span className="text-xs bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 rounded-full px-2 py-0.5 font-medium">
                         Ready to complete
                       </span>
                     ) : (
-                      <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium">
+                      <span className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 rounded-full px-2 py-0.5 font-medium">
                         Pending
                       </span>
                     )}
@@ -316,14 +316,14 @@ export default function AdminInquiriesView({
                                   allowFullScreen
                                 />
                                 {v.reply_text ? (
-                                  <div className="bg-sky-50 border-t border-sky-200 px-3 py-2">
-                                    <p className="text-xs text-sky-700 font-medium">
+                                  <div className="bg-sky-50 dark:bg-sky-950/40 border-t border-sky-200 dark:border-sky-800 px-3 py-2">
+                                    <p className="text-xs text-sky-700 dark:text-sky-200 font-medium">
                                       Your reply
                                       {v.replied_at
                                         ? ` - ${v.replied_at.slice(0, 10)}`
                                         : ""}
                                     </p>
-                                    <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">
+                                    <p className="text-sm text-slate-700 dark:text-slate-100 mt-1 whitespace-pre-wrap">
                                       {v.reply_text}
                                     </p>
                                   </div>

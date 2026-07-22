@@ -56,6 +56,11 @@ export async function POST(req: NextRequest) {
   const assigneeHrCodes: string[] = Array.isArray(body.hr_codes)
     ? body.hr_codes.map((s: any) => String(s).trim()).filter(Boolean)
     : [];
+  // v59: admin-chosen assign date (YYYY-MM-DD). Falls back to today.
+  const rawDate = String(body.assigned_date || "").trim();
+  const assignedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+    ? rawDate
+    : new Date().toISOString().slice(0, 10);
 
   if (!title) return NextResponse.json({ error: "Title is required." }, { status: 400 });
   if (questions.length === 0)
@@ -63,7 +68,7 @@ export async function POST(req: NextRequest) {
 
   const { data: created, error: createErr } = await supabase
     .from("quizzes")
-    .insert({ title, description, created_by: auth.user.id, published })
+    .insert({ title, description, created_by: auth.user.id, published, assigned_date: assignedDate })
     .select("id")
     .single();
   if (createErr || !created) {

@@ -48,14 +48,20 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const title = String(body.title || "").trim();
   const description = String(body.description || "").trim() || null;
   const pages = Array.isArray(body.pages) ? body.pages : [];
+  // v59: optional assigned_date (YYYY-MM-DD). Only patched if the client
+  // sent one — otherwise leave the existing value alone.
+  const rawDate = String(body.assigned_date || "").trim();
+  const assignedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null;
   if (!title) return NextResponse.json({ error: "Title is required." }, { status: 400 });
   if (pages.length === 0) {
     return NextResponse.json({ error: "At least one page is required." }, { status: 400 });
   }
 
+  const updatePatch: Record<string, unknown> = { title, description };
+  if (assignedDate) updatePatch.assigned_date = assignedDate;
   const { error: updateErr } = await supabase
     .from("presentations")
-    .update({ title, description })
+    .update(updatePatch)
     .eq("id", params.id);
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 400 });
 

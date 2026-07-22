@@ -17,7 +17,7 @@ export default async function EditPresentationPage({ params }: { params: { id: s
     await Promise.all([
       supabase
         .from("presentations")
-        .select("id, title, description, google_slides_url")
+        .select("id, title, description, assigned_date, google_slides_url")
         .eq("id", params.id)
         .single(),
       supabase
@@ -50,6 +50,7 @@ export default async function EditPresentationPage({ params }: { params: { id: s
         id: pres.id as string,
         title: pres.title as string,
         description: (pres.description ?? "") as string,
+        assigned_date: ((pres as any).assigned_date ?? null) as string | null,
         google_slides_url: (pres.google_slides_url ?? null) as string | null,
         pages: (pageRows ?? []).map((p: any) => ({
           header: (p.header ?? "") as string,

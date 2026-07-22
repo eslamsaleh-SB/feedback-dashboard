@@ -14,9 +14,11 @@ export default async function MyQuizzesPage() {
   if (!hr) redirect("/dashboard");
 
   // Assignments joined with quiz + my submission (if any).
+  // v59: also pull quizzes.assigned_date so we can show it as the display
+  // "date" the admin picked for the quiz.
   const { data: assign } = await supabase
     .from("quiz_assignments")
-    .select("assigned_at, quizzes!inner(id, title, description, published)")
+    .select("assigned_at, quizzes!inner(id, title, description, published, assigned_date)")
     .eq("hr_code", hr)
     .order("assigned_at", { ascending: false });
 
@@ -39,6 +41,7 @@ export default async function MyQuizzesPage() {
     title: a.quizzes.title as string,
     description: a.quizzes.description as string | null,
     published: !!a.quizzes.published,
+    assigned_date: (a.quizzes.assigned_date ?? null) as string | null,
     submission: submissionByQuiz.get(a.quizzes.id) ?? null,
   })).filter((r) => r.published);
 
@@ -64,6 +67,9 @@ export default async function MyQuizzesPage() {
               <div className="flex items-start justify-between flex-wrap gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-800 dark:text-slate-100">{q.title}</p>
+                  {q.assigned_date && (
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Assigned {q.assigned_date}</p>
+                  )}
                   {q.description && (
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">{q.description}</p>
                   )}
@@ -71,7 +77,9 @@ export default async function MyQuizzesPage() {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   {q.submission ? (
                     <>
-                      <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 font-medium">Completed</span>
+                      <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 font-medium">
+                        Completed {q.submission.submitted_at ? `- ${String(q.submission.submitted_at).slice(0, 10)}` : ""}
+                      </span>
                       <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5">
                         Score {Number(q.submission.total_score).toFixed(0)} / {Number(q.submission.max_score).toFixed(0)}
                       </span>

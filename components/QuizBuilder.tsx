@@ -29,9 +29,14 @@ type InitialData = {
   title: string;
   description: string;
   published: boolean;
+  // v59: assigned/display date (YYYY-MM-DD). Optional so callers that don't
+  // pass it still work.
+  assigned_date?: string | null;
   questions: Question[];
   hr_codes: string[];
 };
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const TYPE_LABEL: Record<QuestionType, string> = {
   multiple_choice: "Multiple Choice",
@@ -79,6 +84,11 @@ export default function QuizBuilder({
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [published, setPublished] = useState<boolean>(initial?.published ?? false);
+  // v59: admin-picked assign date. Defaults to today on new; keeps the
+  // existing value on edit.
+  const [assignedDate, setAssignedDate] = useState<string>(
+    initial?.assigned_date ?? todayIso()
+  );
   const [questions, setQuestions] = useState<Question[]>(
     initial?.questions && initial.questions.length > 0 ? initial.questions : [blankQuestion()]
   );
@@ -145,6 +155,7 @@ export default function QuizBuilder({
         title: title.trim(),
         description: description.trim(),
         published,
+        assigned_date: assignedDate,
         questions: questions.map((q) => ({
           ...q,
           drive_file_id: extractDriveId(q.video_link),
@@ -252,6 +263,20 @@ export default function QuizBuilder({
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
             className={inputCls}
+          />
+        </div>
+        {/* v59: admin picks the "assigned" date. Shown to collectors so they
+            can tell recent assignments from older ones. Defaults to today. */}
+        <div>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+            Assign date
+          </label>
+          <input
+            type="date"
+            value={assignedDate}
+            onChange={(e) => setAssignedDate(e.target.value)}
+            className={inputCls}
+            required
           />
         </div>
         <p className="text-xs text-slate-400 dark:text-slate-500">

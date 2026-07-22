@@ -15,16 +15,18 @@ export default async function MyPresentationsPage() {
   if (profile?.role !== "Viewer") redirect("/admin-presentations");
 
   // RLS scopes presentations to those assigned to the current collector.
+  // v59: also pull assigned_date to display next to the title.
   const { data: rows } = await supabase
     .from("presentations")
-    .select("id, title, description, created_at, presentation_pages(count)")
-    .order("created_at", { ascending: false });
+    .select("id, title, description, assigned_date, created_at, presentation_pages(count)")
+    .order("assigned_date", { ascending: false, nullsFirst: false });
 
   const items = (rows ?? []).map((r: any) => ({
     id: r.id as string,
     title: r.title as string,
     description: (r.description ?? null) as string | null,
     page_count: r.presentation_pages?.[0]?.count ?? 0,
+    assigned_date: (r.assigned_date ?? null) as string | null,
     created_at: r.created_at as string,
   }));
 
@@ -50,6 +52,11 @@ export default async function MyPresentationsPage() {
               className="block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
             >
               <p className="font-semibold text-slate-800 dark:text-slate-100">{p.title}</p>
+              {p.assigned_date && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  Assigned {p.assigned_date}
+                </p>
+              )}
               {p.description && (
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                   {p.description}

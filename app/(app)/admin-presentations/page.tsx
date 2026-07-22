@@ -13,17 +13,18 @@ export default async function AdminPresentationsPage() {
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
   const role = profile?.role ?? "Viewer";
-  if (!["Admin", "Uploader", "Supervisor"].includes(role)) redirect("/my-presentations");
+  if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/my-presentations");
 
   const { data: rows } = await supabase
     .from("presentations")
-    .select("id, title, description, created_at, google_slides_url, presentation_pages(count), presentation_assignments(count)")
-    .order("created_at", { ascending: false });
+    .select("id, title, description, assigned_date, created_at, google_slides_url, presentation_pages(count), presentation_assignments(count)")
+    .order("assigned_date", { ascending: false, nullsFirst: false });
 
   const presentations = (rows ?? []).map((r: any) => ({
     id: r.id as string,
     title: r.title as string,
     description: (r.description ?? null) as string | null,
+    assigned_date: (r.assigned_date ?? null) as string | null,
     created_at: r.created_at as string,
     google_slides_url: (r.google_slides_url ?? null) as string | null,
     page_count: r.presentation_pages?.[0]?.count ?? 0,
@@ -62,6 +63,11 @@ export default async function AdminPresentationsPage() {
                   className="min-w-0 flex-1"
                 >
                   <p className="font-semibold text-slate-800 dark:text-slate-100">{p.title}</p>
+                  {p.assigned_date && (
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                      Assigned {p.assigned_date}
+                    </p>
+                  )}
                   {p.description && (
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
                       {p.description}

@@ -23,7 +23,7 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
     { data: collectors },
   ] = await Promise.all([
     supabase.from("quizzes")
-      .select("id, title, description, published, created_at")
+      .select("id, title, description, published, assigned_date, created_at")
       .eq("id", params.id).single(),
     supabase.from("quiz_questions")
       .select("id, question_order, question_type, prompt, options, correct_answers, points, video_link, drive_file_id, required")
@@ -61,6 +61,7 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
           title: (quiz as any).title,
           description: (quiz as any).description ?? "",
           published: !!(quiz as any).published,
+          assigned_date: ((quiz as any).assigned_date as string | null) ?? null,
           hr_codes: (assign ?? []).map((a: any) => a.hr_code as string),
           questions: (questions ?? []).map((q: any) => ({
             question_type: q.question_type,

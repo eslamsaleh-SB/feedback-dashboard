@@ -11,18 +11,19 @@ export default async function AdminQuizzesPage() {
   if (!user) redirect("/login");
   const eff = await getEffective(supabase);
   const role = eff?.profile?.role ?? "Viewer";
-  if (!["Admin", "Uploader", "Supervisor"].includes(role)) redirect("/my-quizzes");
+  if (!["Admin", "Reviewer", "Supervisor"].includes(role)) redirect("/my-quizzes");
 
   const { data: rows } = await supabase
     .from("quizzes")
-    .select("id, title, description, published, created_at, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)")
-    .order("created_at", { ascending: false });
+    .select("id, title, description, published, assigned_date, created_at, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)")
+    .order("assigned_date", { ascending: false, nullsFirst: false });
 
   const quizzes = (rows ?? []).map((r: any) => ({
     id: r.id as string,
     title: r.title as string,
     description: (r.description ?? null) as string | null,
     published: !!r.published,
+    assigned_date: (r.assigned_date ?? null) as string | null,
     created_at: r.created_at as string,
     question_count: r.quiz_questions?.[0]?.count ?? 0,
     assignee_count: r.quiz_assignments?.[0]?.count ?? 0,
@@ -74,6 +75,11 @@ export default async function AdminQuizzesPage() {
                         {q.published ? "Published" : "Draft"}
                       </span>
                     </p>
+                    {q.assigned_date && (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                        Assigned {q.assigned_date}
+                      </p>
+                    )}
                     {q.description && (
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
                         {q.description}

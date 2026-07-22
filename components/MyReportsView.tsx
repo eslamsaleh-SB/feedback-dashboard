@@ -24,8 +24,8 @@ type SessionReport = {
 
 const statusBadge: Record<string, string> = {
   "Not Started": "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
-  "In Progress": "bg-amber-100 text-amber-700",
-  Complete: "bg-emerald-100 text-emerald-700",
+  "In Progress": "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  Complete: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
 };
 
 export default function MyReportsView({
@@ -86,7 +86,7 @@ export default function MyReportsView({
   const btnCls = (f: typeof filter) =>
     `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
       filter === f
-        ? "bg-slate-900 text-white"
+        ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
         : "border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
     }`;
 
@@ -134,11 +134,11 @@ export default function MyReportsView({
                       <span className="text-xs text-slate-400 dark:text-slate-500">{s.review_date}</span>
                     )}
                     {s.acknowledged ? (
-                      <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">
+                      <span className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full px-2 py-0.5 font-medium">
                         Acknowledged
                       </span>
                     ) : (
-                      <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium">
+                      <span className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 rounded-full px-2 py-0.5 font-medium">
                         Pending
                       </span>
                     )}
@@ -240,14 +240,14 @@ export default function MyReportsView({
                               </span>
                             </div>
                             {n.reply_text && (
-                              <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2">
-                                <p className="text-xs text-sky-700 font-medium">
+                              <div className="rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-3 py-2">
+                                <p className="text-xs text-sky-700 dark:text-sky-200 font-medium">
                                   Reviewer reply
                                   {n.replied_at
                                     ? ` · ${n.replied_at.slice(0, 10)}`
                                     : ""}
                                 </p>
-                                <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">
+                                <p className="text-sm text-slate-700 dark:text-slate-100 mt-1 whitespace-pre-wrap">
                                   {n.reply_text}
                                 </p>
                               </div>
@@ -280,7 +280,7 @@ export default function MyReportsView({
                             !(noteText[s.id] ?? "").trim()
                           }
                           onClick={() => addNote(s.id)}
-                          className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-50"
+                          className="rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 text-sm font-medium disabled:opacity-50"
                         >
                           {saving === "note-" + s.id ? "..." : "Send"}
                         </button>

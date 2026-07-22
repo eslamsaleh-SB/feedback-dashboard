@@ -53,6 +53,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const description = String(body.description || "").trim() || null;
   const published = !!body.published;
   const questions = Array.isArray(body.questions) ? body.questions : [];
+  // v59: optional assigned_date (YYYY-MM-DD). Only patched if the client
+  // sent one — otherwise leave the existing value alone.
+  const rawDate = String(body.assigned_date || "").trim();
+  const assignedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null;
   if (!title) return NextResponse.json({ error: "Title is required." }, { status: 400 });
   if (questions.length === 0)
     return NextResponse.json({ error: "At least one question is required." }, { status: 400 });
@@ -65,9 +69,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     .single();
   const wasPublished = !!(existing as any)?.published;
 
+  const updatePatch: Record<string, unknown> = { title, description, published };
+  if (assignedDate) updatePatch.assigned_date = assignedDate;
   const { error: updErr } = await supabase
     .from("quizzes")
-    .update({ title, description, published })
+    .update(updatePatch)
     .eq("id", params.id);
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 400 });
 

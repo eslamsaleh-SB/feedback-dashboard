@@ -16,10 +16,15 @@ type InitialData = {
   id: string;
   title: string;
   description: string;
+  // v59: assigned/display date (YYYY-MM-DD). Optional so callers that don't
+  // pass it still work.
+  assigned_date?: string | null;
   google_slides_url: string | null;
   pages: Page[];
   hr_codes: string[];
 };
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 function extractDriveId(url: string): string | null {
   if (!url) return null;
@@ -46,6 +51,11 @@ export default function PresentationBuilder({
   const router = useRouter();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
+  // v59: admin-picked assign date. Defaults to today on new; keeps existing
+  // value on edit.
+  const [assignedDate, setAssignedDate] = useState<string>(
+    initial?.assigned_date ?? todayIso()
+  );
   const [pages, setPages] = useState<Page[]>(
     initial?.pages && initial.pages.length > 0
       ? initial.pages
@@ -107,6 +117,7 @@ export default function PresentationBuilder({
       const body = {
         title: title.trim(),
         description: description.trim(),
+        assigned_date: assignedDate,
         pages: pages.map((p) => ({
           header: p.header.trim(),
           description: p.description.trim(),
@@ -284,6 +295,20 @@ export default function PresentationBuilder({
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
             className={inputCls}
+          />
+        </div>
+        {/* v59: admin picks the assign/display date. Shown to collectors on
+            their assigned presentations list. Defaults to today. */}
+        <div>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+            Assign date
+          </label>
+          <input
+            type="date"
+            value={assignedDate}
+            onChange={(e) => setAssignedDate(e.target.value)}
+            className={inputCls}
+            required
           />
         </div>
       </div>
