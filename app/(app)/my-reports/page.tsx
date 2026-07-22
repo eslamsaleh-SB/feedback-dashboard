@@ -17,20 +17,19 @@ export default async function MyReportsPage() {
 
   const hrCode = profile?.hr_code ?? "";
 
-  const { data: collector } = await supabase
-    .from("collectors")
-    .select("id")
-    .eq("hr_code", hrCode)
-    .single();
-
-  if (!collector) {
-    return <div className="p-8 text-slate-500 dark:text-slate-400">No collector record linked to your account yet.</div>;
+  // v59: `collectors` table is stale/orphaned since v56 (identity lives on
+  // `users` now). match_sessions.collector_id (uuid) was also dropped in v56
+  // and repointed onto hr_code (text). Both lookups here failed for any
+  // user created after v56, showing "No collector record linked" even when
+  // they had reports.
+  if (!hrCode) {
+    return <div className="p-8 text-slate-500 dark:text-slate-400">Your account isn't linked to an HR code yet. Ask an Admin to set one on the Users page.</div>;
   }
 
   const { data: sessions } = await supabase
     .from("match_sessions")
     .select("id, match_name, review_date, overall_notes")
-    .eq("collector_id", collector.id)
+    .eq("hr_code", hrCode)
     .order("review_date", { ascending: false });
 
   const sessionIds = (sessions ?? []).map((s: any) => s.id as string);

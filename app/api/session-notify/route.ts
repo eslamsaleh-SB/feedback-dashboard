@@ -16,12 +16,16 @@ function escapeText(s: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  // v59: `collector_id` in the payload is now an hr_code string (v56 dropped
+  // the uuid collector_id from match_sessions and repointed onto hr_code).
+  // Kept the field name for backward compatibility with existing callers.
   const { collector_id, match_name, review_date, overall_notes } = (await req.json()) as {
     collector_id: string;
     match_name: string;
     review_date: string | null;
     overall_notes: string | null;
   };
+  const hrCode = String(collector_id || "").trim();
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
@@ -35,17 +39,12 @@ export async function POST(req: NextRequest) {
     { auth: { persistSession: false } }
   );
 
-  const { data: collector } = await admin
-    .from("collectors")
-    .select("hr_code")
-    .eq("id", collector_id)
-    .single();
-  if (!collector?.hr_code) return NextResponse.json({ ok: true, sent: 0 });
-
+  // v59: `collectors` is stale/orphaned since v56. Look up the user
+  // directly by hr_code.
   const { data: profile } = await admin
     .from("users")
     .select("id")
-    .eq("hr_code", collector.hr_code)
+    .eq("hr_code", hrCode)
     .single();
   if (!profile?.id) return NextResponse.json({ ok: true, sent: 0 });
 

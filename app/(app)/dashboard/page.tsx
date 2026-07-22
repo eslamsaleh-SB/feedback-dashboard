@@ -97,9 +97,7 @@ export default async function DashboardPage({
   const curLabel = `${from} to ${to}`;
   const prevLabel = `${prevFrom} to ${prevTo}`;
 
-  const { data: attendeeRows } = await supabase
-    .from("feedback_attendees")
-    .select("attendance, feedback_reservations(session_date)");
+  // v55 P2.4 - parallelize the 3 independent queries + the 2 module-totals RPCs.
   function attend(rows: any[], fromStr: string, toStr: string) {
     let total = 0, completed = 0, cancelled = 0, absent = 0;
     for (const r of rows ?? []) {
@@ -112,23 +110,27 @@ export default async function DashboardPage({
     }
     return { total, completed, cancelled, absent, incomplete: total - completed };
   }
-  const feedback = attend(attendeeRows ?? [], from, to);
-
-  const { count: submittedReports } = await supabase
-    .from("match_sessions")
-    .select("id", { count: "exact", head: true })
-    .gte("review_date", from)
-    .lte("review_date", to);
-
-  const { count: openNotes } = await supabase
-    .from("session_notes")
-    .select("id", { count: "exact", head: true })
-    .neq("status", "Complete");
-
-  const [{ data: curMt }, { data: prevMt }] = await Promise.all([
+  const [
+    { data: attendeeRows },
+    { count: submittedReports },
+    { count: openNotes },
+    { data: curMt },
+    { data: prevMt },
+  ] = await Promise.all([
+    supabase.from("feedback_attendees").select("attendance, feedback_reservations(session_date)"),
+    supabase
+      .from("match_sessions")
+      .select("id", { count: "exact", head: true })
+      .gte("review_date", from)
+      .lte("review_date", to),
+    supabase
+      .from("session_notes")
+      .select("id", { count: "exact", head: true })
+      .neq("status", "Complete"),
     supabase.rpc("collector_module_totals", { p_from: from, p_to: to }),
     supabase.rpc("collector_module_totals", { p_from: prevFrom, p_to: prevTo }),
   ]);
+  const feedback = attend(attendeeRows ?? [], from, to);
   const modulesCur = sumByModule(curMt);
   const modulesPrev = sumByModule(prevMt);
   const moduleErrorsCur = MODULE_KEYS.reduce((a, m) => a + modulesCur[m], 0);
@@ -172,9 +174,13 @@ export default async function DashboardPage({
   const freezeFrameQualityCur = avgScores(ffRows);
   const freezeFrameQualityPrev = avgScores(ffPrevRows);
 
+  // v59: `collectors` is stale/orphaned since v56. Count active collectors
+  // straight from `users` (Viewer role, with an hr_code).
   const { count: collectorCount } = await supabase
-    .from("collectors")
-    .select("id", { count: "exact", head: true });
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "Viewer")
+    .not("hr_code", "is", null);
 
   return (
     <DashboardView

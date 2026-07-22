@@ -15,14 +15,21 @@ export default async function ModuleUploadPage() {
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
 
-  if (!profile || !["Admin", "Uploader"].includes(profile.role)) {
+  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) {
     redirect("/analytics");
   }
 
-  const { data: collectors } = await supabase
-    .from("collectors")
-    .select("id, name")
-    .order("name");
+  // v59: `collectors` is stale/orphaned since v56. ModuleUploadForm only
+  // uses hr_code + display name, so shape the users result to match.
+  const { data: usersDirRaw } = await supabase
+    .from("users")
+    .select("hr_code, first_name, last_name")
+    .not("hr_code", "is", null)
+    .order("hr_code");
+  const collectors = (usersDirRaw ?? []).map((u: any) => ({
+    id: u.hr_code as string,
+    name: [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || (u.hr_code as string),
+  }));
 
-  return <ModuleUploadForm collectors={collectors ?? []} />;
+  return <ModuleUploadForm collectors={collectors} />;
 }

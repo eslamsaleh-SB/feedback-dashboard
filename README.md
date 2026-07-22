@@ -70,14 +70,35 @@ routes were still writing those columns.
 No new SQL required for these; v56's migrations already dropped the
 relevant columns.
 
+### 6. SQL: patch 6 stored functions still hardcoding 'Uploader'
+After task #71 renamed the enum value `Uploader` → `Reviewer`, Postgres
+updated the enum label but did NOT rewrite the bodies of SQL / plpgsql
+functions stored in `pg_proc`. So calls to Send Report / Analytics started
+failing with:
+```
+invalid input value for enum user_role: "Uploader"
+```
+
+Fix: `sql/03_rename_uploader_in_functions.sql` — recreates all 6 offenders
+with `'Reviewer'` in place of `'Uploader'`:
+`is_reviewer`, `match_count`, `match_module_breakdown`,
+`match_part_summary_fast`, `session_editable`, `session_visible`.
+
+`session_visible` had one extra bug — referenced `match_sessions.collector_id`
+and `my_collector_id()`, both dropped in v56. Repointed onto `hr_code` and
+`my_hr_code()`.
+
+Verification query at the end of the file — should return 0 rows.
+
 ## Deploy order
 
 1. Upload all code files under `app/...` and `components/...` to GitHub
    main at their exact paths.
 2. Wait for Vercel to redeploy.
-3. In Supabase SQL Editor, run **both** SQL files in this bundle:
+3. In Supabase SQL Editor, run **all three** SQL files in this bundle:
    - `sql/01_weekly_add_pressure.sql`
    - `sql/02_collector_module_totals_add_parts.sql`
+   - `sql/03_rename_uploader_in_functions.sql`
 4. Re-upload the latest weekly Module Score CSV to backfill pressure values.
 
 ## Verification
