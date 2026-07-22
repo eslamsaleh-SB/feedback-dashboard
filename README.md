@@ -1,22 +1,55 @@
-# v58 — deploy pending fixes
+# v59 — Pressure column + Chart labels + Parts count
 
-58 files. Folder structure inside = exact repo paths. Only `lib/effective.ts` already live on main; rest missing.
+Three small fixes, all requested from the collector-performance dashboard.
 
-## Upload
-1. Go to https://github.com/eslamsaleh-SB/feedback-dashboard
-2. "Add file" -> "Upload files"
-3. Drag this whole `v58__deploy-pending-fixes` folder in (Chrome preserves subfolders)
-4. Commit directly to `main`
-5. Vercel auto-redeploys
+## What's in here
 
-## Then run in Supabase SQL editor (after deploy confirmed live)
-- Updates/v57__users-admin-crud/sql/01_fix_and_consolidate.sql (if not run yet)
-- Updates/v57__users-admin-crud/sql/02_rename_role_uploader_to_reviewer.sql
+### 1. Weekly Quality Score: Pressure module
+The weekly Quality Score CSV includes a `pressure` module but the app was
+silently dropping it (missing from `MODULE_COLUMNS`, missing from the table,
+missing from the DB schema).
 
-## Fixes included
-- app/(app)/layout.tsx — root cause #2 of Admin-shown-as-Collector bug
-- v57 Users CRUD: users-import route, /users page, users API, UsersManager.tsx
-- 25 files: profiles -> users
-- 36 files: "Uploader" -> "Reviewer" (incl. lib/effective.ts, already live)
-- 18 files: collectors -> users lookup (fixes team-filter null + "Code + Code" display)
-- 2 redirects: /accounts, /collectors -> /users
+Files:
+- `sql/01_weekly_add_pressure.sql` — adds `pressure numeric` column
+- `app/api/weekly-quality-upload/route.ts` — accepts `pressure` from CSV, writes it
+- `app/(app)/weekly-quality-score/page.tsx` — SELECT includes pressure; friendly
+  fallback if the SQL migration hasn't been applied yet
+- `components/WeeklyQualityScoreView.tsx` — renders Pressure column in the table
+
+### 2. Quality Score charts: labels + delta % by default
+Every point on every line chart on `/quality-score` now shows:
+- its score % right above the dot (no more hover-only)
+- the change vs the previous point (▲ / ▼ + delta %), colored green/red
+Files:
+- `components/QualityScoreDashboard.tsx` — LineChart rewritten with taller
+  viewbox + always-on value/delta text labels
+
+### 3. Performance Thresholds: parts count next to errors
+Errors on their own are hard to read (5 errors on 10 parts vs 200 parts is
+very different). The Module Errors table + CSV export now include a Parts
+column alongside the module error columns.
+
+Files:
+- `app/(app)/performance-thresholds/page.tsx` — pulls `match_part_summary_fast`
+  and aggregates parts per hr_code
+- `components/PerformanceThresholdsView.tsx` — new Parts column + CSV field
+
+## Deploy order
+
+1. Upload all 6 code files under `app/...` and `components/...` to GitHub main
+   at their exact paths (drag-and-drop in the GitHub upload UI).
+2. Wait for Vercel to redeploy.
+3. In Supabase SQL Editor, run `sql/01_weekly_add_pressure.sql`. The app is
+   backwards-compatible — if you don't run the SQL, the weekly page will show
+   an amber hint but keep working with pressure as blank.
+4. Re-upload the latest weekly Module Score CSV to backfill pressure values.
+
+## Verification
+
+- `npx tsc --noEmit -p .` → 0 errors before this bundle was cut.
+- Weekly Quality Score: upload a weekly module CSV that includes rows with
+  `module=pressure` → the Pressure column now populates.
+- Quality Score: open `/quality-score`, each module chart shows month
+  labels above each point + up/down deltas.
+- Performance Thresholds: pick a module + threshold, the Module Errors
+  table now shows a Parts column.

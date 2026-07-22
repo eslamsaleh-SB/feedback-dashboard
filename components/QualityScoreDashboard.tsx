@@ -37,9 +37,13 @@ function LineChart({
 }) {
   if (data.length === 0)
     return <p className="text-xs text-slate-400 dark:text-slate-500">No data</p>;
-  const W = 340;
-  const H = 140;
-  const PAD = { top: 14, right: 14, bottom: 32, left: 40 };
+  // v59: every point now shows its % value AND the delta vs the previous
+  // point directly on the chart (no more hover-only tooltips). Extra
+  // vertical padding + wider viewport give the value/delta labels room to
+  // sit above each dot without clipping.
+  const W = 460;
+  const H = 180;
+  const PAD = { top: 28, right: 20, bottom: 36, left: 44 };
   const minV = Math.max(0, Math.min(...data.map((d) => d.value)) - 5);
   const maxV = Math.min(100, Math.max(...data.map((d) => d.value)) + 5);
   const xScale = (i: number) =>
@@ -75,38 +79,56 @@ function LineChart({
         );
       })}
 
-      {/* Points + tiny up/down triangle per month (skips first month = no baseline). */}
+      {/* Points + always-on value label + delta vs previous point.
+          First point has no baseline so only shows its own %. */}
       {data.map((d, i) => {
         const prev = i > 0 ? data[i - 1] : null;
+        const delta = prev ? d.value - prev.value : 0;
         const trend =
           prev == null
             ? "flat"
-            : d.value > prev.value
+            : delta > 0
             ? "up"
-            : d.value < prev.value
+            : delta < 0
             ? "down"
             : "flat";
         const dotColor = trend === "up" ? UP : trend === "down" ? DOWN : stroke;
         const cx = xScale(i);
         const cy = yScale(d.value);
+        const valueY = cy - 10;
+        const deltaY = cy - 20;
+        const deltaText =
+          prev == null ? null : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta).toFixed(1)}%`;
+        const deltaFill = trend === "up" ? UP : trend === "down" ? DOWN : "currentColor";
         return (
           <g key={`pt-${i}`}>
             <circle cx={cx} cy={cy} r={3.6} fill={dotColor} />
-            {trend === "up" && (
-              <polygon
-                points={`${cx - 4},${cy - 9} ${cx + 4},${cy - 9} ${cx},${cy - 15}`}
-                fill={UP}
-              />
-            )}
-            {trend === "down" && (
-              <polygon
-                points={`${cx - 4},${cy - 9} ${cx + 4},${cy - 9} ${cx},${cy - 3}`}
-                fill={DOWN}
-              />
+            {/* Score value label - always visible */}
+            <text
+              x={cx}
+              y={valueY}
+              textAnchor="middle"
+              fontSize={10}
+              fontWeight={600}
+              className="fill-slate-700 dark:fill-slate-100"
+            >
+              {d.value.toFixed(1)}%
+            </text>
+            {/* Delta label - visible from second point onwards */}
+            {deltaText && (
+              <text
+                x={cx}
+                y={deltaY}
+                textAnchor="middle"
+                fontSize={9}
+                fill={deltaFill}
+              >
+                {deltaText}
+              </text>
             )}
             <title>
               {d.label}: {d.value.toFixed(2)}%
-              {prev ? ` (${d.value >= prev.value ? "+" : ""}${(d.value - prev.value).toFixed(2)} vs ${prev.label})` : ""}
+              {prev ? ` (${delta >= 0 ? "+" : ""}${delta.toFixed(2)} vs ${prev.label})` : ""}
             </title>
           </g>
         );

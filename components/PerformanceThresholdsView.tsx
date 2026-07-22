@@ -15,6 +15,10 @@ type ModuleErrorsRow = {
   freeze_frame: number;
   total: number;
   matches: number;
+  // v59: parts count for this collector in the selected range. `matches` is
+  // distinct matches; `parts` is the number of match-parts (each match has
+  // multiple parts).
+  parts: number;
 };
 type QualityScoreRow = {
   hr_code: string;
@@ -262,10 +266,13 @@ export default function PerformanceThresholdsView({
     URL.revokeObjectURL(url);
   }
   function exportErrorsCsv() {
+    // v59: include Parts alongside the module error columns so the CSV
+    // matches what the UI shows.
     const header = [
       "HR Code",
       "Name",
       "Team",
+      "Parts",
       ...errorColumns.map((k) => `${MODULE_LABEL[k]} (>= ${errThresh[k] || 0})`),
     ];
     const rows = errorsRanked.map((c) => {
@@ -274,6 +281,7 @@ export default function PerformanceThresholdsView({
         c.hr_code,
         c.name,
         c.team ?? "",
+        String(row ? Number(row.parts ?? 0) : 0),
         ...errorColumns.map((k) => String(row ? Number(row[k] ?? 0) : 0)),
       ];
     });
@@ -530,6 +538,8 @@ export default function PerformanceThresholdsView({
                 <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">HR Code</th>
                 <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Name</th>
                 <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Team</th>
+                {/* v59: parts count in range. Helps read the error columns in context (5 errors on 10 parts vs on 200 parts). */}
+                <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5 whitespace-nowrap">Parts</th>
                 {errorColumns.map((k) => (
                   <th key={k} className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5 whitespace-nowrap">
                     {MODULE_LABEL[k]} <span className="text-slate-300 dark:text-slate-600">(&ge; {errThresh[k] || 0})</span>
@@ -540,18 +550,22 @@ export default function PerformanceThresholdsView({
             <tbody>
               {errorsRanked.length === 0 ? (
                 <tr>
-                  <td colSpan={3 + errorColumns.length} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={4 + errorColumns.length} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                     No collectors match.
                   </td>
                 </tr>
               ) : (
                 errorsRanked.map((c) => {
                   const row = moduleErrorsByHr.get(c.hr_code);
+                  const parts = row ? Number(row.parts ?? 0) : 0;
                   return (
                     <tr key={c.hr_code} className="border-t border-slate-100 dark:border-slate-800">
                       <td className="px-4 py-2.5 font-medium whitespace-nowrap">{c.hr_code}</td>
                       <td className="px-4 py-2.5 text-slate-700 dark:text-slate-200 whitespace-nowrap">{c.name}</td>
                       <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">{c.team ?? "-"}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                        {parts.toLocaleString()}
+                      </td>
                       {errorColumns.map((k) => {
                         const value = row ? Number(row[k] ?? 0) : 0;
                         const limit = Number(errThresh[k] || 0);

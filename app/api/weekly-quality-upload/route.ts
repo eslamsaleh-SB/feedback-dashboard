@@ -62,6 +62,7 @@ const MODULE_COLUMNS = new Set([
   "location",
   "impact",
   "extras",
+  "pressure",
   "squad",
 ]);
 
@@ -132,7 +133,7 @@ export async function POST(req: NextRequest) {
   // vice versa).
   const { data: existingRows } = await supabase
     .from("weekly_quality_scores")
-    .select("hr_code, base, players, formation_tactical, location, impact, extras, squad, freeze_frame_score")
+    .select("hr_code, base, players, formation_tactical, location, impact, extras, pressure, squad, freeze_frame_score")
     .eq("week_start_date", week);
 
   const wideByHr = new Map<string, any>();
@@ -192,6 +193,7 @@ export async function POST(req: NextRequest) {
     location: r.location ?? null,
     impact: r.impact ?? null,
     extras: r.extras ?? null,
+    pressure: r.pressure ?? null,
     squad: r.squad ?? null,
     freeze_frame_score: r.freeze_frame_score ?? null,
     uploaded_by: user.id,

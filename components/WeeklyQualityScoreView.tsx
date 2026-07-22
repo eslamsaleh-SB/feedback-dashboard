@@ -12,11 +12,15 @@ type Row = {
   location: number | null;
   impact: number | null;
   extras: number | null;
+  pressure: number | null;
   squad: number | null;
   freeze_frame_score: number | null;
 };
 
-// Column order matches the CSV: base, players, formation_tactical, location, impact, extras, squad, THEN freeze_frame_score last.
+// v59: Column order matches the CSV: base, players, formation_tactical,
+// location, impact, extras, pressure, squad, then freeze_frame_score last.
+// `pressure` was missing from this list, which is why it never rendered even
+// though the upload route stored the value.
 const MODULE_COLS: { key: keyof Row; label: string }[] = [
   { key: "base", label: "Base" },
   { key: "players", label: "Players" },
@@ -24,6 +28,7 @@ const MODULE_COLS: { key: keyof Row; label: string }[] = [
   { key: "location", label: "Location" },
   { key: "impact", label: "Impact" },
   { key: "extras", label: "Extras" },
+  { key: "pressure", label: "Pressure" },
   { key: "squad", label: "Squad" },
   { key: "freeze_frame_score", label: "Freeze Frame" },
 ];
