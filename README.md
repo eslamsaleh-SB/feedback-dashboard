@@ -52,6 +52,24 @@ Files:
 
 Same file: `components/PerformanceThresholdsView.tsx`.
 
+### 5. Send Report ("No matching collector records") + Module upload ("actor_id column not found")
+Both symptoms have the same root cause: v56 dropped `collectors.id` /
+`module_totals.actor_id` / `match_sessions.collector_id`, but the upload
+routes were still writing those columns.
+
+- `app/(app)/upload/page.tsx` — `collectors` map now includes `id`
+  (set to the collector's hr_code so the client picker works); the existing
+  match sessions query selects `hr_code` instead of the dropped
+  `collector_id`.
+- `app/api/upload/route.ts` — writes to `match_sessions.hr_code` (not the
+  dropped `collector_id`); notify path looks up the user directly by
+  hr_code (not via the stale `collectors` table).
+- `app/api/modules/upload/route.ts` — no longer seeds `collectors` and no
+  longer writes `actor_id` on `module_totals`. Both were dead since v56.
+
+No new SQL required for these; v56's migrations already dropped the
+relevant columns.
+
 ## Deploy order
 
 1. Upload all code files under `app/...` and `components/...` to GitHub

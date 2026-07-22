@@ -203,31 +203,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Ensure a collector row exists for each HR code (for names + RLS).
+  // v59: the `collectors` seed + `actor_id` lookup below both went dead in
+  // v56 (actor_id column dropped from module_totals; collectors table is
+  // stale/orphaned). Writes here now go straight to hr_code -- Supabase
+  // reported "Could not find the 'actor_id' column of 'module_totals' in
+  // the schema cache" every upload since v56.
   const hrCodes = Array.from(
     new Set(aggregated.map((a) => a.hr_code).filter(Boolean) as string[])
   );
-  if (hrCodes.length) {
-    await supabase
-      .from("collectors")
-      .upsert(hrCodes.map((hr) => ({ hr_code: hr, name: hr })), {
-        onConflict: "hr_code",
-        ignoreDuplicates: true,
-      });
-  }
-
-  // Resolve hr_code -> actor_id (collectors.id) so new rows carry the stable key
-  // while hr_code is kept for CSV/Tableau compatibility.
-  const idByHr = new Map<string, string>();
-  if (hrCodes.length) {
-    const { data: cols } = await supabase
-      .from("collectors")
-      .select("id, hr_code")
-      .in("hr_code", hrCodes);
-    (cols ?? []).forEach((c: any) => {
-      if (c.hr_code) idByHr.set(String(c.hr_code).trim().toUpperCase(), c.id as string);
-    });
-  }
 
   // Upsert the per-part totals for this module (replace on conflict).
   const payload = aggregated.map((a) => ({
@@ -235,7 +218,6 @@ export async function POST(req: NextRequest) {
     partid: a.partid,
     module,
     hr_code: a.hr_code,
-    actor_id: a.hr_code ? idByHr.get(a.hr_code.trim().toUpperCase()) ?? null : null,
     review_date: a.review_date,
     total_mistakes: a.total,
   }));

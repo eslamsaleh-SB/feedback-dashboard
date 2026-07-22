@@ -42,12 +42,12 @@ async function listDriveVideos(folderId: string) {
 }
 
 async function notifyCollectorReport(opts: {
-  collectorId: string;
+  hrCode: string;
   matchName: string;
   reviewDate: string | null;
   notes: string | null;
 }) {
-  const { collectorId, matchName, reviewDate, notes } = opts;
+  const { hrCode, matchName, reviewDate, notes } = opts;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
     console.warn("[upload-notify] SUPABASE_SERVICE_ROLE_KEY not set - email skipped");
@@ -60,17 +60,12 @@ async function notifyCollectorReport(opts: {
     { auth: { persistSession: false } }
   );
 
-  const { data: collector } = await admin
-    .from("collectors")
-    .select("hr_code")
-    .eq("id", collectorId)
-    .single();
-  if (!collector?.hr_code) return;
-
+  // v59: was reading from public.collectors (stale/orphaned since v56 moved
+  // identity onto public.users). Look up the user directly by hr_code.
   const { data: profile } = await admin
     .from("users")
     .select("id")
-    .eq("hr_code", collector.hr_code)
+    .eq("hr_code", hrCode)
     .single();
   if (!profile?.id) return;
 
@@ -149,7 +144,7 @@ export async function POST(req: NextRequest) {
   let matchSessionId: string;
   let merged = false;
   let notify: {
-    collectorId: string;
+    hrCode: string;
     matchName: string;
     reviewDate: string | null;
     notes: string | null;
@@ -175,13 +170,15 @@ export async function POST(req: NextRequest) {
       );
     }
   } else {
-    const collectorId = String(body.collector_id || "");
+    // v59: client's `collector_id` field carries an hr_code string (v56
+    // dropped match_sessions.collector_id and repointed onto hr_code text).
+    const hrCode = String(body.collector_id || "").trim();
     const matchName = String(body.match_name || "").trim();
     const reviewDate = String(body.review_date || "") || null;
     const notes = String(body.overall_notes || "");
     const score = body.quality_score != null ? parseInt(String(body.quality_score), 10) : null;
 
-    if (!collectorId || !matchName) {
+    if (!hrCode || !matchName) {
       return NextResponse.json(
         { error: "collector and match name are required" },
         { status: 400 }
@@ -191,7 +188,7 @@ export async function POST(req: NextRequest) {
     const { data: existingSessions } = await supabase
       .from("match_sessions")
       .select("id, match_name")
-      .eq("collector_id", collectorId)
+      .eq("hr_code", hrCode)
       .ilike("match_name", matchName);
 
     const existing =
@@ -206,7 +203,7 @@ export async function POST(req: NextRequest) {
       const { data: created, error } = await supabase
         .from("match_sessions")
         .insert({
-          collector_id: collectorId,
+          hr_code: hrCode,
           uploader_id: user.id,
           match_name: matchName,
           review_date: reviewDate,
@@ -223,7 +220,7 @@ export async function POST(req: NextRequest) {
         );
       }
       matchSessionId = created.id;
-      notify = { collectorId, matchName, reviewDate, notes: notes || null };
+      notify = { hrCode, matchName, reviewDate, notes: notes || null };
     }
   }
 
