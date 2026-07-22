@@ -65,47 +65,33 @@ export default async function PerformanceThresholdsPage({
   const monthFromIso = `${from.slice(0, 7)}-01`;
   const monthToIso = `${to.slice(0, 7)}-01`;
 
-  const [{ data: usersDirRaw }, { data: moduleRows }, { data: partRows }, qualityRows, freezeFrameRows] =
-    await Promise.all([
-      supabase
-        .from("users")
-        .select("hr_code, first_name, last_name, squad")
-        .not("hr_code", "is", null)
-        .order("hr_code"),
-      supabase.rpc("collector_module_totals", { p_from: from, p_to: to }),
-      // v59: parts count per collector. `collector_module_totals` returns
-      // distinct MATCHES but we also need PARTS (each match has multiple
-      // parts). Pull them from the existing match_part_summary_fast RPC and
-      // aggregate below.
-      supabase.rpc("match_part_summary_fast", {
-        p_from: from,
-        p_to: to,
-        p_collector: null,
-        p_limit: 100000,
-      }),
-      fetchAllInMonthRange<any>(
-        supabase,
-        "quality_scores",
-        "hr_code, module, score, match_count, upload_month",
-        monthFromIso,
-        monthToIso
-      ),
-      fetchAllInMonthRange<any>(
-        supabase,
-        "freeze_frame_scores",
-        "hr_code, score, match_count, upload_month",
-        monthFromIso,
-        monthToIso
-      ),
-    ]);
-
-  // Parts per hr_code: each row of match_part_summary_fast is one (matchid, partid) pair.
-  const partsByHr: Record<string, number> = {};
-  for (const r of partRows ?? []) {
-    const hr = (r as any).hr_code as string | null;
-    if (!hr) continue;
-    partsByHr[hr] = (partsByHr[hr] ?? 0) + 1;
-  }
+  const [{ data: usersDirRaw }, { data: moduleRows }, qualityRows, freezeFrameRows] = await Promise.all([
+    supabase
+      .from("users")
+      .select("hr_code, first_name, last_name, squad")
+      .not("hr_code", "is", null)
+      .order("hr_code"),
+    // v59: collector_module_totals now also returns `parts` (count distinct
+    // (matchid, partid) per hr_code) — computed server-side alongside the
+    // error sums. This replaces the earlier attempt that aggregated
+    // match_part_summary_fast in JS: that RPC picks ONE hr_code per part via
+    // max(), so if two collectors share a match-part one gets 0 parts.
+    supabase.rpc("collector_module_totals", { p_from: from, p_to: to }),
+    fetchAllInMonthRange<any>(
+      supabase,
+      "quality_scores",
+      "hr_code, module, score, match_count, upload_month",
+      monthFromIso,
+      monthToIso
+    ),
+    fetchAllInMonthRange<any>(
+      supabase,
+      "freeze_frame_scores",
+      "hr_code, score, match_count, upload_month",
+      monthFromIso,
+      monthToIso
+    ),
+  ]);
 
   return (
     <PerformanceThresholdsView
@@ -130,7 +116,10 @@ export default async function PerformanceThresholdsPage({
         freeze_frame: Number(r.freeze_frame ?? 0),
         total: Number(r.total ?? 0),
         matches: Number(r.matches ?? 0),
-        parts: partsByHr[r.hr_code as string] ?? 0,
+        // v59: parts now comes directly from collector_module_totals(). Falls
+        // back to matches if the SQL migration hasn't been applied yet — at
+        // least Parts ≈ Matches is a sane lower bound instead of showing 0.
+        parts: Number(r.parts ?? r.matches ?? 0),
       }))}
       qualityScores={qualityRows.map((r: any) => ({
         hr_code: r.hr_code as string,

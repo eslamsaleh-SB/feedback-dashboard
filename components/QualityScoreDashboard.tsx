@@ -40,10 +40,11 @@ function LineChart({
   // v59: every point now shows its % value AND the delta vs the previous
   // point directly on the chart (no more hover-only tooltips). Extra
   // vertical padding + wider viewport give the value/delta labels room to
-  // sit above each dot without clipping.
+  // sit above each dot without clipping. Delta label sits well above the
+  // score label so they don't visually collide.
   const W = 460;
-  const H = 180;
-  const PAD = { top: 28, right: 20, bottom: 36, left: 44 };
+  const H = 190;
+  const PAD = { top: 36, right: 20, bottom: 36, left: 44 };
   const minV = Math.max(0, Math.min(...data.map((d) => d.value)) - 5);
   const maxV = Math.min(100, Math.max(...data.map((d) => d.value)) + 5);
   const xScale = (i: number) =>
@@ -96,7 +97,7 @@ function LineChart({
         const cx = xScale(i);
         const cy = yScale(d.value);
         const valueY = cy - 10;
-        const deltaY = cy - 20;
+        const deltaY = cy - 24;
         const deltaText =
           prev == null ? null : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta).toFixed(1)}%`;
         const deltaFill = trend === "up" ? UP : trend === "down" ? DOWN : "currentColor";

@@ -1,55 +1,64 @@
 # v59 — Pressure column + Chart labels + Parts count
 
-Three small fixes, all requested from the collector-performance dashboard.
+Requested from the collector-performance dashboard.
 
 ## What's in here
 
 ### 1. Weekly Quality Score: Pressure module
-The weekly Quality Score CSV includes a `pressure` module but the app was
-silently dropping it (missing from `MODULE_COLUMNS`, missing from the table,
-missing from the DB schema).
+Weekly Quality Score CSV includes a `pressure` module. App was silently
+dropping it: missing from `MODULE_COLUMNS`, missing from the table, missing
+from the DB schema.
 
 Files:
-- `sql/01_weekly_add_pressure.sql` — adds `pressure numeric` column
-- `app/api/weekly-quality-upload/route.ts` — accepts `pressure` from CSV, writes it
+- `sql/01_weekly_add_pressure.sql` — adds `pressure numeric`
+- `app/api/weekly-quality-upload/route.ts` — accepts `pressure` from CSV
 - `app/(app)/weekly-quality-score/page.tsx` — SELECT includes pressure; friendly
   fallback if the SQL migration hasn't been applied yet
-- `components/WeeklyQualityScoreView.tsx` — renders Pressure column in the table
+- `components/WeeklyQualityScoreView.tsx` — renders Pressure column
 
 ### 2. Quality Score charts: labels + delta % by default
-Every point on every line chart on `/quality-score` now shows:
+Every point on every line chart on `/quality-score` shows:
 - its score % right above the dot (no more hover-only)
 - the change vs the previous point (▲ / ▼ + delta %), colored green/red
+- delta label sits well above the score label so they don't overlap
+
 Files:
-- `components/QualityScoreDashboard.tsx` — LineChart rewritten with taller
-  viewbox + always-on value/delta text labels
+- `components/QualityScoreDashboard.tsx` — LineChart taller viewBox +
+  always-on value/delta labels
 
 ### 3. Performance Thresholds: parts count next to errors
-Errors on their own are hard to read (5 errors on 10 parts vs 200 parts is
-very different). The Module Errors table + CSV export now include a Parts
-column alongside the module error columns.
+Errors alone are hard to read (5 errors on 10 parts vs 200 parts is very
+different). Module Errors table + CSV export now include a Parts column.
+
+**Fix v2**: earlier attempt aggregated `match_part_summary_fast` client-side
+and produced Parts=0 for many collectors. Root cause: that RPC groups by
+(matchid, partid) and picks ONE hr_code per part via `max()`, so when two
+collectors share a match-part one of them gets 0 parts.
+
+Correct fix: extend `collector_module_totals()` to also return `parts` as
+`count(distinct (matchid, partid))` per hr_code, computed server-side.
 
 Files:
-- `app/(app)/performance-thresholds/page.tsx` — pulls `match_part_summary_fast`
-  and aggregates parts per hr_code
+- `sql/02_collector_module_totals_add_parts.sql` — new RPC return column
+- `app/(app)/performance-thresholds/page.tsx` — reads `parts` from the RPC
+  directly (falls back to `matches` if the SQL hasn't been applied yet)
 - `components/PerformanceThresholdsView.tsx` — new Parts column + CSV field
 
 ## Deploy order
 
-1. Upload all 6 code files under `app/...` and `components/...` to GitHub main
-   at their exact paths (drag-and-drop in the GitHub upload UI).
+1. Upload all code files under `app/...` and `components/...` to GitHub
+   main at their exact paths.
 2. Wait for Vercel to redeploy.
-3. In Supabase SQL Editor, run `sql/01_weekly_add_pressure.sql`. The app is
-   backwards-compatible — if you don't run the SQL, the weekly page will show
-   an amber hint but keep working with pressure as blank.
+3. In Supabase SQL Editor, run **both** SQL files in this bundle:
+   - `sql/01_weekly_add_pressure.sql`
+   - `sql/02_collector_module_totals_add_parts.sql`
 4. Re-upload the latest weekly Module Score CSV to backfill pressure values.
 
 ## Verification
 
-- `npx tsc --noEmit -p .` → 0 errors before this bundle was cut.
-- Weekly Quality Score: upload a weekly module CSV that includes rows with
-  `module=pressure` → the Pressure column now populates.
-- Quality Score: open `/quality-score`, each module chart shows month
-  labels above each point + up/down deltas.
-- Performance Thresholds: pick a module + threshold, the Module Errors
-  table now shows a Parts column.
+- `npx tsc --noEmit -p .` → exit 0.
+- Upload weekly module CSV with `module=pressure` rows → Pressure column populates.
+- `/quality-score` → every module chart shows month labels + up/down deltas
+  above each point, delta above score.
+- `/performance-thresholds` → Module Errors table shows Parts column with
+  distinct (matchid, partid) count per collector (no more 0s where errors > 0).
