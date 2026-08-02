@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
 type Collector = { hr_code: string; name: string; team: string | null };
 type Row = {
@@ -19,8 +20,6 @@ type Row = {
 
 // v59: Column order matches the CSV: base, players, formation_tactical,
 // location, impact, extras, pressure, squad, then freeze_frame_score last.
-// `pressure` was missing from this list, which is why it never rendered even
-// though the upload route stored the value.
 const MODULE_COLS: { key: keyof Row; label: string }[] = [
   { key: "base", label: "Base" },
   { key: "players", label: "Players" },
@@ -37,6 +36,13 @@ function fmt(v: number | null | undefined): string {
   if (v == null) return "-";
   return v.toFixed(2) + "%";
 }
+
+// Type alias for one aggregated row (one collector, averaged across weeks).
+type AggregatedRow = {
+  hr_code: string;
+  weeks: number;
+  values: Record<keyof Row, number | null>;
+};
 
 export default function WeeklyQualityScoreView({
   role,
@@ -69,9 +75,12 @@ export default function WeeklyQualityScoreView({
     return Array.from(s).sort();
   }, [collectors]);
 
-  const [weekFilter, setWeekFilter] = useState<string>("all");
-  const [teamFilter, setTeamFilter] = useState<string>("all");
-  const [collectorFilter, setCollectorFilter] = useState<string>("all");
+  // v59: every dropdown is multi-select. Empty array = "all". State holds
+  // the currently APPLIED selection (Apply commits the MultiSelectCombobox
+  // draft into these).
+  const [weekFilter, setWeekFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
   // Score-range filter: which modules to constrain + min/max %.
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set());
   const [minScore, setMinScore] = useState("");
@@ -86,36 +95,87 @@ export default function WeeklyQualityScoreView({
     });
   }
 
+  // Apply Team → Collector cascade: when a team is applied, collector list
+  // narrows. When applied team set changes, drop collector picks not on any
+  // applied team.
+  const collectorOptions = useMemo<MSOption[]>(() => {
+    const teamSet = new Set(teamFilter);
+    const list = teamSet.size === 0
+      ? collectors
+      : collectors.filter((c) => c.team && teamSet.has(c.team));
+    return list.map((c) => ({ value: c.hr_code, label: `${c.hr_code} - ${c.name}` }));
+  }, [collectors, teamFilter]);
+
+  // Aggregate: 1 row per collector, averaged across applied weeks (or all
+  // weeks if none applied). Preserves 1 row per collector regardless of how
+  // many weeks were picked.
+  const aggregated = useMemo<AggregatedRow[]>(() => {
+    const weekSet = new Set(weekFilter);
+    const teamSet = new Set(teamFilter);
+    const collectorSet = new Set(collectorFilter);
+
+    // Buckets keyed by hr_code, one sum + count per module.
+    const buckets = new Map<
+      string,
+      { weeks: Set<string>; sums: Record<string, { s: number; n: number }> }
+    >();
+
+    for (const r of rows) {
+      if (isViewer) {
+        if (!viewerHrCode || r.hr_code !== viewerHrCode) continue;
+      }
+      if (weekSet.size > 0 && !weekSet.has(r.week_start_date)) continue;
+      const c = collectorByHr.get(r.hr_code);
+      if (teamSet.size > 0 && (!c?.team || !teamSet.has(c.team))) continue;
+      if (collectorSet.size > 0 && !collectorSet.has(r.hr_code)) continue;
+
+      let bucket = buckets.get(r.hr_code);
+      if (!bucket) {
+        bucket = { weeks: new Set<string>(), sums: {} };
+        buckets.set(r.hr_code, bucket);
+      }
+      bucket.weeks.add(r.week_start_date);
+      for (const m of MODULE_COLS) {
+        const v = r[m.key] as number | null;
+        if (v == null) continue;
+        const cur = bucket.sums[m.key as string] ?? { s: 0, n: 0 };
+        cur.s += v;
+        cur.n += 1;
+        bucket.sums[m.key as string] = cur;
+      }
+    }
+
+    const out: AggregatedRow[] = [];
+    for (const [hr, b] of buckets) {
+      const values: Record<string, number | null> = {};
+      for (const m of MODULE_COLS) {
+        const cur = b.sums[m.key as string];
+        values[m.key as string] = cur && cur.n > 0 ? cur.s / cur.n : null;
+      }
+      out.push({ hr_code: hr, weeks: b.weeks.size, values: values as any });
+    }
+    return out;
+  }, [rows, weekFilter, teamFilter, collectorFilter, isViewer, viewerHrCode, collectorByHr]);
+
+  // Score-range filter applied AFTER aggregation. v59 fix: applies as soon
+  // as at least one module pill is picked (previously required min OR max
+  // to also be set, so clicking pills alone did nothing and the whole
+  // filter looked broken).
   const filtered = useMemo(() => {
     const minV = minScore.trim() ? Number(minScore) : null;
     const maxV = maxScore.trim() ? Number(maxScore) : null;
     const modKeys = Array.from(selectedModules);
-
-    return rows.filter((r) => {
-      if (isViewer) {
-        if (!viewerHrCode || r.hr_code !== viewerHrCode) return false;
-      }
-      if (weekFilter !== "all" && r.week_start_date !== weekFilter) return false;
-      const c = collectorByHr.get(r.hr_code);
-      if (teamFilter !== "all" && (c?.team ?? "") !== teamFilter) return false;
-      if (collectorFilter !== "all" && r.hr_code !== collectorFilter) return false;
-
-      // Score range: ALL selected modules must fall in [min, max]. A missing
-      // (null) value in a selected module = row is EXCLUDED.
-      if (modKeys.length > 0 && (minV != null || maxV != null)) {
-        for (const k of modKeys) {
-          const v = (r as any)[k] as number | null;
-          if (v == null) return false;
-          if (minV != null && v < minV) return false;
-          if (maxV != null && v > maxV) return false;
-        }
+    if (modKeys.length === 0) return aggregated;
+    return aggregated.filter((r) => {
+      for (const k of modKeys) {
+        const v = r.values[k as keyof Row];
+        if (v == null) return false;
+        if (minV != null && v < minV) return false;
+        if (maxV != null && v > maxV) return false;
       }
       return true;
     });
-  }, [
-    rows, weekFilter, teamFilter, collectorFilter, isViewer, viewerHrCode,
-    collectorByHr, selectedModules, minScore, maxScore,
-  ]);
+  }, [aggregated, selectedModules, minScore, maxScore]);
 
   function csvCell(v: any): string {
     const s = v == null ? "" : String(v);
@@ -123,16 +183,16 @@ export default function WeeklyQualityScoreView({
     return s;
   }
   function exportCsv() {
-    const header = ["HR Code", "Name", "Team", "Week", ...MODULE_COLS.map((m) => m.label)];
+    const header = ["HR Code", "Name", "Team", "Weeks", ...MODULE_COLS.map((m) => m.label)];
     const lines = filtered.map((r) => {
       const c = collectorByHr.get(r.hr_code);
       return [
         r.hr_code,
         c?.name ?? "",
         c?.team ?? "",
-        r.week_start_date,
+        String(r.weeks),
         ...MODULE_COLS.map((m) => {
-          const v = r[m.key] as number | null;
+          const v = r.values[m.key];
           return v == null ? "" : v.toFixed(2);
         }),
       ];
@@ -149,66 +209,100 @@ export default function WeeklyQualityScoreView({
     URL.revokeObjectURL(url);
   }
 
-  const inputCls =
-    "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
+  const weekOptions: MSOption[] = allWeeks.map((w) => ({ value: w, label: w }));
+  const teamOptions: MSOption[] = allTeams.map((t) => ({ value: t, label: t }));
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Weekly Quality Scores</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          One row per collector per week (Sunday - Saturday).
+          One row per collector, averaged across the selected weeks.
         </p>
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
         <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Week</label>
-            <select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} className={inputCls}>
-              <option value="all">All weeks</option>
-              {allWeeks.map((w) => <option key={w} value={w}>{w}</option>)}
-            </select>
+          <div className="w-56">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Weeks</label>
+            <MultiSelectCombobox
+              options={weekOptions}
+              values={weekFilter}
+              onApply={setWeekFilter}
+              placeholder="All weeks"
+            />
           </div>
           {!isViewer && (
             <>
-              <div>
-                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
-                <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} className={inputCls}>
-                  <option value="all">All teams</option>
-                  {allTeams.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+              <div className="w-52">
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Teams</label>
+                <MultiSelectCombobox
+                  options={teamOptions}
+                  values={teamFilter}
+                  onApply={(next) => {
+                    setTeamFilter(next);
+                    // Drop collector picks no longer on any applied team.
+                    if (next.length > 0 && collectorFilter.length > 0) {
+                      const allowed = new Set(
+                        collectors
+                          .filter((c) => c.team && next.includes(c.team))
+                          .map((c) => c.hr_code)
+                      );
+                      setCollectorFilter((prev) => prev.filter((v) => allowed.has(v)));
+                    }
+                  }}
+                  placeholder="All teams"
+                />
               </div>
-              <div>
-                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
-                <select value={collectorFilter} onChange={(e) => setCollectorFilter(e.target.value)} className={inputCls}>
-                  <option value="all">All collectors</option>
-                  {collectors
-                    .filter((c) => teamFilter === "all" || (c.team ?? "") === teamFilter)
-                    .map((c) => (
-                      <option key={c.hr_code} value={c.hr_code}>{c.hr_code} - {c.name}</option>
-                    ))}
-                </select>
+              <div className="w-72">
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collectors</label>
+                <MultiSelectCombobox
+                  options={collectorOptions}
+                  values={collectorFilter}
+                  onApply={setCollectorFilter}
+                  placeholder="All collectors"
+                />
               </div>
             </>
           )}
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Min score %</label>
             <input
-              type="number" value={minScore} onChange={(e) => setMinScore(e.target.value)}
-              placeholder="e.g. 80" className={`${inputCls} w-24`}
+              type="number"
+              value={minScore}
+              onChange={(e) => setMinScore(e.target.value)}
+              placeholder="e.g. 80"
+              className="w-24 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm"
             />
           </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Max score %</label>
             <input
-              type="number" value={maxScore} onChange={(e) => setMaxScore(e.target.value)}
-              placeholder="e.g. 95" className={`${inputCls} w-24`}
+              type="number"
+              value={maxScore}
+              onChange={(e) => setMaxScore(e.target.value)}
+              placeholder="e.g. 95"
+              className="w-24 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm"
             />
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex gap-2">
             <button
-              type="button" onClick={exportCsv}
+              type="button"
+              onClick={() => {
+                setWeekFilter([]);
+                setTeamFilter([]);
+                setCollectorFilter([]);
+                setSelectedModules(new Set());
+                setMinScore("");
+                setMaxScore("");
+              }}
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              Reset filters
+            </button>
+            <button
+              type="button"
+              onClick={exportCsv}
               className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               Export CSV
@@ -216,7 +310,7 @@ export default function WeeklyQualityScoreView({
           </div>
         </div>
 
-        {/* Module multi-select for score-range filter */}
+        {/* Module multi-select pills for score-range filter */}
         <div>
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
             Score-range applies to (pick one or more modules)
@@ -231,7 +325,7 @@ export default function WeeklyQualityScoreView({
                   onClick={() => toggleModule(m.key as string)}
                   className={`rounded-full px-3 py-1 text-xs border ${
                     on
-                      ? "bg-slate-900 text-white border-slate-900"
+                      ? "bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100"
                       : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700"
                   }`}
                 >
@@ -250,8 +344,8 @@ export default function WeeklyQualityScoreView({
             )}
           </div>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-            A row is shown only if <b>all selected modules</b> fall within Min / Max. Leave
-            modules empty to skip this filter.
+            Rows are dropped when a selected module has no value. Min / Max
+            further trim to that band when set.
           </p>
         </div>
       </div>
@@ -263,7 +357,7 @@ export default function WeeklyQualityScoreView({
               {!isViewer && <th className="text-left px-4 py-3">HR Code</th>}
               {!isViewer && <th className="text-left px-4 py-3">Name</th>}
               {!isViewer && <th className="text-left px-4 py-3">Team</th>}
-              <th className="text-left px-4 py-3">Week</th>
+              <th className="text-right px-4 py-3">Weeks</th>
               {MODULE_COLS.map((m) => (
                 <th key={m.key as string} className="text-right px-4 py-3">{m.label}</th>
               ))}
@@ -277,22 +371,24 @@ export default function WeeklyQualityScoreView({
                 </td>
               </tr>
             ) : (
-              filtered.map((r, i) => {
-                const c = collectorByHr.get(r.hr_code);
-                return (
-                  <tr key={`${r.hr_code}-${r.week_start_date}-${i}`} className="text-slate-700 dark:text-slate-200">
-                    {!isViewer && <td className="px-4 py-2 font-medium">{r.hr_code}</td>}
-                    {!isViewer && <td className="px-4 py-2">{c?.name ?? "-"}</td>}
-                    {!isViewer && <td className="px-4 py-2">{c?.team ?? "-"}</td>}
-                    <td className="px-4 py-2">{r.week_start_date}</td>
-                    {MODULE_COLS.map((m) => (
-                      <td key={m.key as string} className="px-4 py-2 text-right">
-                        {fmt(r[m.key] as number | null)}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })
+              filtered
+                .sort((a, b) => a.hr_code.localeCompare(b.hr_code))
+                .map((r, i) => {
+                  const c = collectorByHr.get(r.hr_code);
+                  return (
+                    <tr key={`${r.hr_code}-${i}`} className="text-slate-700 dark:text-slate-200">
+                      {!isViewer && <td className="px-4 py-2 font-medium">{r.hr_code}</td>}
+                      {!isViewer && <td className="px-4 py-2">{c?.name ?? "-"}</td>}
+                      {!isViewer && <td className="px-4 py-2">{c?.team ?? "-"}</td>}
+                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.weeks}</td>
+                      {MODULE_COLS.map((m) => (
+                        <td key={m.key as string} className="px-4 py-2 text-right tabular-nums">
+                          {fmt(r.values[m.key])}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
             )}
           </tbody>
         </table>
