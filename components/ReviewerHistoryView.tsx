@@ -14,6 +14,15 @@ type Row = {
   end_date: string | null;
 };
 
+// v59: inclusive day count. Active rows count to today; end < start
+// (legacy broken data from the v59.0 same-day close bug) is clamped to 0.
+function totalDays(startIso: string, endIso: string | null): number {
+  const start = new Date(startIso + "T00:00:00Z").getTime();
+  const endBase = endIso ? new Date(endIso + "T00:00:00Z").getTime() : Date.now();
+  const days = Math.floor((endBase - start) / 86_400_000) + 1;
+  return Math.max(0, days);
+}
+
 export default function ReviewerHistoryView({
   history,
   missingTable,
@@ -157,12 +166,13 @@ export default function ReviewerHistoryView({
               <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Reviewer</th>
               <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Start</th>
               <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">End</th>
+              <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Total days</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
                   No records match the filters.
                 </td>
               </tr>
@@ -184,6 +194,9 @@ export default function ReviewerHistoryView({
                         Active
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums whitespace-nowrap">
+                    {totalDays(r.start_date, r.end_date)}
                   </td>
                 </tr>
               ))

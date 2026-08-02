@@ -38,8 +38,9 @@ export default async function AdminCollectorReviewerPage() {
       team: (u.squad ?? null) as string | null,
     }));
 
+  // v59: only actual Reviewers should appear in the picker.
   const reviewers = (usersRows ?? [])
-    .filter((u: any) => ["Reviewer", "Admin", "Supervisor"].includes(u.role))
+    .filter((u: any) => u.role === "Reviewer")
     .map((u: any) => ({
       id: u.id as string,
       name: [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || (u.hr_code as string) || String(u.id).slice(0, 8),

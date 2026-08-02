@@ -29,12 +29,6 @@ function todayIso() {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-function yesterdayIso() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 export async function POST(req: NextRequest) {
   const supabase = createClient();
@@ -54,9 +48,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "unassign") {
+    // v59 fix: close with today's date (was yesterday, which meant end < start
+    // whenever an assignment was opened + closed on the same day).
     const { error } = await supabase
       .from("collector_reviewer_assignments")
-      .update({ end_date: yesterdayIso() })
+      .update({ end_date: todayIso() })
       .eq("collector_hr_code", hrCode)
       .is("end_date", null);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -68,21 +64,22 @@ export async function POST(req: NextRequest) {
     if (!reviewerId) {
       return NextResponse.json({ error: "reviewer_id is required" }, { status: 400 });
     }
-    // Confirm the target user is actually a reviewer (or Admin).
+    // v59 fix: Reviewers only — no more Admin/Supervisor allowed here.
     const { data: reviewer } = await supabase
       .from("users").select("id, role").eq("id", reviewerId).single();
     const role = (reviewer as any)?.role;
-    if (!reviewer || !["Reviewer", "Admin", "Supervisor"].includes(role)) {
+    if (!reviewer || role !== "Reviewer") {
       return NextResponse.json(
-        { error: "Selected user is not a Reviewer / Supervisor / Admin." },
+        { error: "Selected user is not a Reviewer." },
         { status: 400 }
       );
     }
 
-    // Close the currently open assignment (if any).
+    // Close the currently open assignment (if any). Same-day close = end_date
+    // == today, matching the new row's start_date.
     const closeErr = await supabase
       .from("collector_reviewer_assignments")
-      .update({ end_date: yesterdayIso() })
+      .update({ end_date: todayIso() })
       .eq("collector_hr_code", hrCode)
       .is("end_date", null);
     if (closeErr.error) {
