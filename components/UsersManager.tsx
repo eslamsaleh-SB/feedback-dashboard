@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Combobox, { type ComboOption } from "@/components/Combobox";
 
 type AppRole =
@@ -76,22 +76,38 @@ export default function UsersManager({
   const [showAdd, setShowAdd] = useState(false);
   const [add, setAdd] = useState<Draft>(emptyDraft);
 
+  // v59: fetch the master lists of squads + job titles from /api/teams (which
+  // uses the service key so RLS doesn't clip results to the caller's row).
+  // Union with anything we already have locally so custom values keep showing.
+  const [remoteTeams, setRemoteTeams] = useState<string[]>([]);
+  const [remoteTitles, setRemoteTitles] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/teams", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(({ teams, titles }: { teams?: string[]; titles?: string[] }) => {
+        if (Array.isArray(teams)) setRemoteTeams(teams);
+        if (Array.isArray(titles)) setRemoteTitles(titles);
+      })
+      .catch(() => {});
+  }, []);
+
   const teamOptions = useMemo(() => {
     const s = new Set<string>(teams);
+    remoteTeams.forEach((t) => s.add(t));
     items.forEach((r) => r.squad && s.add(r.squad));
+    if (draft.squad) s.add(draft.squad);
+    if (add.squad) s.add(add.squad);
     return Array.from(s).sort();
-  }, [teams, items]);
+  }, [teams, remoteTeams, items, draft.squad, add.squad]);
 
-  // v59: Job Title is now a dropdown too, populated from every distinct
-  // job_title on the users table (union with the current draft/add so a
-  // freshly-typed custom value stays visible even after switching rows).
   const titleOptions = useMemo(() => {
     const s = new Set<string>();
+    remoteTitles.forEach((t) => s.add(t));
     items.forEach((r) => r.job_title && s.add(r.job_title));
     if (draft.job_title) s.add(draft.job_title);
     if (add.job_title) s.add(add.job_title);
     return Array.from(s).sort();
-  }, [items, draft.job_title, add.job_title]);
+  }, [remoteTitles, items, draft.job_title, add.job_title]);
 
   const teamCombo: ComboOption[] = useMemo(
     () => [

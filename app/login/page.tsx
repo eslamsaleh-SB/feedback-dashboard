@@ -5,10 +5,18 @@ import { createClient } from "@/lib/supabase/client";
 
 type Mode = "signin" | "signup" | "forgot";
 
-// v59: both teams AND titles come from /api/teams now (pulled from the
-// users table). The hardcoded TITLES list is used as a safety fallback if
-// the endpoint is empty.
-const FALLBACK_TITLES = ["DC", "Resolution", "Team Leader", "Quality", "Live Quality", "Reviewer"];
+// v59: hardcoded titles list per product spec. Team is still dynamic from
+// /api/teams; titles are NOT auto-derived from the users table.
+const TITLES = [
+  "DC",
+  "Resolution",
+  "Team Leader",
+  "Quality",
+  "Live Quality",
+  "Reviewer",
+  "Quality Team Leader",
+  "Collection Team Leader",
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,17 +29,13 @@ export default function LoginPage() {
   const [team, setTeam] = useState("");
   const [title, setTitle] = useState("");
   const [teams, setTeams] = useState<string[]>([]);
-  const [titles, setTitles] = useState<string[]>(FALLBACK_TITLES);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "ok"|"err"; text: string }|null>(null);
 
   useEffect(() => {
     fetch("/api/teams", { cache: "no-store" })
       .then((r) => r.json())
-      .then(({ teams, titles }: { teams: string[]; titles?: string[] }) => {
-        setTeams(Array.isArray(teams) ? teams : []);
-        if (Array.isArray(titles) && titles.length > 0) setTitles(titles);
-      })
+      .then(({ teams }: { teams: string[] }) => setTeams(Array.isArray(teams) ? teams : []))
       .catch(() => setTeams([]));
   }, []);
 
@@ -109,7 +113,7 @@ export default function LoginPage() {
               <label className="block text-sm text-slate-600 dark:text-slate-300 mb-1">Title</label>
               <select value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900">
                 <option value="">-- select your title --</option>
-                {titles.map((t) => <option key={t} value={t}>{t}</option>)}
+                {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </>
