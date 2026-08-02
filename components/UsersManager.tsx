@@ -343,24 +343,31 @@ export default function UsersManager({
           </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Squad</label>
-            {/* v59: Team = dropdown of known squads. */}
-            <input
-              list="users-squad-options"
+            {/* v59: Team dropdown — full list, always. */}
+            <select
               value={add.squad}
               onChange={(e) => setAdd((d) => ({ ...d, squad: e.target.value }))}
-              placeholder="(blank = inactive)"
               className={inputCls}
-            />
+            >
+              <option value="">(blank = inactive)</option>
+              {teamOptions.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Job title</label>
-            {/* v59: Job title = dropdown of known titles. */}
-            <input
-              list="users-title-options"
+            {/* v59: Job title dropdown — full list, always. */}
+            <select
               value={add.job_title}
               onChange={(e) => setAdd((d) => ({ ...d, job_title: e.target.value }))}
               className={inputCls}
-            />
+            >
+              <option value="">- none -</option>
+              {titleOptions.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Role</label>
@@ -481,16 +488,26 @@ export default function UsersManager({
                   </td>
                   <td className="px-3 py-2.5">
                     {editing ? (
-                      // v59: dropdown of known squads.
-                      <input list="users-squad-options" value={draft.squad} onChange={(e) => setDraft((d) => ({ ...d, squad: e.target.value }))} placeholder="(blank = inactive)" className={inputCls} />
+                      // v59: full-list dropdown so admin can change to any team.
+                      <select value={draft.squad} onChange={(e) => setDraft((d) => ({ ...d, squad: e.target.value }))} className={inputCls}>
+                        <option value="">(blank = inactive)</option>
+                        {teamOptions.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
                     ) : (
                       <span className={r.squad ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}>{r.squad ?? "- no squad -"}</span>
                     )}
                   </td>
                   <td className="px-3 py-2.5">
                     {editing ? (
-                      // v59: dropdown of known job titles.
-                      <input list="users-title-options" value={draft.job_title} onChange={(e) => setDraft((d) => ({ ...d, job_title: e.target.value }))} className={inputCls} />
+                      // v59: full-list dropdown so admin can change to any title.
+                      <select value={draft.job_title} onChange={(e) => setDraft((d) => ({ ...d, job_title: e.target.value }))} className={inputCls}>
+                        <option value="">- none -</option>
+                        {titleOptions.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
                     ) : (
                       <span className="text-slate-600 dark:text-slate-300">{r.job_title ?? "-"}</span>
                     )}
