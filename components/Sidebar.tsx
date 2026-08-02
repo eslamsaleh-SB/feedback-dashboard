@@ -63,10 +63,13 @@ function buildNav(role: AppRole): NavEntry[] {
   ];
 
   const uploadItems: NavItem[] = [];
-  if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/module-upload", label: "Module Data" });
+  // v59: Upload Data is Admin-only per product request. Reviewer previously
+  // saw Module Data + Send Report; now hidden. Presentations + Quizzes stay
+  // available to Reviewer + Supervisor since they build coaching content.
+  if (role === "Admin") uploadItems.push({ href: "/module-upload", label: "Module Data" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/weekly-quality-upload", label: "Weekly Quality Score Upload" });
-  if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/upload", label: "Send Report" });
+  if (role === "Admin") uploadItems.push({ href: "/upload", label: "Send Report" });
   if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
     uploadItems.push({ href: "/admin-presentations", label: "Presentations" });
   }
@@ -95,6 +98,9 @@ function buildNav(role: AppRole): NavEntry[] {
         { href: "/admin-presentations", label: "Presentations" },
         { href: "/admin-quizzes", label: "Quiz Analytics" },
         { href: "/feedback-progress", label: "Feedback Progress" },
+        // v59: reviewer assignment surface + history.
+        { href: "/admin-collector-reviewer", label: "Collector ↔ Reviewer" },
+        { href: "/admin-reviewer-history", label: "Assignment History" },
         { href: "/users", label: "Users" },
       ],
     });

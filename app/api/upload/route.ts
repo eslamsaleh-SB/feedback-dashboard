@@ -122,7 +122,8 @@ export async function POST(req: NextRequest) {
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) {
+  // v59: Send Report is Admin-only.
+  if (!profile || profile.role !== "Admin") {
     return NextResponse.json({ error: "Not allowed to upload" }, { status: 403 });
   }
 

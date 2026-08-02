@@ -85,6 +85,10 @@ export default function WeeklyQualityScoreView({
   const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set());
   const [minScore, setMinScore] = useState("");
   const [maxScore, setMaxScore] = useState("");
+  // v59: bottom-N filter — shows the N collectors with the lowest average on
+  // a single chosen module. Empty = off.
+  const [bottomNModule, setBottomNModule] = useState<string>("");
+  const [bottomN, setBottomN] = useState<string>("");
 
   function toggleModule(key: string) {
     setSelectedModules((prev) => {
@@ -161,7 +165,7 @@ export default function WeeklyQualityScoreView({
   // as at least one module pill is picked (previously required min OR max
   // to also be set, so clicking pills alone did nothing and the whole
   // filter looked broken).
-  const filtered = useMemo(() => {
+  const scoreFiltered = useMemo(() => {
     const minV = minScore.trim() ? Number(minScore) : null;
     const maxV = maxScore.trim() ? Number(maxScore) : null;
     const modKeys = Array.from(selectedModules);
@@ -176,6 +180,21 @@ export default function WeeklyQualityScoreView({
       return true;
     });
   }, [aggregated, selectedModules, minScore, maxScore]);
+
+  // v59: bottom-N filter — after score-range gating, if a module is chosen
+  // and N is set, sort ascending by that module's value and keep the first N.
+  // Rows with a null value for the chosen module are excluded from the ranking.
+  const filtered = useMemo(() => {
+    const n = parseInt(bottomN, 10);
+    if (!bottomNModule || !Number.isFinite(n) || n <= 0) return scoreFiltered;
+    const withValue = scoreFiltered.filter((r) => r.values[bottomNModule as keyof Row] != null);
+    withValue.sort((a, b) => {
+      const av = a.values[bottomNModule as keyof Row] as number;
+      const bv = b.values[bottomNModule as keyof Row] as number;
+      return av - bv;
+    });
+    return withValue.slice(0, n);
+  }, [scoreFiltered, bottomNModule, bottomN]);
 
   function csvCell(v: any): string {
     const s = v == null ? "" : String(v);
@@ -295,6 +314,8 @@ export default function WeeklyQualityScoreView({
                 setSelectedModules(new Set());
                 setMinScore("");
                 setMaxScore("");
+                setBottomNModule("");
+                setBottomN("");
               }}
               className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
             >
@@ -346,6 +367,44 @@ export default function WeeklyQualityScoreView({
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
             Rows are dropped when a selected module has no value. Min / Max
             further trim to that band when set.
+          </p>
+        </div>
+
+        {/* v59: bottom-N per module — the N collectors with the lowest score. */}
+        <div className="flex flex-wrap items-end gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+              Bottom-N module
+            </label>
+            <select
+              value={bottomNModule}
+              onChange={(e) => setBottomNModule(e.target.value)}
+              className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm w-48"
+            >
+              <option value="">Off</option>
+              {MODULE_COLS.map((m) => (
+                <option key={m.key as string} value={m.key as string}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+              How many
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={bottomN}
+              onChange={(e) => setBottomN(e.target.value)}
+              placeholder="e.g. 20"
+              className="w-28 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm"
+            />
+          </div>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 max-w-md">
+            Shows the N collectors with the lowest average score in the picked
+            module (after all other filters). Leave module = Off to disable.
           </p>
         </div>
       </div>

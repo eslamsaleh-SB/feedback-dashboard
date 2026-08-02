@@ -130,7 +130,8 @@ export async function POST(req: NextRequest) {
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) {
+  // v59: Module upload is Admin-only.
+  if (!profile || profile.role !== "Admin") {
     return NextResponse.json({ error: "Only Admins/Uploaders can upload" }, { status: 403 });
   }
 

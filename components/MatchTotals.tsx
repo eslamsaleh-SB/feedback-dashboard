@@ -61,7 +61,13 @@ export default function MatchTotals({
   const router = useRouter();
   const supabase = createClient();
   const [matchInput, setMatchInput] = useState(matchId);
-  const moduleFilter = (moduleProp as ModuleValue | "" | undefined) ?? "";
+  // v59: module filter multi-select. Seeded from the (optional) single URL
+  // param for backward compat, but the picker itself is an array.
+  const [moduleFilter, setModuleFilter] = useState<ModuleValue[]>(
+    moduleProp && MODULES.some((m) => m.value === moduleProp)
+      ? [moduleProp as ModuleValue]
+      : []
+  );
   const [errOp, setErrOp] = useState<ErrOp>(errOpProp ?? "gte");
   const [errVal, setErrVal] = useState(errValProp ?? "");
   // v59: multi-select collector filter, applied client-side. Seeds from
@@ -95,7 +101,9 @@ export default function MatchTotals({
     const t = next.to ?? to;
     const c = next.collector ?? collector;
     const m = (next.match ?? matchId).trim();
-    const mod = "module" in next ? next.module : moduleFilter;
+    // v59: keep URL param for the FIRST picked module only, for bookmarks;
+    // rest of the multi-selection lives in local state.
+    const mod = "module" in next ? next.module : (moduleFilter[0] as string | undefined);
     const eop = next.errop ?? errOp;
     const ev = ("errval" in next ? next.errval : errVal)?.trim() ?? "";
     const params = new URLSearchParams();
@@ -112,8 +120,11 @@ export default function MatchTotals({
     router.push(`/match-totals${qs ? `?${qs}` : ""}`);
   }
 
-  const metric = (p: EnrichedPart) =>
-    moduleFilter ? p.counts[moduleFilter] : p.total;
+  // v59: multi-module metric — 0 picked = row total, 1+ picked = sum across the chosen modules.
+  const metric = (p: EnrichedPart) => {
+    if (moduleFilter.length === 0) return p.total;
+    return moduleFilter.reduce((s, m) => s + (p.counts[m] ?? 0), 0);
+  };
 
   const collectorSet = useMemo(() => new Set(collectorFilter), [collectorFilter]);
 
@@ -197,9 +208,12 @@ export default function MatchTotals({
     label: clabel(c.hr_code, c.name, c.team),
   }));
   const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
-  const moduleLabel = moduleFilter
-    ? MODULES.find((m) => m.value === moduleFilter)?.label
-    : null;
+  const moduleLabel =
+    moduleFilter.length === 0
+      ? null
+      : moduleFilter.length === 1
+      ? MODULES.find((m) => m.value === moduleFilter[0])?.label ?? null
+      : `${moduleFilter.length} modules`;
 
   function exportCsv() {
     const headers = [
@@ -228,14 +242,19 @@ export default function MatchTotals({
     const a = document.createElement("a");
     const stamp = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `match-total-per-module${moduleFilter ? `_${moduleFilter}` : ""}_${stamp}.csv`;
+    a.download = `match-total-per-module${moduleFilter.length === 1 ? `_${moduleFilter[0]}` : moduleFilter.length > 1 ? `_multi` : ""}_${stamp}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  const moduleColCount = moduleFilter ? 1 : MODULES.length + 1;
+  const moduleColCount =
+    moduleFilter.length === 1
+      ? 1
+      : moduleFilter.length > 1
+      ? moduleFilter.length + 1
+      : MODULES.length + 1;
 
   return (
     <div className="space-y-6">
@@ -258,12 +277,14 @@ export default function MatchTotals({
             placeholder="All collectors"
           />
         </div>
-        <div className="w-44">
-          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Module</label>
-          <select value={moduleFilter} onChange={(e) => applyFilters({ module: e.target.value })} className={`${inputCls} w-full`}>
-            <option value="">All modules</option>
-            {MODULES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
+        <div className="w-52">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Modules</label>
+          <MultiSelectCombobox
+            options={MODULES.map((m) => ({ value: m.value, label: m.label }))}
+            values={moduleFilter as string[]}
+            onApply={(next) => setModuleFilter(next as ModuleValue[])}
+            placeholder="All modules"
+          />
         </div>
         <div className="w-72">
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
@@ -331,8 +352,19 @@ export default function MatchTotals({
                 <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Review date</th>
                 <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Collector</th>
                 <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-3">Part</th>
-                {moduleFilter ? (
+                {moduleFilter.length === 1 ? (
                   <th className="text-right font-semibold text-slate-900 dark:text-slate-100 px-4 py-3 whitespace-nowrap">{moduleLabel}</th>
+                ) : moduleFilter.length > 1 ? (
+                  <>
+                    {moduleFilter.map((mv) => {
+                      const m = MODULES.find((x) => x.value === mv);
+                      if (!m) return null;
+                      return (
+                        <th key={m.value} className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-3 whitespace-nowrap">{m.label}</th>
+                      );
+                    })}
+                    <th className="text-right font-semibold text-slate-600 dark:text-slate-300 px-4 py-3">Total</th>
+                  </>
                 ) : (
                   <>
                     {MODULES.map((m) => (
@@ -370,8 +402,15 @@ export default function MatchTotals({
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 align-top">{p.partid}</td>
-                      {moduleFilter ? (
-                        <td className="px-4 py-2.5 text-right font-semibold align-top">{p.counts[moduleFilter] ?? 0}</td>
+                      {moduleFilter.length === 1 ? (
+                        <td className="px-4 py-2.5 text-right font-semibold align-top">{p.counts[moduleFilter[0]] ?? 0}</td>
+                      ) : moduleFilter.length > 1 ? (
+                        <>
+                          {moduleFilter.map((mv) => (
+                            <td key={mv} className="px-3 py-2.5 text-right text-slate-600 dark:text-slate-300 align-top">{p.counts[mv] ?? 0}</td>
+                          ))}
+                          <td className="px-4 py-2.5 text-right font-semibold align-top">{metric(p)}</td>
+                        </>
                       ) : (
                         <>
                           {MODULES.map((mod) => (

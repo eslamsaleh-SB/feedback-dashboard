@@ -23,7 +23,7 @@ export default async function MySessionsPage() {
   const { data: rows } = await supabase
     .from("feedback_attendees")
     .select(
-      "id, attendance, comment, feedback_reservations(session_date, mode, location, meet_link)"
+      "id, attendance, comment, feedback_reservations(session_date, session_time, mode, location, meet_link)"
     )
     .eq("hr_code", hr);
 
@@ -39,6 +39,7 @@ export default async function MySessionsPage() {
       return {
         id: String(a.id),
         session_date: r.session_date ?? null,
+        session_time: r.session_time ?? null,
         mode: r.mode ?? null,
         status,
         meet_link: r.meet_link ?? null,

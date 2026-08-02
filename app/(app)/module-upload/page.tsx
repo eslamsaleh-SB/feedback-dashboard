@@ -15,7 +15,8 @@ export default async function ModuleUploadPage() {
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
 
-  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) {
+  // v59: Module upload is Admin-only.
+  if (!profile || profile.role !== "Admin") {
     redirect("/analytics");
   }
 

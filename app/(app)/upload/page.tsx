@@ -15,7 +15,8 @@ export default async function UploadPage() {
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
 
-  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) {
+  // v59: Send Report is Admin-only.
+  if (!profile || profile.role !== "Admin") {
     redirect("/dashboard");
   }
 

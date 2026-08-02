@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 
+// v59: added session_time so the collector can see WHEN the session is.
 type SessionItem = {
   id: string;
   session_date: string;
+  session_time: string | null;
   mode: string;
   status: string;
   meet_link: string | null;
@@ -12,11 +14,22 @@ type SessionItem = {
   notes: string | null;
 };
 
+function fmtTime(t: string | null): string {
+  if (!t) return "";
+  // Accept "HH:MM" or "HH:MM:SS" strings and turn into "H:MM AM/PM".
+  const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(t.trim());
+  if (!m) return t.trim();
+  let h = Number(m[1]);
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 === 0 ? 12 : h % 12;
+  return `${h}:${m[2]} ${ampm}`;
+}
+
 type StatusFilter = "All" | "Scheduled" | "Completed" | "Cancelled";
 
 const statusBadge: Record<string, string> = {
   Scheduled: "bg-sky-100 text-sky-800",
-  Completed: "bg-emerald-100 text-emerald-800",
+  Completed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   Cancelled: "bg-slate-200 text-slate-600 dark:text-slate-300",
 };
 const modeBadge: Record<string, string> = {
@@ -42,7 +55,7 @@ export default function MySessionsView({
 
   const statusFilters: StatusFilter[] = ["All", "Scheduled", "Completed", "Cancelled"];
   const btnClass = (f: StatusFilter) =>
-    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${statusFilter === f ? "bg-slate-900 text-white" : "text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"}`;
+    `px-3 py-1.5 rounded-lg text-sm font-medium transition ${statusFilter === f ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900" : "text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"}`;
 
   return (
     <div className="space-y-6">
@@ -81,6 +94,11 @@ export default function MySessionsView({
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-slate-800 dark:text-slate-100">{s.session_date}</span>
+                  {s.session_time && (
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {fmtTime(s.session_time)}
+                    </span>
+                  )}
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${modeBadge[s.mode] ?? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}>
                     {s.mode}
                   </span>
