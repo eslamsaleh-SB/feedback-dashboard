@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MODULES, type ModuleValue } from "@/lib/modules";
 import { createClient } from "@/lib/supabase/client";
-import Combobox, { type ComboOption } from "@/components/Combobox";
+import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
 export type EnrichedPart = {
   matchid: string;
@@ -64,6 +64,11 @@ export default function MatchTotals({
   const moduleFilter = (moduleProp as ModuleValue | "" | undefined) ?? "";
   const [errOp, setErrOp] = useState<ErrOp>(errOpProp ?? "gte");
   const [errVal, setErrVal] = useState(errValProp ?? "");
+  // v59: multi-select collector filter, applied client-side. Seeds from
+  // the URL param if present (kept for bookmarking the single-collector case).
+  const [collectorFilter, setCollectorFilter] = useState<string[]>(
+    collector && collector !== "all" ? [collector] : []
+  );
 
   // Local copy so bulk-deletes reflect immediately. Reset whenever the server
   // returns a fresh row set (i.e. when filters change).
@@ -110,12 +115,17 @@ export default function MatchTotals({
   const metric = (p: EnrichedPart) =>
     moduleFilter ? p.counts[moduleFilter] : p.total;
 
+  const collectorSet = useMemo(() => new Set(collectorFilter), [collectorFilter]);
+
   const matches = useMemo(() => {
     const map = new Map<
       string,
       { matchid: string; date: string | null; parts: EnrichedPart[] }
     >();
     for (const r of data) {
+      // v59: apply multi-select collector filter here so switching picks
+      // doesn't hit the network.
+      if (collectorSet.size > 0 && (!r.hr_code || !collectorSet.has(r.hr_code))) continue;
       let m = map.get(r.matchid);
       if (!m) {
         m = { matchid: r.matchid, date: r.date, parts: [] };
@@ -134,7 +144,7 @@ export default function MatchTotals({
     arr.sort((a, b) => b.total - a.total);
     return arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, moduleFilter]);
+  }, [data, moduleFilter, collectorSet]);
 
   const shown = matches.slice(0, MAX_MATCHES);
   const shownKeys = useMemo(
@@ -182,13 +192,10 @@ export default function MatchTotals({
     if (failed.length) setMsg(`Deleted with ${failed.length} error(s): ${failed[0]}`);
   }
 
-  const collectorOptions: ComboOption[] = [
-    { value: "all", label: "All collectors" },
-    ...collectors.map((c) => ({
-      value: c.hr_code,
-      label: clabel(c.hr_code, c.name, c.team),
-    })),
-  ];
+  const collectorOptions: MSOption[] = collectors.map((c) => ({
+    value: c.hr_code,
+    label: clabel(c.hr_code, c.name, c.team),
+  }));
   const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
   const moduleLabel = moduleFilter
     ? MODULES.find((m) => m.value === moduleFilter)?.label
@@ -242,9 +249,14 @@ export default function MatchTotals({
 
       {/* Filters */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3">
-        <div className="w-64">
-          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
-          <Combobox options={collectorOptions} value={collector} onChange={(v) => applyFilters({ collector: v })} placeholder="All collectors" />
+        <div className="w-72">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collectors</label>
+          <MultiSelectCombobox
+            options={collectorOptions}
+            values={collectorFilter}
+            onApply={setCollectorFilter}
+            placeholder="All collectors"
+          />
         </div>
         <div className="w-44">
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Module</label>

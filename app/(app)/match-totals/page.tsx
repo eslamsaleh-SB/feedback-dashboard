@@ -65,7 +65,10 @@ export default async function MatchTotalsPage({
   const { data: partRows } = await supabase.rpc("match_module_breakdown_v2", {
     p_from: from,
     p_to: to,
-    p_collector: collector,
+    // v59: collector filter moved to client-side multi-select. Server
+    // returns all collectors' rows so the picker can add more without
+    // needing to re-query.
+    p_collector: null,
     p_matchid: matchId,
     p_module: moduleParam,
     p_err_op: errOp,

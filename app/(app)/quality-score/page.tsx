@@ -67,14 +67,11 @@ export default async function QualityScorePage({
   const monthFrom = `${from.slice(0, 7)}-01`;
   const monthTo = `${to.slice(0, 7)}-01`;
 
-  const teamParam = searchParams.team && searchParams.team !== "all" ? searchParams.team : null;
-
-  const collectorParam =
-    role === "Viewer"
-      ? myHr
-      : searchParams.collector && searchParams.collector !== "all"
-      ? searchParams.collector
-      : null;
+  // v59: filters became multi-select client-side. Only the collector's own
+  // rows are still restricted server-side (Viewer role); everything else is
+  // filtered in the QualityScoreDashboard component so users can pick
+  // multiple teams/collectors at once.
+  const collectorParam = role === "Viewer" ? myHr : null;
 
   const { data: usersDirRaw } = await supabase
     .from("users")
@@ -88,25 +85,10 @@ export default async function QualityScorePage({
   const teams = Array.from(
     new Set((collectors ?? []).map((c: any) => c.team).filter(Boolean) as string[])
   ).sort();
-  const filteredCollectors = teamParam
-    ? (collectors ?? []).filter((c: any) => c.team === teamParam)
-    : (collectors ?? []);
-
-  const effectiveCollector =
-    collectorParam &&
-    teamParam &&
-    !(filteredCollectors ?? []).some((c: any) => c.hr_code === collectorParam)
-      ? null
-      : collectorParam;
-
-  const teamHrCodes = teamParam
-    ? (filteredCollectors ?? []).map((c: any) => c.hr_code as string)
-    : null;
 
   const applyFilters = (q: any) => {
     q = q.gte("upload_month", monthFrom).lte("upload_month", monthTo).order("upload_month", { ascending: true });
-    if (effectiveCollector) q = q.eq("hr_code", effectiveCollector);
-    else if (teamHrCodes && teamHrCodes.length > 0) q = q.in("hr_code", teamHrCodes);
+    if (collectorParam) q = q.eq("hr_code", collectorParam);
     return q;
   };
 
@@ -148,8 +130,8 @@ export default async function QualityScorePage({
         match_count: r.match_count as number | null,
         upload_month: r.upload_month as string,
       }))}
-      selectedCollector={effectiveCollector ?? "all"}
-      selectedTeam={teamParam ?? "all"}
+      selectedCollector="all"
+      selectedTeam="all"
     />
   );
 }

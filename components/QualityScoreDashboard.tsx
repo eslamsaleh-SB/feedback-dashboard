@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AppRole } from "@/components/Sidebar";
-import Combobox from "@/components/Combobox";
+import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
 type ModuleScore = {
@@ -195,24 +195,56 @@ export default function QualityScoreDashboard({
   const [fromInput, setFromInput] = useState(from);
   const [toInput, setToInput] = useState(to);
 
-  function applyFilters(next: { from?: string; to?: string; collector?: string; team?: string }) {
-    const f = next.from ?? fromInput;
-    const t = next.to ?? toInput;
-    const c = next.collector ?? selectedCollector;
-    const tm = next.team ?? selectedTeam;
+  // v59: multi-select filters. Server still applies from/to on the URL, but
+  // Team + Collector filters are now client-side arrays over the returned
+  // data so admins can pick several at once.
+  const [teamFilter, setTeamFilter] = useState<string[]>(
+    selectedTeam && selectedTeam !== "all" ? [selectedTeam] : []
+  );
+  const [collectorFilter, setCollectorFilter] = useState<string[]>(
+    selectedCollector && selectedCollector !== "all" ? [selectedCollector] : []
+  );
+
+  function applyDates() {
     const params = new URLSearchParams();
-    params.set("from", f);
-    params.set("to", t);
-    if (c && c !== "all") params.set("collector", c);
-    if (tm && tm !== "all") params.set("team", tm);
+    params.set("from", fromInput);
+    params.set("to", toInput);
     router.push(`/quality-score?${params.toString()}`);
   }
+
+  // v59: client-side filter step. Multi-select team + collector gates rows
+  // before all downstream aggregation.
+  const teamSet = useMemo(() => new Set(teamFilter), [teamFilter]);
+  const collectorSet = useMemo(() => new Set(collectorFilter), [collectorFilter]);
+  const teamByHr = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const c of collectors) m.set(c.hr_code, c.team ?? null);
+    return m;
+  }, [collectors]);
+  const passesTeamAndCollector = (hr: string) => {
+    if (collectorSet.size > 0 && !collectorSet.has(hr)) return false;
+    if (teamSet.size > 0) {
+      const t = teamByHr.get(hr);
+      if (!t || !teamSet.has(t)) return false;
+    }
+    return true;
+  };
+  const filteredModuleScores = useMemo(
+    () => moduleScores.filter((r) => passesTeamAndCollector(r.hr_code)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [moduleScores, teamSet, collectorSet, teamByHr]
+  );
+  const filteredFfScores = useMemo(
+    () => freezeFrameScores.filter((r) => passesTeamAndCollector(r.hr_code)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [freezeFrameScores, teamSet, collectorSet, teamByHr]
+  );
 
   const moduleCharts = useMemo(() => {
     // Key by YYYY-MM so June never collapses onto May, and average by
     // proper sum/count. Sort ASCENDING by ISO key (oldest -> newest, left -> right).
     const acc: Record<string, Record<string, { sum: number; count: number }>> = {};
-    for (const r of moduleScores) {
+    for (const r of filteredModuleScores) {
       if (!acc[r.module]) acc[r.module] = {};
       const key = (r.upload_month || "").slice(0, 7);
       if (!key) continue;
@@ -236,7 +268,7 @@ export default function QualityScoreDashboard({
   const ffChart = useMemo(() => {
     // Aggregate by ISO YYYY-MM, then sort by ISO ASC (oldest -> newest).
     const agg: Record<string, { sum: number; count: number }> = {};
-    for (const r of freezeFrameScores) {
+    for (const r of filteredFfScores) {
       const iso = (r.upload_month || "").slice(0, 7);
       if (!iso) continue;
       if (!agg[iso]) agg[iso] = { sum: 0, count: 0 };
@@ -250,33 +282,44 @@ export default function QualityScoreDashboard({
         label: fmtMonth(`${iso}-01`),
         value: v.sum / v.count,
       }));
-  }, [freezeFrameScores]);
+  }, [filteredFfScores]);
 
   const summaryScores = useMemo(() => {
-    if (moduleScores.length === 0 && freezeFrameScores.length === 0) return null;
+    if (filteredModuleScores.length === 0 && filteredFfScores.length === 0) return null;
     const mods: Record<string, number[]> = {};
-    for (const r of moduleScores) {
+    for (const r of filteredModuleScores) {
       if (!mods[r.module]) mods[r.module] = [];
       mods[r.module].push(r.score);
     }
     const ffAvg =
-      freezeFrameScores.length > 0
-        ? freezeFrameScores.reduce((a, r) => a + r.score, 0) / freezeFrameScores.length
+      filteredFfScores.length > 0
+        ? filteredFfScores.reduce((a, r) => a + r.score, 0) / filteredFfScores.length
         : null;
     const modSummary = Object.entries(mods).map(([mod, scores]) => ({
       module: mod,
       avg: scores.reduce((a, b) => a + b, 0) / scores.length,
     }));
     return { modSummary, ffAvg };
-  }, [moduleScores, freezeFrameScores]);
+  }, [filteredModuleScores, filteredFfScores]);
 
   const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
-  const allModules = Array.from(new Set(moduleScores.map((r) => r.module))).sort();
+  const allModules = Array.from(new Set(filteredModuleScores.map((r) => r.module))).sort();
 
-  const collectorOptions =
-    selectedTeam !== "all"
-      ? collectors.filter((c) => c.team === selectedTeam)
-      : collectors;
+  const collectorOptionList = useMemo(
+    () =>
+      teamSet.size > 0
+        ? collectors.filter((c) => c.team && teamSet.has(c.team))
+        : collectors,
+    [collectors, teamSet]
+  );
+  const teamOptions: MSOption[] = useMemo(
+    () => teams.map((t) => ({ value: t, label: t })),
+    [teams]
+  );
+  const collectorMSOptions: MSOption[] = useMemo(
+    () => collectorOptionList.map((c) => ({ value: c.hr_code, label: `${c.hr_code} - ${c.name}` })),
+    [collectorOptionList]
+  );
 
   return (
     <div className="space-y-6">
@@ -296,54 +339,49 @@ export default function QualityScoreDashboard({
         </div>
         <button
           type="button"
-          onClick={() => applyFilters({})}
+          onClick={applyDates}
           className="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-slate-800"
         >
           Apply
         </button>
 
         {!isViewer && (
-          <div className="w-44">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
-            <Combobox
-              options={[
-                { value: "all", label: "All teams" },
-                ...teams.map((t) => ({ value: t, label: t })),
-              ]}
-              value={selectedTeam}
-              onChange={(v) => applyFilters({ team: v || "all", collector: "all" })}
+          <div className="w-52">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Teams</label>
+            <MultiSelectCombobox
+              options={teamOptions}
+              values={teamFilter}
+              onApply={(next) => {
+                setTeamFilter(next);
+                // Drop collector picks no longer on any applied team.
+                if (next.length > 0 && collectorFilter.length > 0) {
+                  const allowed = new Set(
+                    collectors.filter((c) => c.team && next.includes(c.team)).map((c) => c.hr_code)
+                  );
+                  setCollectorFilter((prev) => prev.filter((v) => allowed.has(v)));
+                }
+              }}
               placeholder="All teams"
-              searchPlaceholder="Search teams..."
             />
           </div>
         )}
 
         {!isViewer && (
-          <div className="w-64">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
-            <Combobox
-              options={[
-                {
-                  value: "all",
-                  label: selectedTeam !== "all" ? `All on ${selectedTeam}` : "All collectors",
-                },
-                ...collectorOptions.map((c) => ({
-                  value: c.hr_code,
-                  label: `${c.hr_code} - ${c.name}`,
-                })),
-              ]}
-              value={selectedCollector}
-              onChange={(v) => applyFilters({ collector: v || "all" })}
+          <div className="w-72">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collectors</label>
+            <MultiSelectCombobox
+              options={collectorMSOptions}
+              values={collectorFilter}
+              onApply={setCollectorFilter}
               placeholder="All collectors"
-              searchPlaceholder="Search by code or name..."
             />
           </div>
         )}
 
-        {(selectedCollector !== "all" || selectedTeam !== "all") && (
+        {(collectorFilter.length > 0 || teamFilter.length > 0) && (
           <button
             type="button"
-            onClick={() => router.push("/quality-score")}
+            onClick={() => { setTeamFilter([]); setCollectorFilter([]); }}
             className={`${inputCls} text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800`}
           >
             Reset

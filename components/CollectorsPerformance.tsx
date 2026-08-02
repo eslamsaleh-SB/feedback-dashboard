@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MODULES, type ModuleValue, type CollectorRow } from "@/lib/modules";
-import Combobox, { type ComboOption } from "@/components/Combobox";
+import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
 const NO_TITLE = "__none__";
 const NO_TEAM = "__noteam__";
@@ -40,10 +40,11 @@ export default function CollectorsPerformance({
 }) {
   const router = useRouter();
 
-  const [collectorFilter, setCollectorFilter] = useState("");
-  const [teamFilter, setTeamFilter] = useState("");
-  const [titleFilter, setTitleFilter] = useState("");
-  const [moduleFilter, setModuleFilter] = useState<"" | ModuleValue>("");
+  // v59: every filter is now multi-select. Empty array = "all".
+  const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [titleFilter, setTitleFilter] = useState<string[]>([]);
+  const [moduleFilter, setModuleFilter] = useState<ModuleValue[]>([]);
   const [topN, setTopN] = useState("");
 
   function pushDates(f: string, t: string) {
@@ -86,20 +87,29 @@ export default function CollectorsPerformance({
     pushDates(iso(sun), iso(sat));
   }
 
-  const metric = (r: CollectorRow) => (moduleFilter ? r.counts[moduleFilter] : r.total);
+  // v59: multi-module metric = sum of selected modules per collector.
+  // 0 modules picked = the row's total across ALL modules (previous behavior).
+  // 1 module = just that module's count.
+  // 2+ modules = sum across the picked ones.
+  const metric = (r: CollectorRow) => {
+    if (moduleFilter.length === 0) return r.total;
+    return moduleFilter.reduce((acc, m) => acc + (r.counts[m] ?? 0), 0);
+  };
+
+  const collectorSet = useMemo(() => new Set(collectorFilter), [collectorFilter]);
+  const teamSet = useMemo(() => new Set(teamFilter), [teamFilter]);
+  const titleSet = useMemo(() => new Set(titleFilter), [titleFilter]);
 
   const filtered = useMemo(() => {
     let arr = rows.filter((r) => {
-      if (collectorFilter && r.hr_code !== collectorFilter) return false;
-      if (teamFilter) {
-        if (teamFilter === NO_TEAM) {
-          if (r.team) return false;
-        } else if ((r.team ?? "") !== teamFilter) return false;
+      if (collectorSet.size > 0 && !collectorSet.has(r.hr_code)) return false;
+      if (teamSet.size > 0) {
+        const tv = r.team ? r.team : NO_TEAM;
+        if (!teamSet.has(tv)) return false;
       }
-      if (titleFilter) {
-        if (titleFilter === NO_TITLE) {
-          if (r.title) return false;
-        } else if (r.title !== titleFilter) return false;
+      if (titleSet.size > 0) {
+        const tv = r.title ? r.title : NO_TITLE;
+        if (!titleSet.has(tv)) return false;
       }
       return true;
     });
@@ -107,14 +117,15 @@ export default function CollectorsPerformance({
     const n = parseInt(topN, 10);
     return Number.isFinite(n) && n > 0 ? arr.slice(0, n) : arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, collectorFilter, teamFilter, titleFilter, moduleFilter, topN]);
+  }, [rows, collectorSet, teamSet, titleSet, moduleFilter, topN]);
 
   const totalMistakes = filtered.reduce((s, r) => s + metric(r), 0);
 
-  // Match Count reflects the selected collector when one is chosen.
-  const selectedCollector = collectorFilter
-    ? rows.find((r) => r.hr_code === collectorFilter)
-    : null;
+  // Match Count reflects the selected collector when exactly one is chosen.
+  const selectedCollector =
+    collectorFilter.length === 1
+      ? rows.find((r) => r.hr_code === collectorFilter[0])
+      : null;
   const displayMatchCount = selectedCollector
     ? selectedCollector.matches ?? 0
     : matchCount;
@@ -122,39 +133,53 @@ export default function CollectorsPerformance({
     ? "matches for this collector"
     : "distinct matches in range";
 
-  const collectorOptions: ComboOption[] = [
-    { value: "", label: "All collectors" },
-    ...[...rows]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((r) => ({ value: r.hr_code, label: clabel(r.hr_code, r.name, r.team) })),
-  ];
-  const teamOptions: ComboOption[] = [
-    { value: "", label: "All teams" },
-    { value: NO_TEAM, label: "(No team)" },
-    ...teams.map((t) => ({ value: t, label: t })),
-  ];
-  const titleOptions: ComboOption[] = [
-    { value: "", label: "All titles" },
-    { value: NO_TITLE, label: "(No title)" },
-    ...titles.map((t) => ({ value: t, label: t })),
-  ];
-  const moduleOptions: ComboOption[] = [
-    { value: "", label: "All modules" },
-    ...MODULES.map((m) => ({ value: m.value, label: m.label })),
-  ];
+  const collectorOptions: MSOption[] = useMemo(
+    () =>
+      [...rows]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((r) => ({ value: r.hr_code, label: clabel(r.hr_code, r.name, r.team) })),
+    [rows]
+  );
+  const teamOptions: MSOption[] = useMemo(
+    () => [
+      { value: NO_TEAM, label: "(No team)" },
+      ...teams.map((t) => ({ value: t, label: t })),
+    ],
+    [teams]
+  );
+  const titleOptions: MSOption[] = useMemo(
+    () => [
+      { value: NO_TITLE, label: "(No title)" },
+      ...titles.map((t) => ({ value: t, label: t })),
+    ],
+    [titles]
+  );
+  const moduleOptions: MSOption[] = useMemo(
+    () => MODULES.map((m) => ({ value: m.value, label: m.label })),
+    []
+  );
 
   const inputCls = "w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
-  const activeModuleLabel = moduleFilter
-    ? MODULES.find((m) => m.value === moduleFilter)?.label
-    : null;
+  const activeModuleLabel =
+    moduleFilter.length === 1
+      ? MODULES.find((m) => m.value === moduleFilter[0])?.label
+      : moduleFilter.length > 1
+      ? `${moduleFilter.length} modules`
+      : null;
   const anyFilter =
-    from || to || collectorFilter || teamFilter || titleFilter || moduleFilter || topN;
+    from ||
+    to ||
+    collectorFilter.length > 0 ||
+    teamFilter.length > 0 ||
+    titleFilter.length > 0 ||
+    moduleFilter.length > 0 ||
+    topN;
 
   function clearAll() {
-    setCollectorFilter("");
-    setTeamFilter("");
-    setTitleFilter("");
-    setModuleFilter("");
+    setCollectorFilter([]);
+    setTeamFilter([]);
+    setTitleFilter([]);
+    setModuleFilter([]);
     setTopN("");
     router.push("/analytics");
   }
@@ -193,21 +218,26 @@ export default function CollectorsPerformance({
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
-          <div className="w-64">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
-            <Combobox options={collectorOptions} value={collectorFilter} onChange={setCollectorFilter} placeholder="All collectors" />
+          <div className="w-72">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collectors</label>
+            <MultiSelectCombobox options={collectorOptions} values={collectorFilter} onApply={setCollectorFilter} placeholder="All collectors" />
           </div>
-          <div className="w-44">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
-            <Combobox options={teamOptions} value={teamFilter} onChange={setTeamFilter} placeholder="All teams" />
+          <div className="w-52">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Teams</label>
+            <MultiSelectCombobox options={teamOptions} values={teamFilter} onApply={setTeamFilter} placeholder="All teams" />
           </div>
-          <div className="w-44">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Title</label>
-            <Combobox options={titleOptions} value={titleFilter} onChange={setTitleFilter} placeholder="All titles" />
+          <div className="w-52">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Titles</label>
+            <MultiSelectCombobox options={titleOptions} values={titleFilter} onApply={setTitleFilter} placeholder="All titles" />
           </div>
-          <div className="w-44">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Module</label>
-            <Combobox options={moduleOptions} value={moduleFilter} onChange={(v) => setModuleFilter(v as "" | ModuleValue)} placeholder="All modules" />
+          <div className="w-52">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Modules</label>
+            <MultiSelectCombobox
+              options={moduleOptions}
+              values={moduleFilter}
+              onApply={(v) => setModuleFilter(v as ModuleValue[])}
+              placeholder="All modules"
+            />
           </div>
           <div className="w-28">
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Top N</label>
@@ -235,7 +265,8 @@ export default function CollectorsPerformance({
         <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400">
           Sorted by{" "}
           <span className="font-medium text-slate-700 dark:text-slate-200">{activeModuleLabel ?? "Total"}</span>{" "}
-          (highest first). {!moduleFilter && "Click a module header to show only that module."}
+          (highest first).{" "}
+          {moduleFilter.length === 0 && "Click a module header to show only that module."}
         </div>
         {filtered.length === 0 ? (
           <p className="text-slate-500 dark:text-slate-400 p-5">No collectors for this filter.</p>
@@ -246,16 +277,29 @@ export default function CollectorsPerformance({
                 <tr>
                   <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3">#</th>
                   <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-3 whitespace-nowrap">Collector</th>
-                  {moduleFilter ? (
+                  {moduleFilter.length === 1 ? (
                     <th className="text-right font-semibold text-slate-900 dark:text-slate-100 px-4 py-3 whitespace-nowrap">
                       {activeModuleLabel}
                     </th>
+                  ) : moduleFilter.length > 1 ? (
+                    <>
+                      {moduleFilter.map((mv) => {
+                        const m = MODULES.find((x) => x.value === mv);
+                        if (!m) return null;
+                        return (
+                          <th key={m.value} className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-3 whitespace-nowrap">
+                            {m.label}
+                          </th>
+                        );
+                      })}
+                      <th className="text-right font-semibold text-slate-600 dark:text-slate-300 px-4 py-3">Total ↓</th>
+                    </>
                   ) : (
                     <>
                       {MODULES.map((m) => (
                         <th
                           key={m.value}
-                          onClick={() => setModuleFilter(m.value)}
+                          onClick={() => setModuleFilter([m.value])}
                           className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-3 whitespace-nowrap cursor-pointer hover:text-slate-900"
                           title={`Show only ${m.label}`}
                         >
@@ -276,10 +320,19 @@ export default function CollectorsPerformance({
                       {c.name && c.name !== c.hr_code && <span className="text-slate-500 dark:text-slate-400"> - {first3(c.name)}</span>}
                       {c.team && <span className="text-slate-500 dark:text-slate-400"> - {c.team}</span>}
                     </td>
-                    {moduleFilter ? (
+                    {moduleFilter.length === 1 ? (
                       <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
-                        {c.counts[moduleFilter]}
+                        {c.counts[moduleFilter[0]]}
                       </td>
+                    ) : moduleFilter.length > 1 ? (
+                      <>
+                        {moduleFilter.map((mv) => (
+                          <td key={mv} className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                            {c.counts[mv] ?? 0}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2.5 text-right font-bold tabular-nums">{metric(c)}</td>
+                      </>
                     ) : (
                       <>
                         {MODULES.map((m) => (

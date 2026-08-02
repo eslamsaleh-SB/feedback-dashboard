@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import MultiSelectCombobox from "@/components/MultiSelectCombobox";
 
 type Collector = { hr_code: string; name: string; team: string | null };
 type ModuleErrorsRow = {
@@ -118,8 +119,9 @@ export default function PerformanceThresholdsView({
   const [fromInput, setFromInput] = useState(from);
   const [toInput, setToInput] = useState(to);
   const [topN, setTopN] = useState<string>("");
-  const [teamFilter, setTeamFilter] = useState<string>("all");
-  const [collectorFilter, setCollectorFilter] = useState<string>("all");
+  // v59: multi-select filters. Empty arrays = "all".
+  const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
 
   const teams = useMemo(() => {
     const s = new Set<string>();
@@ -178,8 +180,8 @@ export default function PerformanceThresholdsView({
     }
     return collectors.filter((c) => {
       // Team + Collector filters (applied first, then threshold logic).
-      if (teamFilter !== "all" && (c.team ?? "") !== teamFilter) return false;
-      if (collectorFilter !== "all" && c.hr_code !== collectorFilter) return false;
+      if (teamFilter.length > 0 && (!c.team || !teamFilter.includes(c.team))) return false;
+      if (collectorFilter.length > 0 && !collectorFilter.includes(c.hr_code)) return false;
       const errRow = moduleErrorsByHr.get(c.hr_code);
       const scoreRow = avgScoreByHrAndKey[c.hr_code];
 
@@ -354,35 +356,33 @@ export default function PerformanceThresholdsView({
           Apply date range
         </button>
         <div className="ml-auto flex items-end gap-3 flex-wrap">
-          <div>
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
-            <select
-              value={teamFilter}
-              onChange={(e) => setTeamFilter(e.target.value)}
-              className={inputCls}
-            >
-              <option value="all">All teams</option>
-              {teams.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+          <div className="w-52">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Teams</label>
+            <MultiSelectCombobox
+              options={teams.map((t) => ({ value: t, label: t }))}
+              values={teamFilter}
+              onApply={(next) => {
+                setTeamFilter(next);
+                if (next.length > 0 && collectorFilter.length > 0) {
+                  const allowed = new Set(
+                    collectors.filter((c) => c.team && next.includes(c.team)).map((c) => c.hr_code)
+                  );
+                  setCollectorFilter((prev) => prev.filter((v) => allowed.has(v)));
+                }
+              }}
+              placeholder="All teams"
+            />
           </div>
-          <div>
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
-            <select
-              value={collectorFilter}
-              onChange={(e) => setCollectorFilter(e.target.value)}
-              className={inputCls}
-            >
-              <option value="all">All collectors</option>
-              {collectors
-                .filter((c) => teamFilter === "all" || (c.team ?? "") === teamFilter)
-                .map((c) => (
-                  <option key={c.hr_code} value={c.hr_code}>
-                    {c.hr_code} - {c.name}
-                  </option>
-                ))}
-            </select>
+          <div className="w-72">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collectors</label>
+            <MultiSelectCombobox
+              options={collectors
+                .filter((c) => teamFilter.length === 0 || (c.team && teamFilter.includes(c.team)))
+                .map((c) => ({ value: c.hr_code, label: `${c.hr_code} - ${c.name}` }))}
+              values={collectorFilter}
+              onApply={setCollectorFilter}
+              placeholder="All collectors"
+            />
           </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import Combobox from "@/components/Combobox";
+import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
 type Attendance = "Attended" | "Attended Late" | "Absent" | "Cancelled";
 const STATUSES: Attendance[] = ["Attended", "Attended Late", "Absent", "Cancelled"];
@@ -28,9 +28,9 @@ export type Session = {
 };
 
 const statusStyle: Record<string, string> = {
-  Attended: "bg-emerald-100 text-emerald-800",
-  "Attended Late": "bg-amber-100 text-amber-800",
-  Absent: "bg-red-100 text-red-800",
+  Attended: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  "Attended Late": "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  Absent: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
   Cancelled: "bg-slate-200 text-slate-600 dark:text-slate-300",
   "": "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
 };
@@ -45,9 +45,10 @@ function isoDate(d: Date) {
 export default function FeedbackProgress({ initial }: { initial: Session[] }) {
   const supabase = createClient();
   const [sessions, setSessions] = useState<Session[]>(initial);
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [teamFilter, setTeamFilter] = useState<string>("all");
-  const [collectorFilter, setCollectorFilter] = useState<string>("all");
+  // v59: multi-select filters. Empty arrays = "all".
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
 
   // Default range: Jan 1 of the current year through today.
   const now = new Date();
@@ -91,6 +92,10 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     return Array.from(set).sort();
   }, [sessions]);
 
+  const teamSet = useMemo(() => new Set(teamFilter), [teamFilter]);
+  const collectorSet = useMemo(() => new Set(collectorFilter), [collectorFilter]);
+  const statusSet = useMemo(() => new Set(statusFilter), [statusFilter]);
+
   const collectorOptions = useMemo(() => {
     const map = new Map<string, { hr_code: string; name: string | null; team: string | null }>();
     for (const s of sessions) {
@@ -102,19 +107,21 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
       }
     }
     return Array.from(map.values())
-      .filter((c) => teamFilter === "all" || c.team === teamFilter)
+      .filter((c) => teamSet.size === 0 || (c.team && teamSet.has(c.team)))
       .sort((a, b) => (a.name ?? a.hr_code).localeCompare(b.name ?? b.hr_code));
-  }, [sessions, teamFilter]);
+  }, [sessions, teamSet]);
 
   const visible = useMemo(() => {
     return sessions
       .map((s) => {
         const attendees = s.attendees.filter((a) => {
-          if (statusFilter === "__none__") {
-            if (a.attendance) return false;
-          } else if (statusFilter && a.attendance !== statusFilter) return false;
-          if (teamFilter !== "all" && a.team !== teamFilter) return false;
-          if (collectorFilter !== "all" && a.hr_code !== collectorFilter) return false;
+          if (statusSet.size > 0) {
+            // "__none__" pseudo-value matches un-marked rows.
+            const key = a.attendance ?? "__none__";
+            if (!statusSet.has(key)) return false;
+          }
+          if (teamSet.size > 0 && (!a.team || !teamSet.has(a.team))) return false;
+          if (collectorSet.size > 0 && !collectorSet.has(a.hr_code)) return false;
           return true;
         });
         return { ...s, attendees };
@@ -125,7 +132,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
         if (toDate && s.session_date > toDate) return false;
         return s.attendees.length > 0;
       });
-  }, [sessions, statusFilter, teamFilter, collectorFilter, fromDate, toDate]);
+  }, [sessions, statusSet, teamSet, collectorSet, fromDate, toDate]);
 
   const stats = useMemo(() => {
     let total = 0, attended = 0, late = 0, absent = 0, cancelled = 0, notMarked = 0;
@@ -160,9 +167,9 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
   const inputCls = "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
 
   const anyFilter =
-    statusFilter ||
-    teamFilter !== "all" ||
-    collectorFilter !== "all" ||
+    statusFilter.length > 0 ||
+    teamFilter.length > 0 ||
+    collectorFilter.length > 0 ||
     fromDate !== `${now.getFullYear()}-01-01` ||
     toDate !== isoDate(now);
 
@@ -204,51 +211,49 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
           />
         </div>
 
-        <div>
-          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Status</label>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputCls}>
-            <option value="">All statuses</option>
-            <option value="__none__">Not marked</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="w-44">
-          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Team</label>
-          <Combobox
+        <div className="w-52">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Statuses</label>
+          <MultiSelectCombobox
             options={[
-              { value: "all", label: "All teams" },
-              ...teamOptions.map((t) => ({ value: t, label: t })),
+              { value: "__none__", label: "Not marked" },
+              ...STATUSES.map((s) => ({ value: s as string, label: s as string })),
             ]}
-            value={teamFilter}
-            onChange={(v) => {
-              setTeamFilter(v || "all");
-              setCollectorFilter("all");
-            }}
-            placeholder="All teams"
-            searchPlaceholder="Search teams..."
+            values={statusFilter}
+            onApply={setStatusFilter}
+            placeholder="All statuses"
+            showSearch={false}
           />
         </div>
 
-        <div className="w-64">
-          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collector</label>
-          <Combobox
-            options={[
-              {
-                value: "all",
-                label: teamFilter !== "all" ? `All on ${teamFilter}` : "All collectors",
-              },
-              ...collectorOptions.map((c) => ({
-                value: c.hr_code,
-                label: `${c.hr_code}${c.name && c.name !== c.hr_code ? ` - ${first3(c.name)}` : ""}${c.team ? ` - ${c.team}` : ""}`,
-              })),
-            ]}
-            value={collectorFilter}
-            onChange={(v) => setCollectorFilter(v || "all")}
+        <div className="w-52">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Teams</label>
+          <MultiSelectCombobox
+            options={teamOptions.map((t) => ({ value: t, label: t }))}
+            values={teamFilter}
+            onApply={(next) => {
+              setTeamFilter(next);
+              // Drop collector picks no longer on any applied team.
+              if (next.length > 0 && collectorFilter.length > 0) {
+                const allowed = new Set(
+                  collectorOptions.filter((c) => c.team && next.includes(c.team)).map((c) => c.hr_code)
+                );
+                setCollectorFilter((prev) => prev.filter((v) => allowed.has(v)));
+              }
+            }}
+            placeholder="All teams"
+          />
+        </div>
+
+        <div className="w-72">
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Collectors</label>
+          <MultiSelectCombobox
+            options={collectorOptions.map((c) => ({
+              value: c.hr_code,
+              label: `${c.hr_code}${c.name && c.name !== c.hr_code ? ` - ${first3(c.name)}` : ""}${c.team ? ` - ${c.team}` : ""}`,
+            }))}
+            values={collectorFilter}
+            onApply={setCollectorFilter}
             placeholder="All collectors"
-            searchPlaceholder="Search by code or name..."
           />
         </div>
 
@@ -257,9 +262,9 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
             <button
               type="button"
               onClick={() => {
-                setStatusFilter("");
-                setTeamFilter("all");
-                setCollectorFilter("all");
+                setStatusFilter([]);
+                setTeamFilter([]);
+                setCollectorFilter([]);
                 setFromDate(`${now.getFullYear()}-01-01`);
                 setToDate(isoDate(now));
               }}
