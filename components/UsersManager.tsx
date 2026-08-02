@@ -82,6 +82,17 @@ export default function UsersManager({
     return Array.from(s).sort();
   }, [teams, items]);
 
+  // v59: Job Title is now a dropdown too, populated from every distinct
+  // job_title on the users table (union with the current draft/add so a
+  // freshly-typed custom value stays visible even after switching rows).
+  const titleOptions = useMemo(() => {
+    const s = new Set<string>();
+    items.forEach((r) => r.job_title && s.add(r.job_title));
+    if (draft.job_title) s.add(draft.job_title);
+    if (add.job_title) s.add(add.job_title);
+    return Array.from(s).sort();
+  }, [items, draft.job_title, add.job_title]);
+
   const teamCombo: ComboOption[] = useMemo(
     () => [
       { value: "", label: "All teams" },
@@ -256,6 +267,20 @@ export default function UsersManager({
 
   return (
     <div className="space-y-6">
+      {/* v59: shared option lists for every squad + job_title `<input list="">`
+          in this page. Populated from the current dataset so admins get an
+          auto-complete of the exact spellings that already exist, and can
+          still type new values without the browser blocking them. */}
+      <datalist id="users-squad-options">
+        {teamOptions.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
+      <datalist id="users-title-options">
+        {titleOptions.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Users</h1>
@@ -302,11 +327,24 @@ export default function UsersManager({
           </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Squad</label>
-            <input value={add.squad} onChange={(e) => setAdd((d) => ({ ...d, squad: e.target.value }))} placeholder="(blank = inactive)" className={inputCls} />
+            {/* v59: Team = dropdown of known squads. */}
+            <input
+              list="users-squad-options"
+              value={add.squad}
+              onChange={(e) => setAdd((d) => ({ ...d, squad: e.target.value }))}
+              placeholder="(blank = inactive)"
+              className={inputCls}
+            />
           </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Job title</label>
-            <input value={add.job_title} onChange={(e) => setAdd((d) => ({ ...d, job_title: e.target.value }))} className={inputCls} />
+            {/* v59: Job title = dropdown of known titles. */}
+            <input
+              list="users-title-options"
+              value={add.job_title}
+              onChange={(e) => setAdd((d) => ({ ...d, job_title: e.target.value }))}
+              className={inputCls}
+            />
           </div>
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Role</label>
@@ -427,14 +465,16 @@ export default function UsersManager({
                   </td>
                   <td className="px-3 py-2.5">
                     {editing ? (
-                      <input value={draft.squad} onChange={(e) => setDraft((d) => ({ ...d, squad: e.target.value }))} placeholder="(blank = inactive)" className={inputCls} />
+                      // v59: dropdown of known squads.
+                      <input list="users-squad-options" value={draft.squad} onChange={(e) => setDraft((d) => ({ ...d, squad: e.target.value }))} placeholder="(blank = inactive)" className={inputCls} />
                     ) : (
                       <span className={r.squad ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}>{r.squad ?? "- no squad -"}</span>
                     )}
                   </td>
                   <td className="px-3 py-2.5">
                     {editing ? (
-                      <input value={draft.job_title} onChange={(e) => setDraft((d) => ({ ...d, job_title: e.target.value }))} className={inputCls} />
+                      // v59: dropdown of known job titles.
+                      <input list="users-title-options" value={draft.job_title} onChange={(e) => setDraft((d) => ({ ...d, job_title: e.target.value }))} className={inputCls} />
                     ) : (
                       <span className="text-slate-600 dark:text-slate-300">{r.job_title ?? "-"}</span>
                     )}

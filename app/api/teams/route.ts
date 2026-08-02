@@ -1,28 +1,39 @@
 import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
+// v59: `collectors` was orphaned in v56 (identity moved onto users.squad).
+// Reads the live squad values off `public.users` instead. Also returns
+// distinct job_titles so the login page + Users admin can share this
+// endpoint and stay in sync with the actual data.
+
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   try {
     const res = await fetch(
-      `${url}/rest/v1/collectors?select=team&team=not.is.null`,
+      `${url}/rest/v1/users?select=squad,job_title`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" }
     );
-    const data: { team: string | null }[] = res.ok ? await res.json() : [];
+    const rows: { squad: string | null; job_title: string | null }[] =
+      res.ok ? await res.json() : [];
 
     // Trim, drop blanks, de-duplicate case-insensitively (keep first spelling), sort.
-    const seen = new Map<string, string>();
-    for (const row of data) {
-      const t = (row.team ?? "").trim();
-      if (!t) continue;
-      const k = t.toLowerCase();
-      if (!seen.has(k)) seen.set(k, t);
-    }
-    const teams = Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
-    return NextResponse.json({ teams });
+    const dedupe = (values: (string | null | undefined)[]) => {
+      const seen = new Map<string, string>();
+      for (const raw of values) {
+        const v = (raw ?? "").trim();
+        if (!v) continue;
+        const k = v.toLowerCase();
+        if (!seen.has(k)) seen.set(k, v);
+      }
+      return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+    };
+
+    const teams = dedupe(rows.map((r) => r.squad));
+    const titles = dedupe(rows.map((r) => r.job_title));
+    return NextResponse.json({ teams, titles });
   } catch {
-    return NextResponse.json({ teams: [] });
+    return NextResponse.json({ teams: [], titles: [] });
   }
 }
