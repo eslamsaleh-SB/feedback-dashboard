@@ -23,6 +23,20 @@ function adminClient() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
+    return await signupHandler(req);
+  } catch (e: any) {
+    // v59: last-resort catch so ANY exception is surfaced to the client
+    // instead of Next.js returning a generic 500 with no JSON body.
+    console.error("[signup] uncaught:", e?.message ?? e, e?.stack);
+    return NextResponse.json(
+      { error: e?.message ? `Signup failed: ${e.message}` : "Signup failed (unknown error)" },
+      { status: 500 }
+    );
+  }
+}
+
+async function signupHandler(req: NextRequest) {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json(
       { error: "Server is missing SUPABASE_SERVICE_ROLE_KEY." },
