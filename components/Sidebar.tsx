@@ -63,13 +63,12 @@ function buildNav(role: AppRole): NavEntry[] {
   ];
 
   const uploadItems: NavItem[] = [];
-  // v59: Upload Data is Admin-only per product request. Reviewer previously
-  // saw Module Data + Send Report; now hidden. Presentations + Quizzes stay
-  // available to Reviewer + Supervisor since they build coaching content.
+  // v59: Only Module Data is Admin-only per product request. Send Report,
+  // Presentations, and Quizzes stay available to Reviewer.
   if (role === "Admin") uploadItems.push({ href: "/module-upload", label: "Module Data" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/weekly-quality-upload", label: "Weekly Quality Score Upload" });
-  if (role === "Admin") uploadItems.push({ href: "/upload", label: "Send Report" });
+  if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/upload", label: "Send Report" });
   if (role === "Admin" || role === "Reviewer" || role === "Supervisor") {
     uploadItems.push({ href: "/admin-presentations", label: "Presentations" });
   }
