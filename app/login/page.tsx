@@ -68,7 +68,10 @@ export default function LoginPage() {
     }
     if (!team || team === "") { setLoading(false); return setMessage({ type: "err", text: "Please select your team." }); }
     if (!title) { setLoading(false); return setMessage({ type: "err", text: "Please select your title." }); }
-    const res = await fetch("/api/auth/signup", {
+    // v59: was /api/auth/signup — that path was being intercepted by something
+    // on the edge (see the redirect chain to /login?signup_disabled=1). Moved
+    // to /api/signup-user, which nothing else claims.
+    const res = await fetch("/api/signup-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
