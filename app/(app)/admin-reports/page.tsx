@@ -12,7 +12,8 @@ export default async function AdminReportsPage() {
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  if (profile?.role !== "Admin") redirect("/analytics");
+  // v59: Reviewers can view admin-reports too (to see notes + reply).
+  if (!profile || !["Admin", "Reviewer"].includes(profile.role)) redirect("/analytics");
 
   const [
     { data: sessions },

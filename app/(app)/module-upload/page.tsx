@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getEffective } from "@/lib/effective";
 import ModuleUploadForm from "@/components/ModuleUploadForm";
+import UploadDeleteWidget from "@/components/UploadDeleteWidget";
+import { MODULES } from "@/lib/modules";
 
 export const dynamic = "force-dynamic";
 
@@ -32,5 +34,14 @@ export default async function ModuleUploadPage() {
     name: [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || (u.hr_code as string),
   }));
 
-  return <ModuleUploadForm collectors={collectors} />;
+  return (
+    <>
+      <ModuleUploadForm collectors={collectors} />
+      <UploadDeleteWidget
+        target="module_totals"
+        title="Module Data"
+        modules={MODULES.map((m) => ({ value: m.value, label: m.label }))}
+      />
+    </>
+  );
 }

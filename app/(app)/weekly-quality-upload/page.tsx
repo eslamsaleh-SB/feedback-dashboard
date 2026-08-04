@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import UploadDeleteWidget from "@/components/UploadDeleteWidget";
 
 type FileType = "module" | "freeze_frame";
 
@@ -153,6 +154,9 @@ export default function WeeklyQualityUploadPage() {
           </div>
         )}
       </form>
+
+      {/* v59: Admin delete widget for weekly quality scores. */}
+      <UploadDeleteWidget target="weekly_quality_scores" title="Weekly Quality Scores" />
     </div>
   );
 }

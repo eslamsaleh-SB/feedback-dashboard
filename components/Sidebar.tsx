@@ -86,22 +86,30 @@ function buildNav(role: AppRole): NavEntry[] {
     entries.push({ type: "group", key: "feedback", label: "Feedback", items: feedbackItems });
   }
 
-  if (role === "Admin") {
+  // v59: Reviewer now sees the review surfaces (Reports / Inquiries /
+  // Presentations Progress / Quiz Analytics) so they can act on collector
+  // notes. Admin-only pages (Collector ↔ Reviewer, Assignment History,
+  // Users, Feedback Progress) still gate at the page level below.
+  if (role === "Admin" || role === "Reviewer") {
+    const adminItems: NavItem[] = [
+      { href: "/admin-reports", label: "Reports" },
+      { href: "/admin-inquiries", label: "Inquiries" },
+      { href: "/admin-presentations", label: "Presentations" },
+      { href: "/admin-quizzes", label: "Quiz Analytics" },
+    ];
+    if (role === "Admin") {
+      adminItems.push(
+        { href: "/feedback-progress", label: "Feedback Progress" },
+        { href: "/admin-collector-reviewer", label: "Collector ↔ Reviewer" },
+        { href: "/admin-reviewer-history", label: "Assignment History" },
+        { href: "/users", label: "Users" }
+      );
+    }
     entries.push({
       type: "group",
       key: "admin",
       label: "Administration",
-      items: [
-        { href: "/admin-reports", label: "Reports" },
-        { href: "/admin-inquiries", label: "Inquiries" },
-        { href: "/admin-presentations", label: "Presentations" },
-        { href: "/admin-quizzes", label: "Quiz Analytics" },
-        { href: "/feedback-progress", label: "Feedback Progress" },
-        // v59: reviewer assignment surface + history.
-        { href: "/admin-collector-reviewer", label: "Collector ↔ Reviewer" },
-        { href: "/admin-reviewer-history", label: "Assignment History" },
-        { href: "/users", label: "Users" },
-      ],
+      items: adminItems,
     });
   }
 

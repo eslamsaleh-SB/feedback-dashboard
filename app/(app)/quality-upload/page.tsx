@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import UploadDeleteWidget from "@/components/UploadDeleteWidget";
 
 type FileType = "module" | "freeze_frame";
 
@@ -170,6 +171,11 @@ export default function QualityUploadPage() {
           </div>
         )}
       </form>
+
+      {/* v59: delete widget — Admin can wipe rows for a specific month.
+          Two widgets so the admin can pick the right table. */}
+      <UploadDeleteWidget target="quality_scores" title="Quality Score (module)" />
+      <UploadDeleteWidget target="freeze_frame_scores" title="Freeze Frame Score" />
     </div>
   );
 }
