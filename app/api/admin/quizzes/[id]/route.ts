@@ -123,14 +123,18 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ ok: true, email_sent: emailSent });
 }
 
-// DELETE /api/admin/quizzes/[id] - cascade delete via FK
+// DELETE /api/admin/quizzes/[id] - v59: Admin-only.
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient();
   if (isViewingAs()) {
     return NextResponse.json({ error: "Read-only in 'View as' mode." }, { status: 403 });
   }
-  const auth = await requireReviewer(supabase);
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const { data: me } = await supabase.from("users").select("role").eq("id", user.id).single();
+  if ((me as any)?.role !== "Admin") {
+    return NextResponse.json({ error: "Admins only" }, { status: 403 });
+  }
 
   const { error } = await supabase.from("quizzes").delete().eq("id", params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

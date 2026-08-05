@@ -125,6 +125,7 @@ export default function PerformanceThresholdsView({
 
   // v59: reviewer "Only my assigned" toggle.
   const [myAssigned, setMyAssigned] = useState<string[]>([]);
+  const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
   const [onlyMine, setOnlyMine] = useState(false);
   useEffect(() => {
     fetch("/api/my-assigned", { cache: "no-store" })
@@ -132,7 +133,8 @@ export default function PerformanceThresholdsView({
       .then(({ hr_codes }: { hr_codes?: string[] }) => {
         if (Array.isArray(hr_codes)) setMyAssigned(hr_codes);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setAssignmentsLoaded(true));
   }, []);
 
   const teams = useMemo(() => {
@@ -401,12 +403,19 @@ export default function PerformanceThresholdsView({
             />
           </div>
           {/* v59: reviewer's assigned filter. */}
-          {myAssigned.length > 0 && (
+          {assignmentsLoaded && (
             <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 cursor-pointer bg-white dark:bg-slate-900">
+              <label
+                className={`flex items-center gap-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 ${
+                  myAssigned.length === 0
+                    ? "text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                    : "text-slate-600 dark:text-slate-300 cursor-pointer"
+                }`}
+              >
                 <input
                   type="checkbox"
                   checked={onlyMine}
+                  disabled={myAssigned.length === 0}
                   onChange={(e) => setOnlyMine(e.target.checked)}
                   className="h-4 w-4"
                 />

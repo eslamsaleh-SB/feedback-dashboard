@@ -149,10 +149,12 @@ export default async function AdminQuizzesPage() {
                     >
                       Open
                     </Link>
-                    <ItemDeleteButton
-                      endpoint={`/api/admin/quizzes/${q.id}`}
-                      confirmText={`Delete quiz "${q.title}" and every question/submission? Cannot be undone.`}
-                    />
+                    {role === "Admin" && (
+                      <ItemDeleteButton
+                        endpoint={`/api/admin/quizzes/${q.id}`}
+                        confirmText={`Delete quiz "${q.title}" and every question/submission? Cannot be undone.`}
+                      />
+                    )}
                   </div>
                 </div>
               </div>

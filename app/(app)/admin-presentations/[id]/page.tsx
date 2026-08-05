@@ -52,6 +52,7 @@ export default async function EditPresentationPage({ params }: { params: { id: s
   return (
     <PresentationBuilder
       mode="edit"
+      canDelete={role === "Admin"}
       collectors={(collectors ?? []).map((c: any) => ({
         hr_code: c.hr_code as string,
         name: ([c.first_name, c.last_name].filter(Boolean).join(" ").trim() || c.hr_code) as string,

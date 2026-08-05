@@ -60,6 +60,7 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
     <div className="space-y-8">
       <QuizBuilder
         mode="edit"
+        canDelete={role === "Admin"}
         collectors={(collectors ?? []).map((u: any) => {
           const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
           return {

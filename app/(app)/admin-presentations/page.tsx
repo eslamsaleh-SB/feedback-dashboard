@@ -140,10 +140,12 @@ export default async function AdminPresentationsPage() {
                   >
                     Edit
                   </Link>
-                  <ItemDeleteButton
-                    endpoint={`/api/admin/presentations/${p.id}`}
-                    confirmText={`Delete presentation "${p.title}" and every page + assignment? Cannot be undone.`}
-                  />
+                  {role === "Admin" && (
+                    <ItemDeleteButton
+                      endpoint={`/api/admin/presentations/${p.id}`}
+                      confirmText={`Delete presentation "${p.title}" and every page + assignment? Cannot be undone.`}
+                    />
+                  )}
                 </div>
               </div>
             </div>

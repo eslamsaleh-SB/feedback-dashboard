@@ -92,6 +92,7 @@ export default function WeeklyQualityScoreView({
 
   // v59: Reviewer's assigned-collectors toggle.
   const [myAssigned, setMyAssigned] = useState<string[]>([]);
+  const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
   const [onlyMine, setOnlyMine] = useState(false);
   useEffect(() => {
     fetch("/api/my-assigned", { cache: "no-store" })
@@ -99,7 +100,8 @@ export default function WeeklyQualityScoreView({
       .then(({ hr_codes }: { hr_codes?: string[] }) => {
         if (Array.isArray(hr_codes)) setMyAssigned(hr_codes);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setAssignmentsLoaded(true));
   }, []);
   const mineSet = useMemo(() => new Set(myAssigned), [myAssigned]);
 
@@ -299,12 +301,19 @@ export default function WeeklyQualityScoreView({
               </div>
               {/* v59: reviewer's assigned filter, only visible when caller
                   has at least one active assignment. */}
-              {myAssigned.length > 0 && (
+              {assignmentsLoaded && (
                 <div className="flex items-end">
-                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 cursor-pointer bg-white dark:bg-slate-900">
+                  <label
+                    className={`flex items-center gap-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 ${
+                      myAssigned.length === 0
+                        ? "text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                        : "text-slate-600 dark:text-slate-300 cursor-pointer"
+                    }`}
+                  >
                     <input
                       type="checkbox"
                       checked={onlyMine}
+                      disabled={myAssigned.length === 0}
                       onChange={(e) => setOnlyMine(e.target.checked)}
                       className="h-4 w-4"
                     />

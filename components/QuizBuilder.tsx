@@ -75,10 +75,13 @@ export default function QuizBuilder({
   mode,
   collectors,
   initial,
+  canDelete = false,
 }: {
   mode: "create" | "edit";
   collectors: CollectorOpt[];
   initial: InitialData | null;
+  // v59: Delete is Admin-only; hide from Reviewer.
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -230,7 +233,7 @@ export default function QuizBuilder({
           >
             {busy ? "Saving..." : mode === "create" ? "Create" : "Save changes"}
           </button>
-          {mode === "edit" && (
+          {mode === "edit" && canDelete && (
             <button
               type="button"
               onClick={deleteQuiz}
