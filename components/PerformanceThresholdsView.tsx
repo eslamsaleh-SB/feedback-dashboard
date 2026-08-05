@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import MultiSelectCombobox from "@/components/MultiSelectCombobox";
 
@@ -123,6 +123,18 @@ export default function PerformanceThresholdsView({
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
 
+  // v59: reviewer "Only my assigned" toggle.
+  const [myAssigned, setMyAssigned] = useState<string[]>([]);
+  const [onlyMine, setOnlyMine] = useState(false);
+  useEffect(() => {
+    fetch("/api/my-assigned", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(({ hr_codes }: { hr_codes?: string[] }) => {
+        if (Array.isArray(hr_codes)) setMyAssigned(hr_codes);
+      })
+      .catch(() => {});
+  }, []);
+
   const teams = useMemo(() => {
     const s = new Set<string>();
     for (const c of collectors) if (c.team) s.add(c.team);
@@ -182,6 +194,8 @@ export default function PerformanceThresholdsView({
       // Team + Collector filters (applied first, then threshold logic).
       if (teamFilter.length > 0 && (!c.team || !teamFilter.includes(c.team))) return false;
       if (collectorFilter.length > 0 && !collectorFilter.includes(c.hr_code)) return false;
+      // v59: reviewer's "only mine" toggle.
+      if (onlyMine && myAssigned.length > 0 && !myAssigned.includes(c.hr_code)) return false;
       const errRow = moduleErrorsByHr.get(c.hr_code);
       const scoreRow = avgScoreByHrAndKey[c.hr_code];
 
@@ -216,6 +230,8 @@ export default function PerformanceThresholdsView({
     matchLogic,
     teamFilter,
     collectorFilter,
+    onlyMine,
+    myAssigned,
   ]);
 
   const errorColumns = activeErrCriteria;
@@ -384,6 +400,20 @@ export default function PerformanceThresholdsView({
               placeholder="All collectors"
             />
           </div>
+          {/* v59: reviewer's assigned filter. */}
+          {myAssigned.length > 0 && (
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 cursor-pointer bg-white dark:bg-slate-900">
+                <input
+                  type="checkbox"
+                  checked={onlyMine}
+                  onChange={(e) => setOnlyMine(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span>Only my assigned ({myAssigned.length})</span>
+              </label>
+            </div>
+          )}
           <div>
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
               Top N (leave empty = all)

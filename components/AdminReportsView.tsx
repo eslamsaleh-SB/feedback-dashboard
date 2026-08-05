@@ -25,6 +25,9 @@ type SessionReport = {
   acknowledged: boolean;
   notes: NoteItem[];
   videos: VideoItem[];
+  // v59: creator identity so admins + reviewers see who sent the report.
+  created_by_hr: string | null;
+  created_by_name: string | null;
 };
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
 
@@ -40,9 +43,12 @@ type AckFilter = "all" | "acknowledged" | "not_acknowledged";
 export default function AdminReportsView({
   sessions: initialSessions,
   collectors,
+  role = "Admin",
 }: {
   sessions: SessionReport[];
   collectors: CollectorOpt[];
+  // v59: Admin sees the row-level Delete; Reviewer doesn't.
+  role?: "Admin" | "Reviewer";
 }) {
   const supabase = createClient();
   const [sessions, setSessions] = useState(initialSessions);
@@ -288,6 +294,13 @@ export default function AdminReportsView({
                       {s.hr_code ?? "-"}
                       {s.collector_name ? ` - ${s.collector_name}` : ""}
                     </span>
+                    {/* v59: who created this report. */}
+                    {(s.created_by_hr || s.created_by_name) && (
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        Sent by {s.created_by_hr ?? ""}
+                        {s.created_by_name ? ` - ${s.created_by_name}` : ""}
+                      </span>
+                    )}
                     {s.acknowledged ? (
                       <span className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full px-2 py-0.5 font-medium">
                         Acknowledged
@@ -304,7 +317,29 @@ export default function AdminReportsView({
                       <span className="text-xs text-amber-600 font-medium">{s.notes.length} note(s)</span>
                     )}
                   </div>
-                  <span className="text-slate-400 dark:text-slate-500 text-sm">{isExp ? "▲" : "▼"}</span>
+                  <div className="flex items-center gap-2">
+                    {/* v59: Admin can delete a sent report from the list. */}
+                    {role === "Admin" && (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm(`Delete "${s.match_name}" and every note/video attached to it? Cannot be undone.`)) return;
+                          const res = await fetch(`/api/admin/reports/${s.id}`, { method: "DELETE" });
+                          const j = await res.json().catch(() => ({}));
+                          if (!res.ok) {
+                            alert(j.error || "Failed to delete");
+                            return;
+                          }
+                          setSessions((prev) => prev.filter((x) => x.id !== s.id));
+                        }}
+                        className="text-xs text-red-600 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    )}
+                    <span className="text-slate-400 dark:text-slate-500 text-sm">{isExp ? "▲" : "▼"}</span>
+                  </div>
                 </button>
 
                 {isExp && (

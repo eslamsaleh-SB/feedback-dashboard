@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getEffective } from "@/lib/effective";
+import ItemDeleteButton from "@/components/ItemDeleteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -21,14 +22,14 @@ export default async function AdminQuizzesPage() {
   const withDate = await supabase
     .from("quizzes")
     .select(
-      "id, title, description, published, assigned_date, created_at, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)"
+      "id, title, description, published, assigned_date, created_at, created_by, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)"
     )
     .order("created_at", { ascending: false });
   if (withDate.error) {
     const legacy = await supabase
       .from("quizzes")
       .select(
-        "id, title, description, published, created_at, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)"
+        "id, title, description, published, created_at, created_by, quiz_questions(count), quiz_assignments(count), quiz_submissions(count)"
       )
       .order("created_at", { ascending: false });
     rows = legacy.data ?? [];
@@ -36,17 +37,37 @@ export default async function AdminQuizzesPage() {
     rows = withDate.data ?? [];
   }
 
-  const quizzes = (rows ?? []).map((r: any) => ({
-    id: r.id as string,
-    title: r.title as string,
-    description: (r.description ?? null) as string | null,
-    published: !!r.published,
-    assigned_date: (r.assigned_date ?? null) as string | null,
-    created_at: r.created_at as string,
-    question_count: r.quiz_questions?.[0]?.count ?? 0,
-    assignee_count: r.quiz_assignments?.[0]?.count ?? 0,
-    submission_count: r.quiz_submissions?.[0]?.count ?? 0,
-  }));
+  // v59: look up creator names so admins + reviewers see who authored each quiz.
+  const { data: usersRows } = await supabase
+    .from("users")
+    .select("id, hr_code, first_name, last_name")
+    .order("hr_code");
+  const userById = new Map<string, { hr_code: string | null; name: string }>();
+  for (const u of usersRows ?? []) {
+    const uAny = u as any;
+    const name = [uAny.first_name, uAny.last_name].filter(Boolean).join(" ").trim();
+    userById.set(uAny.id, {
+      hr_code: (uAny.hr_code ?? null) as string | null,
+      name: name || uAny.hr_code || String(uAny.id).slice(0, 8),
+    });
+  }
+
+  const quizzes = (rows ?? []).map((r: any) => {
+    const creator = r.created_by ? userById.get(r.created_by) : null;
+    return {
+      id: r.id as string,
+      title: r.title as string,
+      description: (r.description ?? null) as string | null,
+      published: !!r.published,
+      assigned_date: (r.assigned_date ?? null) as string | null,
+      created_at: r.created_at as string,
+      question_count: r.quiz_questions?.[0]?.count ?? 0,
+      assignee_count: r.quiz_assignments?.[0]?.count ?? 0,
+      submission_count: r.quiz_submissions?.[0]?.count ?? 0,
+      created_by_hr: creator?.hr_code ?? null,
+      created_by_name: creator?.name ?? null,
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -98,6 +119,12 @@ export default async function AdminQuizzesPage() {
                         Assigned {q.assigned_date}
                       </p>
                     )}
+                    {(q.created_by_hr || q.created_by_name) && (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                        Created by {q.created_by_hr ?? ""}
+                        {q.created_by_name ? ` - ${q.created_by_name}` : ""}
+                      </p>
+                    )}
                     {q.description && (
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
                         {q.description}
@@ -122,6 +149,10 @@ export default async function AdminQuizzesPage() {
                     >
                       Open
                     </Link>
+                    <ItemDeleteButton
+                      endpoint={`/api/admin/quizzes/${q.id}`}
+                      confirmText={`Delete quiz "${q.title}" and every question/submission? Cannot be undone.`}
+                    />
                   </div>
                 </div>
               </div>

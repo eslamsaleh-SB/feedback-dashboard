@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MODULES, type ModuleValue, type CollectorRow } from "@/lib/modules";
 import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
@@ -46,6 +46,20 @@ export default function CollectorsPerformance({
   const [titleFilter, setTitleFilter] = useState<string[]>([]);
   const [moduleFilter, setModuleFilter] = useState<ModuleValue[]>([]);
   const [topN, setTopN] = useState("");
+
+  // v59: reviewer's own assigned collectors. Loaded on mount; if empty the
+  // toggle stays hidden. When ON, table is restricted to those hr_codes.
+  const [myAssigned, setMyAssigned] = useState<string[]>([]);
+  const [onlyMine, setOnlyMine] = useState(false);
+  useEffect(() => {
+    fetch("/api/my-assigned", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(({ hr_codes }: { hr_codes?: string[] }) => {
+        if (Array.isArray(hr_codes)) setMyAssigned(hr_codes);
+      })
+      .catch(() => {});
+  }, []);
+  const mineSet = useMemo(() => new Set(myAssigned), [myAssigned]);
 
   function pushDates(f: string, t: string) {
     const params = new URLSearchParams();
@@ -102,6 +116,7 @@ export default function CollectorsPerformance({
 
   const filtered = useMemo(() => {
     let arr = rows.filter((r) => {
+      if (onlyMine && mineSet.size > 0 && !mineSet.has(r.hr_code)) return false;
       if (collectorSet.size > 0 && !collectorSet.has(r.hr_code)) return false;
       if (teamSet.size > 0) {
         const tv = r.team ? r.team : NO_TEAM;
@@ -117,7 +132,7 @@ export default function CollectorsPerformance({
     const n = parseInt(topN, 10);
     return Number.isFinite(n) && n > 0 ? arr.slice(0, n) : arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, collectorSet, teamSet, titleSet, moduleFilter, topN]);
+  }, [rows, collectorSet, teamSet, titleSet, moduleFilter, topN, onlyMine, mineSet]);
 
   const totalMistakes = filtered.reduce((s, r) => s + metric(r), 0);
 
@@ -243,6 +258,21 @@ export default function CollectorsPerformance({
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Top N</label>
             <input type="number" min={1} value={topN} onChange={(e) => setTopN(e.target.value)} placeholder="All" className={inputCls} />
           </div>
+          {/* v59: Reviewer-only assigned filter. Hidden when the caller has
+              no active assignments (Admin, Viewer, or unassigned reviewers). */}
+          {myAssigned.length > 0 && (
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 cursor-pointer bg-white dark:bg-slate-900">
+                <input
+                  type="checkbox"
+                  checked={onlyMine}
+                  onChange={(e) => setOnlyMine(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span>Only my assigned ({myAssigned.length})</span>
+              </label>
+            </div>
+          )}
           {anyFilter && (
             <div className="flex items-end">
               <button type="button" onClick={clearAll} className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">

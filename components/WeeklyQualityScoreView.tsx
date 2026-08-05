@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
 type Collector = { hr_code: string; name: string; team: string | null };
@@ -90,6 +90,19 @@ export default function WeeklyQualityScoreView({
   const [bottomNModule, setBottomNModule] = useState<string>("");
   const [bottomN, setBottomN] = useState<string>("");
 
+  // v59: Reviewer's assigned-collectors toggle.
+  const [myAssigned, setMyAssigned] = useState<string[]>([]);
+  const [onlyMine, setOnlyMine] = useState(false);
+  useEffect(() => {
+    fetch("/api/my-assigned", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(({ hr_codes }: { hr_codes?: string[] }) => {
+        if (Array.isArray(hr_codes)) setMyAssigned(hr_codes);
+      })
+      .catch(() => {});
+  }, []);
+  const mineSet = useMemo(() => new Set(myAssigned), [myAssigned]);
+
   function toggleModule(key: string) {
     setSelectedModules((prev) => {
       const next = new Set(prev);
@@ -132,6 +145,8 @@ export default function WeeklyQualityScoreView({
       const c = collectorByHr.get(r.hr_code);
       if (teamSet.size > 0 && (!c?.team || !teamSet.has(c.team))) continue;
       if (collectorSet.size > 0 && !collectorSet.has(r.hr_code)) continue;
+      // v59: reviewer's "only mine" toggle.
+      if (onlyMine && mineSet.size > 0 && !mineSet.has(r.hr_code)) continue;
 
       let bucket = buckets.get(r.hr_code);
       if (!bucket) {
@@ -159,7 +174,7 @@ export default function WeeklyQualityScoreView({
       out.push({ hr_code: hr, weeks: b.weeks.size, values: values as any });
     }
     return out;
-  }, [rows, weekFilter, teamFilter, collectorFilter, isViewer, viewerHrCode, collectorByHr]);
+  }, [rows, weekFilter, teamFilter, collectorFilter, isViewer, viewerHrCode, collectorByHr, onlyMine, mineSet]);
 
   // Score-range filter applied AFTER aggregation. v59 fix: applies as soon
   // as at least one module pill is picked (previously required min OR max
@@ -282,6 +297,21 @@ export default function WeeklyQualityScoreView({
                   placeholder="All collectors"
                 />
               </div>
+              {/* v59: reviewer's assigned filter, only visible when caller
+                  has at least one active assignment. */}
+              {myAssigned.length > 0 && (
+                <div className="flex items-end">
+                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 cursor-pointer bg-white dark:bg-slate-900">
+                    <input
+                      type="checkbox"
+                      checked={onlyMine}
+                      onChange={(e) => setOnlyMine(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <span>Only my assigned ({myAssigned.length})</span>
+                  </label>
+                </div>
+              )}
             </>
           )}
           <div>

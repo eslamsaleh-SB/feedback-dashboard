@@ -27,7 +27,9 @@ export default async function AdminReportsPage() {
     // repointed onto hr_code back in v56. The embed silently broke.
     supabase
       .from("match_sessions")
-      .select("id, match_name, review_date, overall_notes, hr_code")
+      // v59: also grab uploader_id so we can label reports with the reviewer
+      // who sent them.
+      .select("id, match_name, review_date, overall_notes, hr_code, uploader_id")
       .order("review_date", { ascending: false }),
     supabase
       .from("session_notes")
@@ -43,8 +45,8 @@ export default async function AdminReportsPage() {
       .select("id, match_session_id, drive_file_id, file_name"),
     supabase
       .from("users")
-      .select("hr_code, first_name, last_name, squad")
-      .not("hr_code", "is", null)
+      // v59: pull id too so we can look up uploader by uploader_id (uuid).
+      .select("id, hr_code, first_name, last_name, squad")
       .order("hr_code"),
   ]);
 
@@ -77,19 +79,28 @@ export default async function AdminReportsPage() {
   }
 
   const collectorByHr = new Map<string, { name: string; team: string | null }>();
+  const userById = new Map<string, { hr_code: string | null; name: string }>();
   for (const c of collectorRows ?? []) {
-    if ((c as any).hr_code) {
-      const name = [(c as any).first_name, (c as any).last_name].filter(Boolean).join(" ").trim();
-      collectorByHr.set((c as any).hr_code, {
-        name: name || (c as any).hr_code,
-        team: (c as any).squad ?? null,
+    const cAny = c as any;
+    const name = [cAny.first_name, cAny.last_name].filter(Boolean).join(" ").trim();
+    if (cAny.hr_code) {
+      collectorByHr.set(cAny.hr_code, {
+        name: name || cAny.hr_code,
+        team: cAny.squad ?? null,
+      });
+    }
+    if (cAny.id) {
+      userById.set(cAny.id, {
+        hr_code: (cAny.hr_code ?? null) as string | null,
+        name: name || (cAny.hr_code as string) || String(cAny.id).slice(0, 8),
       });
     }
   }
 
   return (
     <AdminReportsView
-      collectors={(collectorRows ?? []).map((c: any) => {
+      role={profile.role as "Admin" | "Reviewer"}
+      collectors={(collectorRows ?? []).filter((c: any) => c.hr_code).map((c: any) => {
         const name = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
         return {
           hr_code: c.hr_code as string,
@@ -99,6 +110,7 @@ export default async function AdminReportsPage() {
       })}
       sessions={(sessions ?? []).map((s: any) => {
         const c = s.hr_code ? collectorByHr.get(s.hr_code) : undefined;
+        const uploader = s.uploader_id ? userById.get(s.uploader_id) : undefined;
         return {
           id: s.id,
           match_name: s.match_name,
@@ -109,6 +121,8 @@ export default async function AdminReportsPage() {
           acknowledged: ackedIds.has(s.id),
           notes: notesBySession[s.id] ?? [],
           videos: videosBySession[s.id] ?? [],
+          created_by_hr: uploader?.hr_code ?? null,
+          created_by_name: uploader?.name ?? null,
         };
       })}
     />
