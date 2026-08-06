@@ -32,6 +32,8 @@ export default function TopEventsView({
 
   const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
   const [topN, setTopN] = useState<string>("10");
   const [baseRows, setBaseRows] = useState<BaseRow[]>([]);
   const [extrasRows, setExtrasRows] = useState<ExtrasRow[]>([]);
@@ -93,6 +95,8 @@ export default function TopEventsView({
         bq = bq.in("hr_code", effectiveHrs);
         eq = eq.in("hr_code", effectiveHrs);
       }
+      if (dateFrom) { bq = bq.gte("review_date", dateFrom); eq = eq.gte("review_date", dateFrom); }
+      if (dateTo)   { bq = bq.lte("review_date", dateTo);   eq = eq.lte("review_date", dateTo);   }
       const [{ data: bd, error: be }, { data: ed, error: ee }] = await Promise.all([bq, eq]);
       if (be) throw new Error(be.message);
       if (ee) throw new Error(ee.message);
@@ -110,7 +114,7 @@ export default function TopEventsView({
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveHrs]);
+  }, [effectiveHrs, dateFrom, dateTo]);
 
   const nTop = (() => {
     const n = parseInt(topN, 10);
@@ -211,6 +215,14 @@ export default function TopEventsView({
             </label>
           </div>
         )}
+        <div>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} />
+        </div>
         <div>
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Top N</label>
           <input

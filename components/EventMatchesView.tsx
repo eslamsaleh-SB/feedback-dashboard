@@ -9,11 +9,16 @@ type Collector = { hr_code: string; name: string; team: string | null };
 type BaseRow = {
   match_id: string | null;
   hr_code: string | null;
+  collector_event: string | null;
+  reviewer_event: string | null;
   total_count: number;
 };
 type ExtrasRow = {
   match_id: string | null;
   hr_code: string | null;
+  extra_field: string | null;
+  changed_from: string | null;
+  changed_to: string | null;
   total_count: number;
 };
 
@@ -28,6 +33,8 @@ export default function EventMatchesView({
 
   const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
   const [baseRows, setBaseRows] = useState<BaseRow[]>([]);
   const [extrasRows, setExtrasRows] = useState<ExtrasRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -78,16 +85,18 @@ export default function EventMatchesView({
     try {
       let bq = supabase
         .from("base_events")
-        .select("match_id, hr_code, total_count")
+        .select("match_id, hr_code, collector_event, reviewer_event, total_count")
         .limit(50000);
       let eq = supabase
         .from("extras_events")
-        .select("match_id, hr_code, total_count")
+        .select("match_id, hr_code, extra_field, changed_from, changed_to, total_count")
         .limit(50000);
       if (effectiveHrs.length > 0) {
         bq = bq.in("hr_code", effectiveHrs);
         eq = eq.in("hr_code", effectiveHrs);
       }
+      if (dateFrom) { bq = bq.gte("review_date", dateFrom); eq = eq.gte("review_date", dateFrom); }
+      if (dateTo)   { bq = bq.lte("review_date", dateTo);   eq = eq.lte("review_date", dateTo);   }
       const [{ data: bd, error: be }, { data: ed, error: ee }] = await Promise.all([bq, eq]);
       if (be) throw new Error(be.message);
       if (ee) throw new Error(ee.message);
@@ -105,31 +114,73 @@ export default function EventMatchesView({
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveHrs]);
+  }, [effectiveHrs, dateFrom, dateTo]);
 
-  // Group by match_id, count distinct collectors + total corrections.
-  function groupByMatch(rows: { match_id: string | null; hr_code: string | null; total_count: number }[]) {
-    const map = new Map<string, { match_id: string; count: number; collectors: Set<string> }>();
-    for (const r of rows) {
-      const key = (r.match_id ?? "").trim() || "(no match id)";
-      const cur = map.get(key);
-      if (cur) {
-        cur.count += Number(r.total_count ?? 0);
-        if (r.hr_code) cur.collectors.add(r.hr_code);
-      } else {
-        const set = new Set<string>();
-        if (r.hr_code) set.add(r.hr_code);
-        map.set(key, { match_id: key, count: Number(r.total_count ?? 0), collectors: set });
-      }
+  // Base: one row per (match_id, collector_event → reviewer_event). Sorted
+  // by match count desc, then by pair count desc within a match.
+  const baseAgg = useMemo(() => {
+    type Pair = { from: string; to: string; count: number };
+    type MatchGroup = { match_id: string; total: number; pairs: Pair[] };
+    const groups = new Map<string, MatchGroup>();
+    for (const r of baseRows) {
+      const mid = (r.match_id ?? "").trim() || "(no match id)";
+      const from = (r.collector_event ?? "").trim() || "(blank)";
+      const to = (r.reviewer_event ?? "").trim() || "(blank)";
+      const add = Number(r.total_count ?? 0);
+      let g = groups.get(mid);
+      if (!g) { g = { match_id: mid, total: 0, pairs: [] }; groups.set(mid, g); }
+      g.total += add;
+      const p = g.pairs.find((x) => x.from === from && x.to === to);
+      if (p) p.count += add;
+      else g.pairs.push({ from, to, count: add });
     }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count);
-  }
+    const arr = Array.from(groups.values());
+    for (const g of arr) g.pairs.sort((a, b) => b.count - a.count);
+    arr.sort((a, b) => b.total - a.total);
+    // Flatten with rowspan info.
+    const flat: { match_id: string; total: number; from: string; to: string; count: number; first: boolean; span: number }[] = [];
+    for (const g of arr) {
+      g.pairs.forEach((p, i) => flat.push({
+        match_id: g.match_id, total: g.total, from: p.from, to: p.to, count: p.count,
+        first: i === 0, span: g.pairs.length,
+      }));
+    }
+    return { flat, groupCount: arr.length, total: arr.reduce((s, g) => s + g.total, 0) };
+  }, [baseRows]);
 
-  const baseAgg = useMemo(() => groupByMatch(baseRows), [baseRows]);
-  const extrasAgg = useMemo(() => groupByMatch(extrasRows), [extrasRows]);
+  // Extras: same, but pair = (extra_field, changed_from → changed_to).
+  const extrasAgg = useMemo(() => {
+    type Pair = { field: string; from: string; to: string; count: number };
+    type MatchGroup = { match_id: string; total: number; pairs: Pair[] };
+    const groups = new Map<string, MatchGroup>();
+    for (const r of extrasRows) {
+      const mid = (r.match_id ?? "").trim() || "(no match id)";
+      const field = (r.extra_field ?? "").trim() || "—";
+      const from = (r.changed_from ?? "").trim() || "(blank)";
+      const to = (r.changed_to ?? "").trim() || "(blank)";
+      const add = Number(r.total_count ?? 0);
+      let g = groups.get(mid);
+      if (!g) { g = { match_id: mid, total: 0, pairs: [] }; groups.set(mid, g); }
+      g.total += add;
+      const p = g.pairs.find((x) => x.field === field && x.from === from && x.to === to);
+      if (p) p.count += add;
+      else g.pairs.push({ field, from, to, count: add });
+    }
+    const arr = Array.from(groups.values());
+    for (const g of arr) g.pairs.sort((a, b) => b.count - a.count);
+    arr.sort((a, b) => b.total - a.total);
+    const flat: { match_id: string; total: number; field: string; from: string; to: string; count: number; first: boolean; span: number }[] = [];
+    for (const g of arr) {
+      g.pairs.forEach((p, i) => flat.push({
+        match_id: g.match_id, total: g.total, field: p.field, from: p.from, to: p.to, count: p.count,
+        first: i === 0, span: g.pairs.length,
+      }));
+    }
+    return { flat, groupCount: arr.length, total: arr.reduce((s, g) => s + g.total, 0) };
+  }, [extrasRows]);
 
-  const baseTotal = baseAgg.reduce((s, r) => s + r.count, 0);
-  const extrasTotal = extrasAgg.reduce((s, r) => s + r.count, 0);
+  const baseTotal = baseAgg.total;
+  const extrasTotal = extrasAgg.total;
 
   return (
     <div className="space-y-6">
@@ -168,6 +219,16 @@ export default function EventMatchesView({
             placeholder="All collectors"
           />
         </div>
+        <div>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">From</label>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm" />
+        </div>
         {assignmentsLoaded && (
           <div className="flex items-end">
             <label
@@ -197,7 +258,7 @@ export default function EventMatchesView({
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
             <h2 className="font-semibold">Events (Base)</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {loading ? "…" : `${baseAgg.length} match(es) · ${baseTotal.toLocaleString()} corrections`}
+              {loading ? "…" : `${baseAgg.groupCount} match(es) · ${baseTotal.toLocaleString()} corrections`}
             </span>
           </div>
           <div className="overflow-x-auto">
@@ -205,22 +266,29 @@ export default function EventMatchesView({
               <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr>
                   <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Match ID</th>
-                  <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Collectors</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Collector Event</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Reviewer Event</th>
                   <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Count</th>
                 </tr>
               </thead>
               <tbody>
-                {baseAgg.length === 0 ? (
+                {baseAgg.flat.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
                       {loading ? "" : "No rows."}
                     </td>
                   </tr>
                 ) : (
-                  baseAgg.map((r) => (
-                    <tr key={r.match_id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-3 py-2 font-medium">{r.match_id}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.collectors.size}</td>
+                  baseAgg.flat.map((r, i) => (
+                    <tr key={i} className={r.first ? "border-t-2 border-slate-200 dark:border-slate-700" : "border-t border-slate-100 dark:border-slate-800"}>
+                      {r.first ? (
+                        <td rowSpan={r.span} className="px-3 py-2 font-medium align-top bg-slate-50/50 dark:bg-slate-800/40">
+                          <div>{r.match_id}</div>
+                          <div className="text-xs text-slate-400 tabular-nums">{r.total.toLocaleString()}</div>
+                        </td>
+                      ) : null}
+                      <td className="px-3 py-2 text-rose-700 dark:text-rose-300 font-medium">{r.from}</td>
+                      <td className="px-3 py-2 text-emerald-700 dark:text-emerald-300 font-medium">{r.to}</td>
                       <td className="px-3 py-2 text-right tabular-nums font-semibold">{r.count.toLocaleString()}</td>
                     </tr>
                   ))
@@ -234,7 +302,7 @@ export default function EventMatchesView({
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
             <h2 className="font-semibold">Extras</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {loading ? "…" : `${extrasAgg.length} match(es) · ${extrasTotal.toLocaleString()} corrections`}
+              {loading ? "…" : `${extrasAgg.groupCount} match(es) · ${extrasTotal.toLocaleString()} corrections`}
             </span>
           </div>
           <div className="overflow-x-auto">
@@ -242,22 +310,31 @@ export default function EventMatchesView({
               <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr>
                   <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Match ID</th>
-                  <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Collectors</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Extra Field</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Changed From</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Changed To</th>
                   <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Count</th>
                 </tr>
               </thead>
               <tbody>
-                {extrasAgg.length === 0 ? (
+                {extrasAgg.flat.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                    <td colSpan={5} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
                       {loading ? "" : "No rows."}
                     </td>
                   </tr>
                 ) : (
-                  extrasAgg.map((r) => (
-                    <tr key={r.match_id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-3 py-2 font-medium">{r.match_id}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.collectors.size}</td>
+                  extrasAgg.flat.map((r, i) => (
+                    <tr key={i} className={r.first ? "border-t-2 border-slate-200 dark:border-slate-700" : "border-t border-slate-100 dark:border-slate-800"}>
+                      {r.first ? (
+                        <td rowSpan={r.span} className="px-3 py-2 font-medium align-top bg-slate-50/50 dark:bg-slate-800/40">
+                          <div>{r.match_id}</div>
+                          <div className="text-xs text-slate-400 tabular-nums">{r.total.toLocaleString()}</div>
+                        </td>
+                      ) : null}
+                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{r.field}</td>
+                      <td className="px-3 py-2 text-rose-700 dark:text-rose-300 font-medium">{r.from}</td>
+                      <td className="px-3 py-2 text-emerald-700 dark:text-emerald-300 font-medium">{r.to}</td>
                       <td className="px-3 py-2 text-right tabular-nums font-semibold">{r.count.toLocaleString()}</td>
                     </tr>
                   ))

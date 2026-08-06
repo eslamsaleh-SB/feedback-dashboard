@@ -44,6 +44,9 @@ const DATE_COL: Record<string, string> = {
   quality_scores: "upload_month",
   freeze_frame_scores: "upload_month",
   weekly_quality_scores: "week_start_date",
+  // v59: per-event tables (Base / Extras Final from the Google Sheet).
+  base_events: "review_date",
+  extras_events: "review_date",
 };
 
 // Whether the table supports a "module" column filter.
@@ -52,6 +55,8 @@ const MODULE_COL: Record<string, string | null> = {
   quality_scores: "module",
   freeze_frame_scores: null,
   weekly_quality_scores: null,
+  base_events: null,
+  extras_events: null,
 };
 
 export async function POST(req: NextRequest) {

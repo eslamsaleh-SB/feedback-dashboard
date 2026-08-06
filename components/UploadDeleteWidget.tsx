@@ -6,7 +6,9 @@ type Target =
   | "module_totals"
   | "quality_scores"
   | "freeze_frame_scores"
-  | "weekly_quality_scores";
+  | "weekly_quality_scores"
+  | "base_events"
+  | "extras_events";
 
 type Mode = "date" | "month" | "range";
 
