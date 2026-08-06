@@ -5,7 +5,6 @@ import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectComb
 import { createClient } from "@/lib/supabase/client";
 
 type Collector = { hr_code: string; name: string; team: string | null };
-type Source = "base" | "extras";
 
 type BaseRow = {
   hr_code: string | null;
@@ -21,12 +20,9 @@ type ExtrasRow = {
   total_count: number;
 };
 
-// v59: "Top corrected events" view.
-//
-// - Pick source (Base or Extras).
-// - Pick one or more collectors (respects "Only my assigned" toggle).
-// - Aggregated across the selected collectors.
-// - Top-N by total_count, descending.
+// v59: Top Corrected Events — side-by-side Base + Extras. Aggregates by
+// (original → corrected) pair. Shared filters: Team, Collectors, Assigned,
+// Top-N. Sorted by count desc.
 export default function TopEventsView({
   collectors,
 }: {
@@ -34,15 +30,14 @@ export default function TopEventsView({
 }) {
   const supabase = createClient();
 
-  const [source, setSource] = useState<Source>("base");
   const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [topN, setTopN] = useState<string>("10");
-  const [rows, setRows] = useState<(BaseRow | ExtrasRow)[]>([]);
+  const [baseRows, setBaseRows] = useState<BaseRow[]>([]);
+  const [extrasRows, setExtrasRows] = useState<ExtrasRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Assigned toggle.
   const [myAssigned, setMyAssigned] = useState<string[]>([]);
   const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
   const [onlyMine, setOnlyMine] = useState(false);
@@ -69,31 +64,44 @@ export default function TopEventsView({
       .map((c) => ({ value: c.hr_code, label: `${c.hr_code} - ${c.name}` }));
   }, [collectors, teamFilter]);
 
+  const effectiveHrs = useMemo(() => {
+    let set: string[] = collectorFilter;
+    if (teamFilter.length > 0) {
+      const teamSet = new Set(teamFilter);
+      const teamHrs = collectors.filter((c) => c.team && teamSet.has(c.team)).map((c) => c.hr_code);
+      set = set.length === 0 ? teamHrs : set.filter((h) => teamHrs.includes(h));
+    }
+    if (onlyMine && myAssigned.length > 0) {
+      set = set.length === 0 ? myAssigned : set.filter((h) => myAssigned.includes(h));
+    }
+    return set;
+  }, [collectorFilter, teamFilter, onlyMine, myAssigned, collectors]);
+
   async function load() {
     setLoading(true);
     setErr(null);
     try {
-      const table = source === "base" ? "base_events" : "extras_events";
-      // Effective collector set: intersect explicit picks with the "mine"
-      // toggle if that's on. Empty set = query all.
-      let effective: string[] = collectorFilter;
-      if (onlyMine && myAssigned.length > 0) {
-        if (effective.length === 0) effective = myAssigned;
-        else effective = effective.filter((c) => myAssigned.includes(c));
+      let bq = supabase
+        .from("base_events")
+        .select("hr_code, collector_event, reviewer_event, total_count")
+        .limit(50000);
+      let eq = supabase
+        .from("extras_events")
+        .select("hr_code, extra_field, changed_from, changed_to, total_count")
+        .limit(50000);
+      if (effectiveHrs.length > 0) {
+        bq = bq.in("hr_code", effectiveHrs);
+        eq = eq.in("hr_code", effectiveHrs);
       }
-
-      const cols =
-        source === "base"
-          ? "hr_code, collector_event, reviewer_event, total_count"
-          : "hr_code, extra_field, changed_from, changed_to, total_count";
-      let q = supabase.from(table).select(cols);
-      if (effective.length > 0) q = q.in("hr_code", effective);
-      const { data, error } = await q.limit(50000);
-      if (error) throw new Error(error.message);
-      setRows((data ?? []) as any);
+      const [{ data: bd, error: be }, { data: ed, error: ee }] = await Promise.all([bq, eq]);
+      if (be) throw new Error(be.message);
+      if (ee) throw new Error(ee.message);
+      setBaseRows((bd ?? []) as any);
+      setExtrasRows((ed ?? []) as any);
     } catch (e: any) {
       setErr(e.message);
-      setRows([]);
+      setBaseRows([]);
+      setExtrasRows([]);
     } finally {
       setLoading(false);
     }
@@ -102,67 +110,61 @@ export default function TopEventsView({
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, collectorFilter, teamFilter, onlyMine, myAssigned]);
+  }, [effectiveHrs]);
 
-  const aggregated = useMemo(() => {
-    // Bucket by (original → corrected). Base = collector→reviewer event.
-    // Extras = changed_from→changed_to on a given extra_field.
-    const map = new Map<string, { from: string; to: string; field: string; count: number }>();
-    for (const r of rows as any[]) {
-      let from = "";
-      let to = "";
-      let field = "";
-      if (source === "base") {
-        from = (r.collector_event ?? "").toString().trim() || "(blank)";
-        to = (r.reviewer_event ?? "").toString().trim() || "(blank)";
-      } else {
-        from = (r.changed_from ?? "").toString().trim() || "(blank)";
-        to = (r.changed_to ?? "").toString().trim() || "(blank)";
-        field = (r.extra_field ?? "").toString().trim();
-      }
+  const nTop = (() => {
+    const n = parseInt(topN, 10);
+    return Number.isFinite(n) && n > 0 ? n : Infinity;
+  })();
+
+  const baseAgg = useMemo(() => {
+    const map = new Map<string, { from: string; to: string; count: number }>();
+    for (const r of baseRows) {
+      const from = (r.collector_event ?? "").trim() || "(blank)";
+      const to = (r.reviewer_event ?? "").trim() || "(blank)";
+      const key = `${from}||${to}`;
+      const cur = map.get(key);
+      const add = Number(r.total_count ?? 0);
+      if (cur) cur.count += add;
+      else map.set(key, { from, to, count: add });
+    }
+    const arr = Array.from(map.values()).sort((a, b) => b.count - a.count);
+    return arr.slice(0, nTop);
+  }, [baseRows, nTop]);
+
+  const extrasAgg = useMemo(() => {
+    const map = new Map<string, { field: string; from: string; to: string; count: number }>();
+    for (const r of extrasRows) {
+      const field = (r.extra_field ?? "").trim() || "—";
+      const from = (r.changed_from ?? "").trim() || "(blank)";
+      const to = (r.changed_to ?? "").trim() || "(blank)";
       const key = `${field}||${from}||${to}`;
       const cur = map.get(key);
       const add = Number(r.total_count ?? 0);
       if (cur) cur.count += add;
-      else map.set(key, { from, to, field, count: add });
+      else map.set(key, { field, from, to, count: add });
     }
     const arr = Array.from(map.values()).sort((a, b) => b.count - a.count);
-    const n = parseInt(topN, 10);
-    return Number.isFinite(n) && n > 0 ? arr.slice(0, n) : arr;
-  }, [rows, topN, source]);
+    return arr.slice(0, nTop);
+  }, [extrasRows, nTop]);
 
-  const total = aggregated.reduce((s, r) => s + r.count, 0);
+  const baseTotal = baseAgg.reduce((s, r) => s + r.count, 0);
+  const extrasTotal = extrasAgg.reduce((s, r) => s + r.count, 0);
+
   const inputCls =
     "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
-
-  const activeCollectorLabel = collectorFilter.length === 1
-    ? collectors.find((c) => c.hr_code === collectorFilter[0])?.name ?? collectorFilter[0]
-    : collectorFilter.length > 1
-    ? `${collectorFilter.length} collectors`
-    : "all collectors";
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Top Corrected Events</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          Ranks the events that were corrected most for the selected
-          collectors. Choose Base or Extras.
+          Original → corrected pairs ranked by frequency. Base events on the
+          left, Extras on the right. Filters apply to both.
         </p>
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Source</label>
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value as Source)}
-            className={inputCls}
-          >
-            <option value="base">Base</option>
-            <option value="extras">Extras</option>
-          </select>
-        </div>
         <div className="w-52">
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Teams</label>
           <MultiSelectCombobox
@@ -205,7 +207,7 @@ export default function TopEventsView({
                 onChange={(e) => setOnlyMine(e.target.checked)}
                 className="h-4 w-4"
               />
-              <span>Only my assigned ({myAssigned.length})</span>
+              <span>Only my assigned active collectors ({myAssigned.length})</span>
             </label>
           </div>
         )}
@@ -222,50 +224,84 @@ export default function TopEventsView({
         </div>
       </div>
 
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        {loading ? "Loading…" : `${aggregated.length} event(s) — ${total.toLocaleString()} total corrections — ${activeCollectorLabel}`}
-      </p>
       {err && <p className="text-sm text-red-600">{err}</p>}
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-800">
-            <tr>
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">#</th>
-              {source === "extras" && (
-                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Extra Field</th>
-              )}
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">
-                {source === "base" ? "Collector Event (original)" : "Changed From (original)"}
-              </th>
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">
-                {source === "base" ? "Reviewer Event (corrected)" : "Changed To (corrected)"}
-              </th>
-              <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Corrections</th>
-            </tr>
-          </thead>
-          <tbody>
-            {aggregated.length === 0 ? (
-              <tr>
-                <td colSpan={source === "extras" ? 5 : 4} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
-                  {loading ? "" : "No events match — try uploading Base/Extras data first."}
-                </td>
-              </tr>
-            ) : (
-              aggregated.map((r, i) => (
-                <tr key={`${r.field}|${r.from}|${r.to}|${i}`} className="border-t border-slate-100 dark:border-slate-800">
-                  <td className="px-4 py-2 text-slate-400 dark:text-slate-500 tabular-nums">{i + 1}</td>
-                  {source === "extras" && (
-                    <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{r.field || "—"}</td>
-                  )}
-                  <td className="px-4 py-2 font-medium text-rose-700 dark:text-rose-300">{r.from}</td>
-                  <td className="px-4 py-2 font-medium text-emerald-700 dark:text-emerald-300">{r.to}</td>
-                  <td className="px-4 py-2 text-right tabular-nums font-semibold">{r.count.toLocaleString()}</td>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
+            <h2 className="font-semibold">Events (Base)</h2>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {loading ? "…" : `${baseAgg.length} pair(s) · ${baseTotal.toLocaleString()} total`}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800">
+                <tr>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Collector Event</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Reviewer Event</th>
+                  <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Count</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {baseAgg.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                      {loading ? "" : "No rows."}
+                    </td>
+                  </tr>
+                ) : (
+                  baseAgg.map((r, i) => (
+                    <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="px-3 py-2 text-rose-700 dark:text-rose-300 font-medium">{r.from}</td>
+                      <td className="px-3 py-2 text-emerald-700 dark:text-emerald-300 font-medium">{r.to}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{r.count.toLocaleString()}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
+            <h2 className="font-semibold">Extras</h2>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {loading ? "…" : `${extrasAgg.length} pair(s) · ${extrasTotal.toLocaleString()} total`}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800">
+                <tr>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Extra Field</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Changed From</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Changed To</th>
+                  <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {extrasAgg.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                      {loading ? "" : "No rows."}
+                    </td>
+                  </tr>
+                ) : (
+                  extrasAgg.map((r, i) => (
+                    <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{r.field}</td>
+                      <td className="px-3 py-2 text-rose-700 dark:text-rose-300 font-medium">{r.from}</td>
+                      <td className="px-3 py-2 text-emerald-700 dark:text-emerald-300 font-medium">{r.to}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{r.count.toLocaleString()}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

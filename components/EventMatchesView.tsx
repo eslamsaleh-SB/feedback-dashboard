@@ -7,21 +7,18 @@ import { createClient } from "@/lib/supabase/client";
 type Collector = { hr_code: string; name: string; team: string | null };
 
 type BaseRow = {
+  match_id: string | null;
   hr_code: string | null;
-  collector_event: string | null;
-  reviewer_event: string | null;
   total_count: number;
 };
 type ExtrasRow = {
+  match_id: string | null;
   hr_code: string | null;
-  extra_field: string | null;
-  changed_from: string | null;
-  changed_to: string | null;
   total_count: number;
 };
 
-// v59: Event Matches page — side-by-side Base (Events) + Extras tables.
-// Both share the same filters: Assigned, Team, Collectors. Sorted by count.
+// v59: Event Matches — same layout as Top Corrected Events but rows are
+// grouped by Match ID (one row per match), sorted by total corrections desc.
 export default function EventMatchesView({
   collectors,
 }: {
@@ -62,7 +59,6 @@ export default function EventMatchesView({
       .map((c) => ({ value: c.hr_code, label: `${c.hr_code} - ${c.name}` }));
   }, [collectors, teamFilter]);
 
-  // Effective hr_code set: intersect Collectors, Team, Assigned toggle.
   const effectiveHrs = useMemo(() => {
     let set: string[] = collectorFilter;
     if (teamFilter.length > 0) {
@@ -82,11 +78,11 @@ export default function EventMatchesView({
     try {
       let bq = supabase
         .from("base_events")
-        .select("hr_code, collector_event, reviewer_event, total_count")
+        .select("match_id, hr_code, total_count")
         .limit(50000);
       let eq = supabase
         .from("extras_events")
-        .select("hr_code, extra_field, changed_from, changed_to, total_count")
+        .select("match_id, hr_code, total_count")
         .limit(50000);
       if (effectiveHrs.length > 0) {
         bq = bq.in("hr_code", effectiveHrs);
@@ -111,35 +107,26 @@ export default function EventMatchesView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveHrs]);
 
-  // Aggregate rows to (from → to) pairs, sorted by count desc.
-  const baseAgg = useMemo(() => {
-    const map = new Map<string, { from: string; to: string; count: number }>();
-    for (const r of baseRows) {
-      const from = (r.collector_event ?? "").trim() || "(blank)";
-      const to = (r.reviewer_event ?? "").trim() || "(blank)";
-      const key = `${from}||${to}`;
+  // Group by match_id, count distinct collectors + total corrections.
+  function groupByMatch(rows: { match_id: string | null; hr_code: string | null; total_count: number }[]) {
+    const map = new Map<string, { match_id: string; count: number; collectors: Set<string> }>();
+    for (const r of rows) {
+      const key = (r.match_id ?? "").trim() || "(no match id)";
       const cur = map.get(key);
-      const add = Number(r.total_count ?? 0);
-      if (cur) cur.count += add;
-      else map.set(key, { from, to, count: add });
+      if (cur) {
+        cur.count += Number(r.total_count ?? 0);
+        if (r.hr_code) cur.collectors.add(r.hr_code);
+      } else {
+        const set = new Set<string>();
+        if (r.hr_code) set.add(r.hr_code);
+        map.set(key, { match_id: key, count: Number(r.total_count ?? 0), collectors: set });
+      }
     }
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
-  }, [baseRows]);
+  }
 
-  const extrasAgg = useMemo(() => {
-    const map = new Map<string, { field: string; from: string; to: string; count: number }>();
-    for (const r of extrasRows) {
-      const field = (r.extra_field ?? "").trim() || "—";
-      const from = (r.changed_from ?? "").trim() || "(blank)";
-      const to = (r.changed_to ?? "").trim() || "(blank)";
-      const key = `${field}||${from}||${to}`;
-      const cur = map.get(key);
-      const add = Number(r.total_count ?? 0);
-      if (cur) cur.count += add;
-      else map.set(key, { field, from, to, count: add });
-    }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count);
-  }, [extrasRows]);
+  const baseAgg = useMemo(() => groupByMatch(baseRows), [baseRows]);
+  const extrasAgg = useMemo(() => groupByMatch(extrasRows), [extrasRows]);
 
   const baseTotal = baseAgg.reduce((s, r) => s + r.count, 0);
   const extrasTotal = extrasAgg.reduce((s, r) => s + r.count, 0);
@@ -149,8 +136,8 @@ export default function EventMatchesView({
       <div>
         <h1 className="text-2xl font-bold">Event Matches</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          Original → corrected pairs. Base events on the left, Extras on the
-          right. Filters apply to both.
+          Corrections grouped by Match ID. Base events on the left, Extras on
+          the right. Filters apply to both.
         </p>
       </div>
 
@@ -206,20 +193,19 @@ export default function EventMatchesView({
       {err && <p className="text-sm text-red-600">{err}</p>}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Base / Events */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
             <h2 className="font-semibold">Events (Base)</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {loading ? "…" : `${baseAgg.length} pair(s) · ${baseTotal.toLocaleString()} total`}
+              {loading ? "…" : `${baseAgg.length} match(es) · ${baseTotal.toLocaleString()} corrections`}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr>
-                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Collector Event</th>
-                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Reviewer Event</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Match ID</th>
+                  <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Collectors</th>
                   <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Count</th>
                 </tr>
               </thead>
@@ -231,10 +217,10 @@ export default function EventMatchesView({
                     </td>
                   </tr>
                 ) : (
-                  baseAgg.map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-3 py-2 text-rose-700 dark:text-rose-300 font-medium">{r.from}</td>
-                      <td className="px-3 py-2 text-emerald-700 dark:text-emerald-300 font-medium">{r.to}</td>
+                  baseAgg.map((r) => (
+                    <tr key={r.match_id} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-medium">{r.match_id}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.collectors.size}</td>
                       <td className="px-3 py-2 text-right tabular-nums font-semibold">{r.count.toLocaleString()}</td>
                     </tr>
                   ))
@@ -244,37 +230,34 @@ export default function EventMatchesView({
           </div>
         </div>
 
-        {/* Extras */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
             <h2 className="font-semibold">Extras</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {loading ? "…" : `${extrasAgg.length} pair(s) · ${extrasTotal.toLocaleString()} total`}
+              {loading ? "…" : `${extrasAgg.length} match(es) · ${extrasTotal.toLocaleString()} corrections`}
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 dark:bg-slate-800">
                 <tr>
-                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Extra Field</th>
-                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Changed From</th>
-                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Changed To</th>
+                  <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Match ID</th>
+                  <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Collectors</th>
                   <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-3 py-2">Count</th>
                 </tr>
               </thead>
               <tbody>
                 {extrasAgg.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                    <td colSpan={3} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
                       {loading ? "" : "No rows."}
                     </td>
                   </tr>
                 ) : (
-                  extrasAgg.map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{r.field}</td>
-                      <td className="px-3 py-2 text-rose-700 dark:text-rose-300 font-medium">{r.from}</td>
-                      <td className="px-3 py-2 text-emerald-700 dark:text-emerald-300 font-medium">{r.to}</td>
+                  extrasAgg.map((r) => (
+                    <tr key={r.match_id} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="px-3 py-2 font-medium">{r.match_id}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.collectors.size}</td>
                       <td className="px-3 py-2 text-right tabular-nums font-semibold">{r.count.toLocaleString()}</td>
                     </tr>
                   ))
