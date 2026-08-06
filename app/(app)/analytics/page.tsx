@@ -22,6 +22,7 @@ function emptyCounts(): Record<ModuleValue, number> {
     location: 0,
     impact: 0,
     extras: 0,
+    pressure: 0,
     freeze_frame: 0,
   };
 }
@@ -33,6 +34,7 @@ const numCounts = (r: any): Record<ModuleValue, number> => ({
   location: Number(r.location),
   impact: Number(r.impact),
   extras: Number(r.extras),
+  pressure: Number(r.pressure ?? 0),
   freeze_frame: Number(r.freeze_frame),
 });
 

@@ -26,7 +26,7 @@ export default async function MyMatchesPage({ searchParams }: { searchParams: { 
 
   const numCounts = (r: any): Record<ModuleValue, number> => ({
     players: Number(r.players), event: Number(r.event), formation_tactical: Number(r.formation_tactical),
-    location: Number(r.location), impact: Number(r.impact), extras: Number(r.extras), freeze_frame: Number(r.freeze_frame),
+    location: Number(r.location), impact: Number(r.impact), extras: Number(r.extras), pressure: Number(r.pressure ?? 0), freeze_frame: Number(r.freeze_frame),
   });
 
   const { data: usersDirRaw } = await supabase.from("users").select("hr_code, first_name, last_name, squad");

@@ -58,6 +58,9 @@ function buildNav(role: AppRole): NavEntry[] {
         { href: "/quality-score", label: "Quality Score" },
         { href: "/weekly-quality-score", label: "Weekly Quality Score" },
         { href: "/performance-thresholds", label: "Performance Thresholds" },
+        // v59: per-event views built on base_events / extras_events.
+        { href: "/top-events", label: "Top Corrected Events" },
+        { href: "/event-matches", label: "Event Matches" },
       ],
     },
   ];
@@ -66,6 +69,8 @@ function buildNav(role: AppRole): NavEntry[] {
   // v59: Only Module Data is Admin-only per product request. Send Report,
   // Presentations, and Quizzes stay available to Reviewer.
   if (role === "Admin") uploadItems.push({ href: "/module-upload", label: "Module Data" });
+  // v59: Base/Extras Final per-event upload (Admin-only).
+  if (role === "Admin") uploadItems.push({ href: "/events-upload", label: "Event Details (Base/Extras)" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/quality-upload", label: "Quality Score Upload" });
   if (role === "Admin" || role === "QualityLeader") uploadItems.push({ href: "/weekly-quality-upload", label: "Weekly Quality Score Upload" });
   if (role === "Admin" || role === "Reviewer") uploadItems.push({ href: "/upload", label: "Send Report" });

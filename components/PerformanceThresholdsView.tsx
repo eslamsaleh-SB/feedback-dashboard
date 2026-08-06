@@ -13,6 +13,7 @@ type ModuleErrorsRow = {
   location: number;
   impact: number;
   extras: number;
+  pressure: number;
   freeze_frame: number;
   total: number;
   matches: number;
@@ -36,6 +37,7 @@ const MODULE_KEYS = [
   "location",
   "impact",
   "extras",
+  "pressure",
   "freeze_frame",
 ] as const;
 type ModuleKey = (typeof MODULE_KEYS)[number];
@@ -47,6 +49,7 @@ const MODULE_LABEL: Record<ModuleKey, string> = {
   location: "Location",
   impact: "Impact",
   extras: "Extras",
+  pressure: "Pressure",
   freeze_frame: "Freeze Frame",
 };
 

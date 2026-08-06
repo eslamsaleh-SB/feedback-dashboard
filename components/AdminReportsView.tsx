@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import Combobox from "@/components/Combobox";
@@ -53,6 +53,19 @@ export default function AdminReportsView({
   const supabase = createClient();
   const [sessions, setSessions] = useState(initialSessions);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // v59: Assigned Active Collectors toggle.
+  const [myAssigned, setMyAssigned] = useState<string[]>([]);
+  const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(false);
+  useEffect(() => {
+    fetch("/api/my-assigned", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(({ hr_codes }: { hr_codes?: string[] }) => {
+        if (Array.isArray(hr_codes)) setMyAssigned(hr_codes);
+      })
+      .catch(() => {})
+      .finally(() => setAssignmentsLoaded(true));
+  }, []);
   const [showVideos, setShowVideos] = useState<Record<string, boolean>>({});
   const [noteFilter, setNoteFilter] = useState("");
   const [ackFilter, setAckFilter] = useState<AckFilter>("all");
@@ -145,6 +158,10 @@ export default function AdminReportsView({
       if (collectorFilter !== "all" && s.hr_code !== collectorFilter) return false;
       if (ackFilter === "acknowledged" && !s.acknowledged) return false;
       if (ackFilter === "not_acknowledged" && s.acknowledged) return false;
+      // v59: reviewer's "only mine" gate.
+      if (onlyMine && myAssigned.length > 0) {
+        if (!s.hr_code || !myAssigned.includes(s.hr_code)) return false;
+      }
       if (search) {
         const q = search.toLowerCase();
         const hay =
@@ -157,7 +174,7 @@ export default function AdminReportsView({
       }
       return true;
     });
-  }, [sessions, collectorFilter, ackFilter, search]);
+  }, [sessions, collectorFilter, ackFilter, search, onlyMine, myAssigned]);
 
   const cards = [
     { label: "Total reports", value: stats.total, color: "text-slate-800 dark:text-slate-100" },
@@ -222,6 +239,26 @@ export default function AdminReportsView({
             searchPlaceholder="Search by code or name..."
           />
         </div>
+        {assignmentsLoaded && (
+          <div>
+            <label
+              className={`flex items-center gap-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 ${
+                myAssigned.length === 0
+                  ? "text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                  : "text-slate-600 dark:text-slate-300 cursor-pointer"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={onlyMine}
+                disabled={myAssigned.length === 0}
+                onChange={(e) => setOnlyMine(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span>Only my assigned ({myAssigned.length})</span>
+            </label>
+          </div>
+        )}
         <div>
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Acknowledgement</label>
           <select

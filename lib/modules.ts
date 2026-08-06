@@ -8,6 +8,8 @@ export const MODULES = [
   { value: "location", label: "Location" },
   { value: "impact", label: "Impact" },
   { value: "extras", label: "Extras" },
+  // v59: Pressure added alongside Players + Event per product request.
+  { value: "pressure", label: "Pressure" },
   { value: "freeze_frame", label: "Freeze Frame" },
 ] as const;
 
@@ -23,6 +25,7 @@ export const CARD_ORDER: ModuleValue[] = [
   "extras",
   "location",
   "formation_tactical",
+  "pressure",
   "freeze_frame",
   "impact",
 ];

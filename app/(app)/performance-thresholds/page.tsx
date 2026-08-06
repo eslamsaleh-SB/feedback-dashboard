@@ -113,6 +113,7 @@ export default async function PerformanceThresholdsPage({
         location: Number(r.location ?? 0),
         impact: Number(r.impact ?? 0),
         extras: Number(r.extras ?? 0),
+        pressure: Number(r.pressure ?? 0),
         freeze_frame: Number(r.freeze_frame ?? 0),
         total: Number(r.total ?? 0),
         matches: Number(r.matches ?? 0),

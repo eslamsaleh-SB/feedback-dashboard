@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
@@ -49,6 +49,20 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [collectorFilter, setCollectorFilter] = useState<string[]>([]);
+
+  // v59: reviewer's Assigned Collectors toggle.
+  const [myAssigned, setMyAssigned] = useState<string[]>([]);
+  const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(false);
+  useEffect(() => {
+    fetch("/api/my-assigned", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(({ hr_codes }: { hr_codes?: string[] }) => {
+        if (Array.isArray(hr_codes)) setMyAssigned(hr_codes);
+      })
+      .catch(() => {})
+      .finally(() => setAssignmentsLoaded(true));
+  }, []);
 
   // Default range: Jan 1 of the current year through today.
   const now = new Date();
@@ -122,6 +136,8 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
           }
           if (teamSet.size > 0 && (!a.team || !teamSet.has(a.team))) return false;
           if (collectorSet.size > 0 && !collectorSet.has(a.hr_code)) return false;
+          // v59: reviewer's "only mine" gate.
+          if (onlyMine && myAssigned.length > 0 && !myAssigned.includes(a.hr_code)) return false;
           return true;
         });
         return { ...s, attendees };
@@ -132,7 +148,7 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
         if (toDate && s.session_date > toDate) return false;
         return s.attendees.length > 0;
       });
-  }, [sessions, statusSet, teamSet, collectorSet, fromDate, toDate]);
+  }, [sessions, statusSet, teamSet, collectorSet, fromDate, toDate, onlyMine, myAssigned]);
 
   const stats = useMemo(() => {
     let total = 0, attended = 0, late = 0, absent = 0, cancelled = 0, notMarked = 0;
@@ -256,6 +272,27 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
             placeholder="All collectors"
           />
         </div>
+
+        {assignmentsLoaded && (
+          <div className="flex items-end">
+            <label
+              className={`flex items-center gap-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 ${
+                myAssigned.length === 0
+                  ? "text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                  : "text-slate-600 dark:text-slate-300 cursor-pointer"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={onlyMine}
+                disabled={myAssigned.length === 0}
+                onChange={(e) => setOnlyMine(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span>Only my assigned ({myAssigned.length})</span>
+            </label>
+          </div>
+        )}
 
         {anyFilter && (
           <div className="flex items-end">
