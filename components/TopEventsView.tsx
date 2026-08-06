@@ -9,12 +9,15 @@ type Source = "base" | "extras";
 
 type BaseRow = {
   hr_code: string | null;
-  event_name: string | null;
+  collector_event: string | null;
+  reviewer_event: string | null;
   total_count: number;
 };
 type ExtrasRow = {
   hr_code: string | null;
-  event_name: string | null;
+  extra_field: string | null;
+  changed_from: string | null;
+  changed_to: string | null;
   total_count: number;
 };
 
@@ -79,7 +82,11 @@ export default function TopEventsView({
         else effective = effective.filter((c) => myAssigned.includes(c));
       }
 
-      let q = supabase.from(table).select("hr_code, event_name, total_count");
+      const cols =
+        source === "base"
+          ? "hr_code, collector_event, reviewer_event, total_count"
+          : "hr_code, extra_field, changed_from, changed_to, total_count";
+      let q = supabase.from(table).select(cols);
       if (effective.length > 0) q = q.in("hr_code", effective);
       const { data, error } = await q.limit(50000);
       if (error) throw new Error(error.message);
@@ -98,19 +105,31 @@ export default function TopEventsView({
   }, [source, collectorFilter, teamFilter, onlyMine, myAssigned]);
 
   const aggregated = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of rows) {
-      const key = (r.event_name ?? "").trim() || "(no event)";
-      map.set(key, (map.get(key) ?? 0) + Number(r.total_count ?? 0));
+    // Bucket by (original → corrected). Base = collector→reviewer event.
+    // Extras = changed_from→changed_to on a given extra_field.
+    const map = new Map<string, { from: string; to: string; field: string; count: number }>();
+    for (const r of rows as any[]) {
+      let from = "";
+      let to = "";
+      let field = "";
+      if (source === "base") {
+        from = (r.collector_event ?? "").toString().trim() || "(blank)";
+        to = (r.reviewer_event ?? "").toString().trim() || "(blank)";
+      } else {
+        from = (r.changed_from ?? "").toString().trim() || "(blank)";
+        to = (r.changed_to ?? "").toString().trim() || "(blank)";
+        field = (r.extra_field ?? "").toString().trim();
+      }
+      const key = `${field}||${from}||${to}`;
+      const cur = map.get(key);
+      const add = Number(r.total_count ?? 0);
+      if (cur) cur.count += add;
+      else map.set(key, { from, to, field, count: add });
     }
-    const arr = Array.from(map.entries()).map(([event_name, count]) => ({
-      event_name,
-      count,
-    }));
-    arr.sort((a, b) => b.count - a.count);
+    const arr = Array.from(map.values()).sort((a, b) => b.count - a.count);
     const n = parseInt(topN, 10);
     return Number.isFinite(n) && n > 0 ? arr.slice(0, n) : arr;
-  }, [rows, topN]);
+  }, [rows, topN, source]);
 
   const total = aggregated.reduce((s, r) => s + r.count, 0);
   const inputCls =
@@ -213,22 +232,34 @@ export default function TopEventsView({
           <thead className="bg-slate-50 dark:bg-slate-800">
             <tr>
               <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">#</th>
-              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Event</th>
+              {source === "extras" && (
+                <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Extra Field</th>
+              )}
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">
+                {source === "base" ? "Collector Event (original)" : "Changed From (original)"}
+              </th>
+              <th className="text-left font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">
+                {source === "base" ? "Reviewer Event (corrected)" : "Changed To (corrected)"}
+              </th>
               <th className="text-right font-medium text-slate-500 dark:text-slate-400 px-4 py-2.5">Corrections</th>
             </tr>
           </thead>
           <tbody>
             {aggregated.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                <td colSpan={source === "extras" ? 5 : 4} className="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
                   {loading ? "" : "No events match — try uploading Base/Extras data first."}
                 </td>
               </tr>
             ) : (
               aggregated.map((r, i) => (
-                <tr key={r.event_name + i} className="border-t border-slate-100 dark:border-slate-800">
+                <tr key={`${r.field}|${r.from}|${r.to}|${i}`} className="border-t border-slate-100 dark:border-slate-800">
                   <td className="px-4 py-2 text-slate-400 dark:text-slate-500 tabular-nums">{i + 1}</td>
-                  <td className="px-4 py-2 font-medium">{r.event_name}</td>
+                  {source === "extras" && (
+                    <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{r.field || "—"}</td>
+                  )}
+                  <td className="px-4 py-2 font-medium text-rose-700 dark:text-rose-300">{r.from}</td>
+                  <td className="px-4 py-2 font-medium text-emerald-700 dark:text-emerald-300">{r.to}</td>
                   <td className="px-4 py-2 text-right tabular-nums font-semibold">{r.count.toLocaleString()}</td>
                 </tr>
               ))
