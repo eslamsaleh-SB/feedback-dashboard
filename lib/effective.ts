@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type AppRole =
-  | "Admin" | "Reviewer" | "Viewer" | "TeamLeader" | "Supervisor" | "QualityLeader";
+  | "Admin" | "Reviewer" | "Viewer" | "TeamLeader" | "Supervisor" | "QualityLeader" | "OCTeamLeader";
 
 export type EffProfile = {
   id: string;
@@ -79,4 +79,21 @@ export async function getEffective(
 // True while an Admin is previewing as someone else — used to block writes.
 export function isViewingAs(): boolean {
   return !!cookies().get(VIEW_AS_COOKIE)?.value;
+}
+
+// v59: OC Team Leader scoping. Returns the set of hr_codes an OCTeamLeader
+// is allowed to see (all collectors on their squad). For any other role,
+// returns null meaning "no team-scope restriction applies here".
+export async function getTeamHrCodes(
+  supabase: SupabaseClient,
+  profile: EffProfile | null | undefined
+): Promise<string[] | null> {
+  if (!profile || profile.role !== "OCTeamLeader") return null;
+  if (!profile.team) return [];
+  const { data } = await supabase
+    .from("users")
+    .select("hr_code")
+    .eq("squad", profile.team)
+    .not("hr_code", "is", null);
+  return (data ?? []).map((r: any) => r.hr_code as string);
 }

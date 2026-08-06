@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getEffective } from "@/lib/effective";
+import { getEffective, getTeamHrCodes } from "@/lib/effective";
 import QualityScoreDashboard from "@/components/QualityScoreDashboard";
 import type { AppRole } from "@/components/Sidebar";
 
@@ -72,6 +72,8 @@ export default async function QualityScorePage({
   // filtered in the QualityScoreDashboard component so users can pick
   // multiple teams/collectors at once.
   const collectorParam = role === "Viewer" ? myHr : null;
+  // v59: OCTL restricts to whole squad instead of a single hr_code.
+  const octlHrs = role === "OCTeamLeader" ? (await getTeamHrCodes(supabase, profile) ?? []) : null;
 
   const { data: usersDirRaw } = await supabase
     .from("users")
@@ -89,6 +91,7 @@ export default async function QualityScorePage({
   const applyFilters = (q: any) => {
     q = q.gte("upload_month", monthFrom).lte("upload_month", monthTo).order("upload_month", { ascending: true });
     if (collectorParam) q = q.eq("hr_code", collectorParam);
+    if (octlHrs) q = octlHrs.length ? q.in("hr_code", octlHrs) : q.eq("hr_code", "__none__");
     return q;
   };
 

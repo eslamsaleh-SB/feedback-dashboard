@@ -81,7 +81,7 @@ export default async function DashboardPage({
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
   const role = (profile?.role ?? "Viewer") as AppRole;
-  if (role === "Viewer") redirect("/analytics");
+  if (role === "Viewer" || role === "OCTeamLeader") redirect("/analytics");
 
   const def = defaultRange();
   const from = isoOk(searchParams.from) ?? def.from;

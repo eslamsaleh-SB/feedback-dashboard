@@ -8,6 +8,7 @@ type AppRole =
   | "Reviewer"
   | "Viewer"
   | "TeamLeader"
+  | "OCTeamLeader"
   | "Supervisor"
   | "QualityLeader";
 
@@ -32,6 +33,7 @@ const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
   { value: "TeamLeader", label: "Team Leader" },
   { value: "Supervisor", label: "Supervisor" },
   { value: "QualityLeader", label: "Quality Leader" },
+  { value: "OCTeamLeader", label: "OC Team Leader" },
 ];
 const roleLabel = (r: AppRole) => ROLE_OPTIONS.find((o) => o.value === r)?.label ?? r;
 const NO_TEAM = "__noteam__";

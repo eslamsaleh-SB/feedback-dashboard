@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getEffective } from "@/lib/effective";
+import { getEffective, getTeamHrCodes } from "@/lib/effective";
 import CollectorDashboard from "@/components/CollectorDashboard";
 import CollectorsPerformance from "@/components/CollectorsPerformance";
 import {
@@ -50,7 +50,7 @@ export default async function AnalyticsPage({
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  const role = (profile?.role ?? "Viewer") as "Admin" | "Reviewer" | "Viewer";
+  const role = (profile?.role ?? "Viewer") as "Admin" | "Reviewer" | "Viewer" | "OCTeamLeader";
 
   const from = isoOk(searchParams.from);
   const to = isoOk(searchParams.to);
@@ -77,11 +77,19 @@ export default async function AnalyticsPage({
     });
   });
 
-  // =================== COLLECTOR (Viewer) ===================
-  if (role === "Viewer") {
-    const isLinked = !!profile?.hr_code;
+  // =================== COLLECTOR (Viewer) + OC TEAM LEADER ===================
+  if (role === "Viewer" || role === "OCTeamLeader") {
+    // v59: OCTeamLeader sees team-wide, Viewer sees just own hr_code.
+    const teamHrs = await getTeamHrCodes(supabase, profile);
+    const scopeHrs = role === "OCTeamLeader"
+      ? (teamHrs ?? [])
+      : (profile?.hr_code ? [profile.hr_code] : []);
+    const scopeSet = new Set(scopeHrs.map((h) => h.toLowerCase()));
+    const isLinked = role === "OCTeamLeader" ? scopeHrs.length > 0 : !!profile?.hr_code;
     const meInfo = profile?.hr_code ? byHr.get(profile.hr_code) : undefined;
-    const myName = meInfo?.name ?? profile?.hr_code ?? null;
+    const myName = role === "OCTeamLeader"
+      ? (profile?.team ? `${profile.team} (team)` : "Team")
+      : (meInfo?.name ?? profile?.hr_code ?? null);
 
     const { data: partRows } = await supabase.rpc("match_part_summary_fast", {
       p_from: from,
@@ -89,7 +97,10 @@ export default async function AnalyticsPage({
       p_collector: null,
       p_limit: 5000,
     });
-    const parts: PartSummary[] = (partRows ?? []).map((r: any) => ({
+    const scopedPartRows = (partRows ?? []).filter((r: any) =>
+      r.hr_code && scopeSet.has(String(r.hr_code).toLowerCase())
+    );
+    const parts: PartSummary[] = scopedPartRows.map((r: any) => ({
       matchid: r.matchid,
       partid: r.partid,
       hr_code: r.hr_code,
@@ -101,10 +112,7 @@ export default async function AnalyticsPage({
 
     // Compute module totals from parts data (already filtered to this collector via RLS)
     const moduleTotals = emptyCounts();
-    const myParts = (partRows ?? []).filter((r: any) =>
-      profile?.hr_code && r.hr_code &&
-      r.hr_code.toLowerCase() === profile.hr_code.toLowerCase()
-    );
+    const myParts = scopedPartRows;
     for (const r of myParts) {
       const c = numCounts(r);
       (Object.keys(c) as (keyof typeof c)[]).forEach((k) => {
@@ -118,18 +126,21 @@ export default async function AnalyticsPage({
     let rq = supabase
       .from("match_sessions")
       .select("id, match_name, review_date, overall_notes")
-      .eq("hr_code", profile?.hr_code ?? "")
       .order("review_date", { ascending: false });
+    if (scopeHrs.length > 0) rq = rq.in("hr_code", scopeHrs);
+    else rq = rq.eq("hr_code", "__none__");
     if (from) rq = rq.gte("review_date", from);
     if (to) rq = rq.lte("review_date", to);
     const { data: reportRows } = await rq;
 
     // Sessions for this collector: read attendees joined to reservations
     // (feedback_meetings was retired in v41).
-    const { data: feRows } = await supabase
+    const feBase = supabase
       .from("feedback_attendees")
-      .select("id, comment, feedback_reservations(session_date, mode)")
-      .eq("hr_code", profile?.hr_code ?? "");
+      .select("id, comment, feedback_reservations(session_date, mode)");
+    const { data: feRows } = scopeHrs.length
+      ? await feBase.in("hr_code", scopeHrs)
+      : { data: [] };
 
     const fsRows = (feRows ?? [])
       .map((a: any) => ({
@@ -148,8 +159,8 @@ export default async function AnalyticsPage({
     return (
       <CollectorDashboard
         myName={myName}
-        myHr={profile?.hr_code ?? null}
-        myTeam={meInfo?.team ?? profile?.team ?? null}
+        myHr={role === "OCTeamLeader" ? null : (profile?.hr_code ?? null)}
+        myTeam={role === "OCTeamLeader" ? (profile?.team ?? null) : (meInfo?.team ?? profile?.team ?? null)}
         isLinked={isLinked}
         from={from ?? ""}
         to={to ?? ""}

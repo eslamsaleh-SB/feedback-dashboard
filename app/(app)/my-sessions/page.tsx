@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getEffective } from "@/lib/effective";
+import { getEffective, getTeamHrCodes } from "@/lib/effective";
 import { redirect } from "next/navigation";
 import MySessionsView from "@/components/MySessionsView";
 
@@ -14,18 +14,19 @@ export default async function MySessionsPage() {
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  if (profile?.role !== "Viewer") redirect("/admin-sessions");
+  if (profile?.role !== "Viewer" && profile?.role !== "OCTeamLeader") redirect("/admin-sessions");
 
   const hr = profile?.hr_code ?? "";
+  const teamHrs = await getTeamHrCodes(supabase, profile);
+  const scopeHrs = profile.role === "OCTeamLeader" ? (teamHrs ?? []) : (hr ? [hr] : []);
+  if (scopeHrs.length === 0) return <MySessionsView sessions={[]} />;
 
-  // Read the real source (attendees + reservations) instead of feedback_meetings,
-  // so status always matches what the admin set on Feedback Progress.
   const { data: rows } = await supabase
     .from("feedback_attendees")
     .select(
       "id, attendance, comment, feedback_reservations(session_date, session_time, mode, location, meet_link)"
     )
-    .eq("hr_code", hr);
+    .in("hr_code", scopeHrs);
 
   const sessions = (rows ?? [])
     .map((a: any) => {

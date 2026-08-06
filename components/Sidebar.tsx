@@ -12,7 +12,8 @@ export type AppRole =
   | "Viewer"
   | "TeamLeader"
   | "Supervisor"
-  | "QualityLeader";
+  | "QualityLeader"
+  | "OCTeamLeader";
 
 const roleLabel = (role: AppRole): string => {
   const map: Record<AppRole, string> = {
@@ -22,6 +23,7 @@ const roleLabel = (role: AppRole): string => {
     TeamLeader: "Team Leader",
     Supervisor: "Supervisor",
     QualityLeader: "Quality Leader",
+    OCTeamLeader: "OC Team Leader",
   };
   return map[role] ?? role;
 };
@@ -32,13 +34,15 @@ type NavEntry =
   | { type: "group"; key: string; label: string; items: NavItem[] };
 
 function buildNav(role: AppRole): NavEntry[] {
-  if (role === "Viewer") {
+  // v59: OC Team Leader gets the same nav as Collector (Viewer). Pages
+  // widen the hr_code scope from self to whole squad via getTeamHrCodes().
+  if (role === "Viewer" || role === "OCTeamLeader") {
     return [
-      { type: "link", href: "/analytics", label: "Home" },
-      { type: "link", href: "/my-reports", label: "My Reports" },
-      { type: "link", href: "/my-sessions", label: "My Sessions" },
-      { type: "link", href: "/my-matches", label: "My Match Details" },
-      { type: "link", href: "/my-inquiries", label: "Ask a Question" },
+      { type: "link", href: "/analytics", label: role === "OCTeamLeader" ? "Team Overview" : "Home" },
+      { type: "link", href: "/my-reports", label: role === "OCTeamLeader" ? "Team Reports" : "My Reports" },
+      { type: "link", href: "/my-sessions", label: role === "OCTeamLeader" ? "Team Sessions" : "My Sessions" },
+      { type: "link", href: "/my-matches", label: role === "OCTeamLeader" ? "Team Match Details" : "My Match Details" },
+      { type: "link", href: "/my-inquiries", label: role === "OCTeamLeader" ? "Team Inquiries" : "Ask a Question" },
       { type: "link", href: "/my-presentations", label: "Presentations" },
       { type: "link", href: "/my-quizzes", label: "Quizzes" },
       { type: "link", href: "/quality-score", label: "Quality Score" },

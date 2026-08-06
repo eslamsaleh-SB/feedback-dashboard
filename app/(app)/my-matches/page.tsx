@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getEffective } from "@/lib/effective";
+import { getEffective, getTeamHrCodes } from "@/lib/effective";
 import { redirect } from "next/navigation";
 import CollectorMatchDetails from "@/components/CollectorMatchDetails";
 import type { EnrichedPart } from "@/components/MatchTotals";
@@ -14,7 +14,11 @@ export default async function MyMatchesPage({ searchParams }: { searchParams: { 
   if (!user) redirect("/login");
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  if (profile?.role !== "Viewer") redirect("/match-totals");
+  if (profile?.role !== "Viewer" && profile?.role !== "OCTeamLeader") redirect("/match-totals");
+  const teamHrs = await getTeamHrCodes(supabase, profile);
+  const scopeHrs = profile.role === "OCTeamLeader"
+    ? (teamHrs ?? [])
+    : (profile.hr_code ? [profile.hr_code] : []);
   const from = isoOk(searchParams.from) ?? "";
   const to = isoOk(searchParams.to) ?? "";
   const matchId = searchParams.match ?? "";
@@ -37,7 +41,9 @@ export default async function MyMatchesPage({ searchParams }: { searchParams: { 
     byHr.set(u.hr_code, { name: name || u.hr_code, team: u.squad ?? null });
   });
 
+  const scopeSet = new Set(scopeHrs);
   const enriched: EnrichedPart[] = (rows ?? [])
+    .filter((r: any) => r.hr_code && scopeSet.has(r.hr_code))
     .filter((r: any) => !matchId || String(r.matchid).includes(matchId))
     .map((r: any) => {
       const info = r.hr_code ? byHr.get(r.hr_code) : undefined;

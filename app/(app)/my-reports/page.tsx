@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getEffective } from "@/lib/effective";
+import { getEffective, getTeamHrCodes } from "@/lib/effective";
 import MyReportsView from "@/components/MyReportsView";
 
 export const dynamic = "force-dynamic";
@@ -13,33 +13,42 @@ export default async function MyReportsPage() {
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
 
-  if (profile?.role !== "Viewer") redirect("/admin-reports");
+  // v59: OC Team Leader gets the same page but scoped to their whole squad.
+  if (profile?.role !== "Viewer" && profile?.role !== "OCTeamLeader") redirect("/admin-reports");
 
   const hrCode = profile?.hr_code ?? "";
+  const teamHrs = await getTeamHrCodes(supabase, profile);
+  const scopeHrs = profile.role === "OCTeamLeader"
+    ? (teamHrs ?? [])
+    : (hrCode ? [hrCode] : []);
 
   // v59: `collectors` table is stale/orphaned since v56 (identity lives on
   // `users` now). match_sessions.collector_id (uuid) was also dropped in v56
   // and repointed onto hr_code (text). Both lookups here failed for any
   // user created after v56, showing "No collector record linked" even when
   // they had reports.
-  if (!hrCode) {
-    return <div className="p-8 text-slate-500 dark:text-slate-400">Your account isn't linked to an HR code yet. Ask an Admin to set one on the Users page.</div>;
+  if (scopeHrs.length === 0) {
+    return <div className="p-8 text-slate-500 dark:text-slate-400">
+      {profile.role === "OCTeamLeader"
+        ? "Your account isn't linked to a team yet. Ask an Admin to set your team on the Users page."
+        : "Your account isn't linked to an HR code yet. Ask an Admin to set one on the Users page."}
+    </div>;
   }
 
   const { data: sessions } = await supabase
     .from("match_sessions")
-    .select("id, match_name, review_date, overall_notes")
-    .eq("hr_code", hrCode)
+    .select("id, match_name, review_date, overall_notes, hr_code")
+    .in("hr_code", scopeHrs)
     .order("review_date", { ascending: false });
 
   const sessionIds = (sessions ?? []).map((s: any) => s.id as string);
 
   const [{ data: ackRows }, { data: noteRows }, { data: videoRows }] = await Promise.all([
     sessionIds.length
-      ? supabase.from("session_acknowledgments").select("session_id").in("session_id", sessionIds).eq("hr_code", hrCode)
+      ? supabase.from("session_acknowledgments").select("session_id").in("session_id", sessionIds).in("hr_code", scopeHrs)
       : Promise.resolve({ data: [] }),
     sessionIds.length
-      ? supabase.from("session_notes").select("id, session_id, note_text, status, created_at, reply_text, replied_at").in("session_id", sessionIds).eq("hr_code", hrCode).order("created_at")
+      ? supabase.from("session_notes").select("id, session_id, note_text, status, created_at, reply_text, replied_at").in("session_id", sessionIds).in("hr_code", scopeHrs).order("created_at")
       : Promise.resolve({ data: [] }),
     sessionIds.length
       ? supabase.from("session_videos").select("id, match_session_id, drive_file_id, file_name").in("match_session_id", sessionIds)

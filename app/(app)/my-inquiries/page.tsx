@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getEffective } from "@/lib/effective";
+import { getEffective, getTeamHrCodes } from "@/lib/effective";
 import MyInquiriesView from "@/components/MyInquiriesView";
 
 export const dynamic = "force-dynamic";
@@ -14,17 +14,21 @@ export default async function MyInquiriesPage() {
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  if (profile?.role !== "Viewer") redirect("/admin-inquiries");
+  if (profile?.role !== "Viewer" && profile?.role !== "OCTeamLeader") redirect("/admin-inquiries");
 
   const hrCode = profile?.hr_code ?? "";
+  const teamHrs = await getTeamHrCodes(supabase, profile);
+  const scopeHrs = profile.role === "OCTeamLeader" ? (teamHrs ?? []) : (hrCode ? [hrCode] : []);
 
-  const { data: rows } = await supabase
-    .from("match_inquiries")
-    .select(
-      "id, match_id, created_at, completed_at, match_inquiry_videos(id, drive_file_id, file_name, reply_text, replied_at)"
-    )
-    .eq("hr_code", hrCode)
-    .order("created_at", { ascending: false });
+  const { data: rows } = scopeHrs.length
+    ? await supabase
+        .from("match_inquiries")
+        .select(
+          "id, match_id, created_at, completed_at, match_inquiry_videos(id, drive_file_id, file_name, reply_text, replied_at)"
+        )
+        .in("hr_code", scopeHrs)
+        .order("created_at", { ascending: false })
+    : { data: [] };
 
   const inquiries = (rows ?? []).map((r: any) => ({
     id: r.id as string,

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getEffective } from "@/lib/effective";
+import { getEffective, getTeamHrCodes } from "@/lib/effective";
 import WeeklyQualityScoreView from "@/components/WeeklyQualityScoreView";
 
 export const dynamic = "force-dynamic";
@@ -102,7 +102,18 @@ export default async function WeeklyQualityScorePage() {
         role={role}
         viewerHrCode={profile?.hr_code ?? null}
         collectors={(collectors ?? []) as any}
-        rows={rows as any}
+        rows={(role === "OCTeamLeader"
+          ? (() => {
+              // v59: OCTL only sees rows for their squad. Filter server-side
+              // so the client-side "isViewer" logic doesn't need to know.
+              const allowed = new Set(
+                (collectors ?? [])
+                  .filter((c: any) => c.team && c.team === profile?.team)
+                  .map((c: any) => c.hr_code)
+              );
+              return rows.filter((r: any) => r.hr_code && allowed.has(r.hr_code));
+            })()
+          : rows) as any}
       />
     </div>
   );

@@ -12,7 +12,7 @@ export default async function MyPresentationsPage() {
 
   const eff = await getEffective(supabase);
   const profile = eff?.profile ?? null;
-  if (profile?.role !== "Viewer") redirect("/admin-presentations");
+  if (profile?.role !== "Viewer" && profile?.role !== "OCTeamLeader") redirect("/admin-presentations");
 
   // RLS scopes presentations to those assigned to the current collector.
   // v59: try SELECT with assigned_date; fall back to legacy shape if the DB
