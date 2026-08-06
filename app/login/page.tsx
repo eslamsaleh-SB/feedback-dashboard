@@ -16,6 +16,7 @@ const TITLES = [
   "Reviewer",
   "Quality Team Leader",
   "Collection Team Leader",
+  "Operation Team Leader",
 ];
 
 export default function LoginPage() {

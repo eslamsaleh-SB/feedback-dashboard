@@ -30,8 +30,18 @@ export async function GET() {
       return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
     };
 
-    const teams = dedupe(rows.map((r) => r.squad));
-    const titles = dedupe(rows.map((r) => r.job_title));
+    // v59: seed base lists so newly-created teams/titles show up in the
+    // Users admin + login dropdowns even before any user has been assigned
+    // to them yet.
+    const BASE_TEAMS = ["Operation"];
+    const BASE_TITLES = [
+      "DC", "Resolution", "Team Leader", "Quality", "Live Quality",
+      "Reviewer", "Quality Team Leader", "Collection Team Leader",
+      "Operation Team Leader",
+    ];
+
+    const teams = dedupe([...BASE_TEAMS, ...rows.map((r) => r.squad)]);
+    const titles = dedupe([...BASE_TITLES, ...rows.map((r) => r.job_title)]);
     return NextResponse.json({ teams, titles });
   } catch {
     return NextResponse.json({ teams: [], titles: [] });
