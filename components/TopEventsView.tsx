@@ -152,8 +152,30 @@ export default function TopEventsView({
     return arr.slice(0, nTop);
   }, [extrasRows, nTop]);
 
-  const baseTotal = baseAgg.reduce((s, r) => s + r.count, 0);
-  const extrasTotal = extrasAgg.reduce((s, r) => s + r.count, 0);
+  // v59 fix: totals must sum ALL fetched rows, not just the top-N slice.
+  // Otherwise the "Total Errors" number shrank when Top N was set.
+  const baseTotal = useMemo(
+    () => baseRows.reduce((s, r) => s + Number(r.total_count ?? 0), 0),
+    [baseRows]
+  );
+  const extrasTotal = useMemo(
+    () => extrasRows.reduce((s, r) => s + Number(r.total_count ?? 0), 0),
+    [extrasRows]
+  );
+  const basePairCount = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of baseRows) {
+      s.add(`${(r.collector_event ?? "").trim()}||${(r.reviewer_event ?? "").trim()}`);
+    }
+    return s.size;
+  }, [baseRows]);
+  const extrasPairCount = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of extrasRows) {
+      s.add(`${(r.extra_field ?? "").trim()}||${(r.changed_from ?? "").trim()}||${(r.changed_to ?? "").trim()}`);
+    }
+    return s.size;
+  }, [extrasRows]);
 
   const inputCls =
     "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm";
@@ -243,7 +265,7 @@ export default function TopEventsView({
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
             <h2 className="font-semibold">Events (Base)</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {loading ? "…" : `${baseAgg.length} pair(s) · ${baseTotal.toLocaleString()} total`}
+              {loading ? "…" : `showing ${baseAgg.length} of ${basePairCount} pair(s) · ${baseTotal.toLocaleString()} total errors`}
             </span>
           </div>
           <div className="overflow-x-auto">
@@ -280,7 +302,7 @@ export default function TopEventsView({
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
             <h2 className="font-semibold">Extras</h2>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {loading ? "…" : `${extrasAgg.length} pair(s) · ${extrasTotal.toLocaleString()} total`}
+              {loading ? "…" : `showing ${extrasAgg.length} of ${extrasPairCount} pair(s) · ${extrasTotal.toLocaleString()} total errors`}
             </span>
           </div>
           <div className="overflow-x-auto">
