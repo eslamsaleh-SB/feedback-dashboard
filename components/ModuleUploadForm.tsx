@@ -13,6 +13,8 @@ const MODULES = [
   { value: "location", label: "Location" },
   { value: "impact", label: "Impact" },
   { value: "extras", label: "Extras" },
+  // v59: Pressure module now accepted by the upload API too.
+  { value: "pressure", label: "Pressure" },
   { value: "freeze_frame", label: "Freeze Frame" },
 ] as const;
 
