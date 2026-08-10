@@ -79,29 +79,41 @@ export default function TopEventsView({
     return set;
   }, [collectorFilter, teamFilter, onlyMine, myAssigned, collectors]);
 
+  // v59 fix: PostgREST caps a single request at 1000 rows regardless of
+  // .limit(). Paginate with .range() until we've drained the result set,
+  // otherwise Base/Extras totals get capped at ~1k and the header shows a
+  // fraction of the true totals.
+  async function fetchAll(table: string, cols: string): Promise<any[]> {
+    const PAGE = 1000;
+    let start = 0;
+    const out: any[] = [];
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let q = supabase.from(table).select(cols).range(start, start + PAGE - 1);
+      if (effectiveHrs.length > 0) q = q.in("hr_code", effectiveHrs);
+      if (dateFrom) q = q.gte("review_date", dateFrom);
+      if (dateTo)   q = q.lte("review_date", dateTo);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      const batch = (data ?? []) as any[];
+      out.push(...batch);
+      if (batch.length < PAGE) break;
+      start += PAGE;
+      if (start > 500000) break; // safety cap
+    }
+    return out;
+  }
+
   async function load() {
     setLoading(true);
     setErr(null);
     try {
-      let bq = supabase
-        .from("base_events")
-        .select("hr_code, collector_event, reviewer_event, total_count")
-        .limit(50000);
-      let eq = supabase
-        .from("extras_events")
-        .select("hr_code, extra_field, changed_from, changed_to, total_count")
-        .limit(50000);
-      if (effectiveHrs.length > 0) {
-        bq = bq.in("hr_code", effectiveHrs);
-        eq = eq.in("hr_code", effectiveHrs);
-      }
-      if (dateFrom) { bq = bq.gte("review_date", dateFrom); eq = eq.gte("review_date", dateFrom); }
-      if (dateTo)   { bq = bq.lte("review_date", dateTo);   eq = eq.lte("review_date", dateTo);   }
-      const [{ data: bd, error: be }, { data: ed, error: ee }] = await Promise.all([bq, eq]);
-      if (be) throw new Error(be.message);
-      if (ee) throw new Error(ee.message);
-      setBaseRows((bd ?? []) as any);
-      setExtrasRows((ed ?? []) as any);
+      const [bd, ed] = await Promise.all([
+        fetchAll("base_events", "hr_code, collector_event, reviewer_event, total_count"),
+        fetchAll("extras_events", "hr_code, extra_field, changed_from, changed_to, total_count"),
+      ]);
+      setBaseRows(bd as any);
+      setExtrasRows(ed as any);
     } catch (e: any) {
       setErr(e.message);
       setBaseRows([]);
