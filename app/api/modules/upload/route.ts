@@ -12,6 +12,7 @@ export const MODULES = [
   "location",
   "impact",
   "extras",
+  "pressure",
   "freeze_frame",
 ] as const;
 type Module = (typeof MODULES)[number];
@@ -30,6 +31,7 @@ const ALIASES = {
     "location_hr_code",
     "impact_hr_code",
     "extras_hr_code",
+    "pressure_hr_code",
   ],
   review_date: ["review_date", "a_review_date", "date"],
   total_mistakes: ["total_mistakes", "total", "mistakes", "count"],

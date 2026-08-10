@@ -108,13 +108,42 @@ async function signupHandler(req: NextRequest) {
     email_confirm: true,
     user_metadata: { full_name, hr_code, team, title },
   });
-  if (error || !created.user) {
-    return NextResponse.json(
-      { error: error?.message || "Could not create user" },
-      { status: 400 }
+  let newId: string;
+  if (error || !created?.user) {
+    // v59 auto-heal: public.users row got deleted but auth.users still holds
+    // the email → createUser errors with "already registered". Look up the
+    // orphan auth id, reset the password to what the user typed, and use
+    // that id to insert the missing public.users row below.
+    const msg = String(error?.message ?? "").toLowerCase();
+    const isDuplicate = msg.includes("already") || msg.includes("registered") || msg.includes("exists");
+    if (!isDuplicate) {
+      return NextResponse.json(
+        { error: error?.message || "Could not create user" },
+        { status: 400 }
+      );
+    }
+    // Find the auth user by email.
+    const { data: list, error: listErr } = await a.auth.admin.listUsers({ page: 1, perPage: 200 });
+    if (listErr) return NextResponse.json({ error: listErr.message }, { status: 400 });
+    const orphan = (list?.users ?? []).find((u: any) =>
+      String(u.email ?? "").toLowerCase() === email
     );
+    if (!orphan) {
+      return NextResponse.json(
+        { error: error?.message || "Could not create user" },
+        { status: 400 }
+      );
+    }
+    // Reset password so the user can sign in with what they just typed.
+    await a.auth.admin.updateUserById(orphan.id, {
+      password,
+      email_confirm: true,
+      user_metadata: { full_name, hr_code, team, title },
+    });
+    newId = orphan.id;
+  } else {
+    newId = created.user.id;
   }
-  const newId = created.user.id;
 
   // v59: split full_name into first_name/last_name to match the shape used
   // by the /users admin CRUD. Best-effort split — anything past the first
@@ -123,7 +152,7 @@ async function signupHandler(req: NextRequest) {
   const first_name = parts[0] || full_name;
   const last_name = parts.slice(1).join(" ") || null;
 
-  const { error: insErr } = await a.from("users").insert({
+  const { error: insErr } = await a.from("users").upsert({
     id: newId,
     email,
     hr_code,
@@ -132,10 +161,11 @@ async function signupHandler(req: NextRequest) {
     squad: team,
     job_title: title,
     role: "Viewer",
-  });
+  }, { onConflict: "id" });
   if (insErr) {
-    // Roll back the auth user to keep things clean.
-    await a.auth.admin.deleteUser(newId);
+    // Only roll back the auth user if WE just created it. When we're
+    // healing an orphan we keep the login intact.
+    if (created?.user) await a.auth.admin.deleteUser(newId);
     return NextResponse.json({ error: insErr.message }, { status: 400 });
   }
 
