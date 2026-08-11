@@ -39,8 +39,11 @@ export default function EventMatchesView({
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
-  const [eventFilter, setEventFilter] = useState<string[]>([]);
-  const [extrasFilter, setExtrasFilter] = useState<string[]>([]);
+  const [colEventFilter, setColEventFilter] = useState<string[]>([]);
+  const [revEventFilter, setRevEventFilter] = useState<string[]>([]);
+  const [changedFromFilter, setChangedFromFilter] = useState<string[]>([]);
+  const [changedToFilter, setChangedToFilter] = useState<string[]>([]);
+  const [matchIdFilter, setMatchIdFilter] = useState<string>("");
   const [baseRows, setBaseRows] = useState<BaseRow[]>([]);
   const [extrasRows, setExtrasRows] = useState<ExtrasRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -133,41 +136,33 @@ export default function EventMatchesView({
 
   // Base: one row per (match_id, collector_event → reviewer_event). Sorted
   // by match count desc, then by pair count desc within a match.
-  // Distinct event names for the two filters.
-  const baseEventOptions: MSOption[] = useMemo(() => {
+  // Distinct values per column, feeding each per-column filter.
+  const distinct = (rows: any[], key: string): MSOption[] => {
     const s = new Set<string>();
-    for (const r of baseRows) {
-      const a = (r.collector_event ?? "").trim();
-      const b = (r.reviewer_event ?? "").trim();
-      if (a) s.add(a);
-      if (b) s.add(b);
+    for (const r of rows) {
+      const v = (r?.[key] ?? "").toString().trim();
+      if (v) s.add(v);
     }
     return Array.from(s).sort().map((v) => ({ value: v, label: v }));
-  }, [baseRows]);
-
-  const extrasFieldOptions: MSOption[] = useMemo(() => {
-    const s = new Set<string>();
-    for (const r of extrasRows) {
-      const a = (r.changed_from ?? "").trim();
-      const b = (r.changed_to ?? "").trim();
-      if (a) s.add(a);
-      if (b) s.add(b);
-    }
-    return Array.from(s).sort().map((v) => ({ value: v, label: v }));
-  }, [extrasRows]);
+  };
+  const colEventOptions   = useMemo(() => distinct(baseRows, "collector_event"), [baseRows]);
+  const revEventOptions   = useMemo(() => distinct(baseRows, "reviewer_event"), [baseRows]);
+  const changedFromOptions = useMemo(() => distinct(extrasRows, "changed_from"), [extrasRows]);
+  const changedToOptions   = useMemo(() => distinct(extrasRows, "changed_to"), [extrasRows]);
 
   const baseAgg = useMemo(() => {
     type Pair = { from: string; to: string; count: number };
     type MatchGroup = { key: string; review_date: string; match_id: string; part_id: string; total: number; pairs: Pair[] };
     const groups = new Map<string, MatchGroup>();
-    const evSet = new Set(eventFilter);
+    const colSet = new Set(colEventFilter);
+    const revSet = new Set(revEventFilter);
+    const midQ = matchIdFilter.trim().toLowerCase();
     for (const r of baseRows) {
-      // Event filter: match on collector OR reviewer event.
-      if (evSet.size > 0) {
-        const ce = (r.collector_event ?? "").trim();
-        const re = (r.reviewer_event ?? "").trim();
-        if (!evSet.has(ce) && !evSet.has(re)) continue;
-      }
+      const ce = (r.collector_event ?? "").trim();
+      const re = (r.reviewer_event ?? "").trim();
+      if (colSet.size > 0 && !colSet.has(ce)) continue;
+      if (revSet.size > 0 && !revSet.has(re)) continue;
+      if (midQ && !((r.match_id ?? "").toString().toLowerCase().includes(midQ))) continue;
       const date = (r.review_date ?? "").trim() || "—";
       const mid = (r.match_id ?? "").trim() || "(no match id)";
       const pid = r.part_id == null ? "—" : String(r.part_id);
@@ -194,21 +189,22 @@ export default function EventMatchesView({
       }));
     }
     return { flat, groupCount: arr.length, total: arr.reduce((s, g) => s + g.total, 0) };
-  }, [baseRows, eventFilter]);
+  }, [baseRows, colEventFilter, revEventFilter, matchIdFilter]);
 
   // Extras: same, but pair = (extra_field, changed_from → changed_to).
   const extrasAgg = useMemo(() => {
     type Pair = { field: string; from: string; to: string; count: number };
     type MatchGroup = { key: string; review_date: string; match_id: string; part_id: string; total: number; pairs: Pair[] };
     const groups = new Map<string, MatchGroup>();
-    const exSet = new Set(extrasFilter);
+    const fromSet = new Set(changedFromFilter);
+    const toSet = new Set(changedToFilter);
+    const midQ = matchIdFilter.trim().toLowerCase();
     for (const r of extrasRows) {
-      // Extras filter: match on changed_from OR changed_to.
-      if (exSet.size > 0) {
-        const cf = (r.changed_from ?? "").trim();
-        const ct = (r.changed_to ?? "").trim();
-        if (!exSet.has(cf) && !exSet.has(ct)) continue;
-      }
+      const cf = (r.changed_from ?? "").trim();
+      const ct = (r.changed_to ?? "").trim();
+      if (fromSet.size > 0 && !fromSet.has(cf)) continue;
+      if (toSet.size > 0 && !toSet.has(ct)) continue;
+      if (midQ && !((r.match_id ?? "").toString().toLowerCase().includes(midQ))) continue;
       const date = (r.review_date ?? "").trim() || "—";
       const mid = (r.match_id ?? "").trim() || "(no match id)";
       const pid = r.part_id == null ? "—" : String(r.part_id);
@@ -236,7 +232,7 @@ export default function EventMatchesView({
       }));
     }
     return { flat, groupCount: arr.length, total: arr.reduce((s, g) => s + g.total, 0) };
-  }, [extrasRows, extrasFilter]);
+  }, [extrasRows, changedFromFilter, changedToFilter, matchIdFilter]);
 
   const baseTotal = baseAgg.total;
   const extrasTotal = extrasAgg.total;
@@ -288,6 +284,12 @@ export default function EventMatchesView({
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
             className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm" />
         </div>
+        <div>
+          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Match ID</label>
+          <input type="text" value={matchIdFilter} onChange={(e) => setMatchIdFilter(e.target.value)}
+            placeholder="contains…"
+            className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm w-40" />
+        </div>
         {assignmentsLoaded && (
           <div className="flex items-end">
             <label
@@ -316,13 +318,21 @@ export default function EventMatchesView({
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap">
             <h2 className="font-semibold">Events (Base)</h2>
-            <div className="flex items-center gap-2">
-              <div className="w-64">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="w-52">
                 <MultiSelectCombobox
-                  options={baseEventOptions}
-                  values={eventFilter}
-                  onApply={setEventFilter}
-                  placeholder="Filter by Event (collector or reviewer)"
+                  options={colEventOptions}
+                  values={colEventFilter}
+                  onApply={setColEventFilter}
+                  placeholder="Collector Event"
+                />
+              </div>
+              <div className="w-52">
+                <MultiSelectCombobox
+                  options={revEventOptions}
+                  values={revEventFilter}
+                  onApply={setRevEventFilter}
+                  placeholder="Reviewer Event"
                 />
               </div>
               <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -382,13 +392,21 @@ export default function EventMatchesView({
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap">
             <h2 className="font-semibold">Extras</h2>
-            <div className="flex items-center gap-2">
-              <div className="w-64">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="w-52">
                 <MultiSelectCombobox
-                  options={extrasFieldOptions}
-                  values={extrasFilter}
-                  onApply={setExtrasFilter}
-                  placeholder="Filter by Extras (from or to)"
+                  options={changedFromOptions}
+                  values={changedFromFilter}
+                  onApply={setChangedFromFilter}
+                  placeholder="Changed From"
+                />
+              </div>
+              <div className="w-52">
+                <MultiSelectCombobox
+                  options={changedToOptions}
+                  values={changedToFilter}
+                  onApply={setChangedToFilter}
+                  placeholder="Changed To"
                 />
               </div>
               <span className="text-xs text-slate-500 dark:text-slate-400">
