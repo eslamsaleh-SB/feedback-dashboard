@@ -33,7 +33,7 @@ export default async function PreviewPresentationPage({
       .single(),
     supabase
       .from("presentation_pages")
-      .select("page_order, header, description, video_link, drive_file_id")
+      .select("page_order, header, description, video_link, drive_file_id, duration_seconds")
       .eq("presentation_id", params.id)
       .order("page_order"),
   ]);
@@ -48,6 +48,7 @@ export default async function PreviewPresentationPage({
         description: (p.description ?? null) as string | null,
         video_link: (p.video_link ?? null) as string | null,
         drive_file_id: (p.drive_file_id ?? null) as string | null,
+        duration_seconds: (p.duration_seconds ?? null) as number | null,
       }))}
       backHref="/admin-presentations"
       backLabel="Back to Presentations"

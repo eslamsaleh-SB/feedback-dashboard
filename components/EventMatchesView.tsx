@@ -136,14 +136,21 @@ export default function EventMatchesView({
 
   // Base: one row per (match_id, collector_event → reviewer_event). Sorted
   // by match count desc, then by pair count desc within a match.
-  // Distinct values per column, feeding each per-column filter.
+  // Distinct values per column. Include a "(blank)" pseudo-option if any
+  // row has an empty value there — lets the user filter for rows where the
+  // reviewer OR collector event was left empty.
+  const BLANK = "__blank__";
   const distinct = (rows: any[], key: string): MSOption[] => {
     const s = new Set<string>();
+    let hasBlank = false;
     for (const r of rows) {
       const v = (r?.[key] ?? "").toString().trim();
       if (v) s.add(v);
+      else hasBlank = true;
     }
-    return Array.from(s).sort().map((v) => ({ value: v, label: v }));
+    const opts = Array.from(s).sort().map((v) => ({ value: v, label: v }));
+    if (hasBlank) opts.unshift({ value: BLANK, label: "(blank)" });
+    return opts;
   };
   const colEventOptions   = useMemo(() => distinct(baseRows, "collector_event"), [baseRows]);
   const revEventOptions   = useMemo(() => distinct(baseRows, "reviewer_event"), [baseRows]);
@@ -157,11 +164,13 @@ export default function EventMatchesView({
     const colSet = new Set(colEventFilter);
     const revSet = new Set(revEventFilter);
     const midQ = matchIdFilter.trim().toLowerCase();
+    const inSel = (set: Set<string>, v: string) =>
+      set.size === 0 || set.has(v) || (v === "" && set.has(BLANK));
     for (const r of baseRows) {
       const ce = (r.collector_event ?? "").trim();
       const re = (r.reviewer_event ?? "").trim();
-      if (colSet.size > 0 && !colSet.has(ce)) continue;
-      if (revSet.size > 0 && !revSet.has(re)) continue;
+      if (!inSel(colSet, ce)) continue;
+      if (!inSel(revSet, re)) continue;
       if (midQ && !((r.match_id ?? "").toString().toLowerCase().includes(midQ))) continue;
       const date = (r.review_date ?? "").trim() || "—";
       const mid = (r.match_id ?? "").trim() || "(no match id)";
@@ -199,11 +208,13 @@ export default function EventMatchesView({
     const fromSet = new Set(changedFromFilter);
     const toSet = new Set(changedToFilter);
     const midQ = matchIdFilter.trim().toLowerCase();
+    const inSel = (set: Set<string>, v: string) =>
+      set.size === 0 || set.has(v) || (v === "" && set.has(BLANK));
     for (const r of extrasRows) {
       const cf = (r.changed_from ?? "").trim();
       const ct = (r.changed_to ?? "").trim();
-      if (fromSet.size > 0 && !fromSet.has(cf)) continue;
-      if (toSet.size > 0 && !toSet.has(ct)) continue;
+      if (!inSel(fromSet, cf)) continue;
+      if (!inSel(toSet, ct)) continue;
       if (midQ && !((r.match_id ?? "").toString().toLowerCase().includes(midQ))) continue;
       const date = (r.review_date ?? "").trim() || "—";
       const mid = (r.match_id ?? "").trim() || "(no match id)";

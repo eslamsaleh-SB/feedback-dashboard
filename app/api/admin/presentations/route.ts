@@ -99,6 +99,10 @@ export async function POST(req: NextRequest) {
     description: String(p.description || "").trim() || null,
     video_link: String(p.video_link || "").trim() || null,
     drive_file_id: extractDriveId(String(p.video_link || "")),
+    duration_seconds:
+      p.duration_seconds != null && Number(p.duration_seconds) > 0
+        ? Math.floor(Number(p.duration_seconds))
+        : null,
   }));
   const { error: pagesErr } = await supabase.from("presentation_pages").insert(pageRows);
   if (pagesErr) {

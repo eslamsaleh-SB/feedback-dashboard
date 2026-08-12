@@ -8,6 +8,9 @@ type Page = {
   description: string;
   video_link: string;
   drive_file_id?: string | null;
+  // v59: per-slide countdown (seconds). Timer starts on first video play in
+  // the viewer, loops the video, and shows "time is up" when it expires.
+  duration_seconds?: number | null;
 };
 
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
@@ -62,7 +65,7 @@ export default function PresentationBuilder({
   const [pages, setPages] = useState<Page[]>(
     initial?.pages && initial.pages.length > 0
       ? initial.pages
-      : [{ header: "Page 1", description: "", video_link: "" }]
+      : [{ header: "Page 1", description: "", video_link: "", duration_seconds: null }]
   );
   const [assigned, setAssigned] = useState<Set<string>>(
     new Set(initial?.hr_codes ?? [])
@@ -87,7 +90,7 @@ export default function PresentationBuilder({
   function addPage() {
     setPages((prev) => [
       ...prev,
-      { header: `Page ${prev.length + 1}`, description: "", video_link: "" },
+      { header: `Page ${prev.length + 1}`, description: "", video_link: "", duration_seconds: null },
     ]);
   }
   function removePage(i: number) {
@@ -125,6 +128,8 @@ export default function PresentationBuilder({
           header: p.header.trim(),
           description: p.description.trim(),
           video_link: p.video_link.trim(),
+          duration_seconds:
+            p.duration_seconds && p.duration_seconds > 0 ? Math.floor(p.duration_seconds) : null,
         })),
         hr_codes: Array.from(assigned),
       };
@@ -400,6 +405,25 @@ export default function PresentationBuilder({
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                   The link must be shared as "Anyone with the link".
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+                  Timer (seconds)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={p.duration_seconds ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    updatePage(i, { duration_seconds: v ? Math.max(0, parseInt(v, 10)) : null });
+                  }}
+                  placeholder="No timer"
+                  className={inputCls}
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                  Countdown starts on first Play. Blank = no timer. Video always loops.
                 </p>
               </div>
               {driveId && (
