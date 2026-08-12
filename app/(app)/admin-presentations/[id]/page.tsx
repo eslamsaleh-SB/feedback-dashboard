@@ -33,7 +33,7 @@ export default async function EditPresentationPage({ params }: { params: { id: s
       })(),
       supabase
         .from("presentation_pages")
-        .select("id, page_order, header, description, video_link, drive_file_id, duration_seconds")
+        .select("id, page_order, header, description, video_link, drive_file_id, duration_seconds, video_seconds")
         .eq("presentation_id", params.id)
         .order("page_order"),
       supabase
@@ -70,6 +70,7 @@ export default async function EditPresentationPage({ params }: { params: { id: s
           video_link: (p.video_link ?? "") as string,
           drive_file_id: (p.drive_file_id ?? null) as string | null,
           duration_seconds: (p.duration_seconds ?? null) as number | null,
+          video_seconds: (p.video_seconds ?? null) as number | null,
         })),
         hr_codes: (assignRows ?? []).map((r: any) => r.hr_code as string),
       }}

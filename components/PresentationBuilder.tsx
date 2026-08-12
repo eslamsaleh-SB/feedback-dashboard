@@ -9,8 +9,11 @@ type Page = {
   video_link: string;
   drive_file_id?: string | null;
   // v59: per-slide countdown (seconds). Timer starts on first video play in
-  // the viewer, loops the video, and shows "time is up" when it expires.
+  // the viewer and shows "time is up" when it expires.
   duration_seconds?: number | null;
+  // v59: video length (seconds). Used to loop the Drive iframe by reloading
+  // it every N seconds. Native <video> also uses this as a fallback poll.
+  video_seconds?: number | null;
 };
 
 type CollectorOpt = { hr_code: string; name: string; team: string | null };
@@ -65,7 +68,7 @@ export default function PresentationBuilder({
   const [pages, setPages] = useState<Page[]>(
     initial?.pages && initial.pages.length > 0
       ? initial.pages
-      : [{ header: "Page 1", description: "", video_link: "", duration_seconds: null }]
+      : [{ header: "Page 1", description: "", video_link: "", duration_seconds: null, video_seconds: null }]
   );
   const [assigned, setAssigned] = useState<Set<string>>(
     new Set(initial?.hr_codes ?? [])
@@ -90,7 +93,7 @@ export default function PresentationBuilder({
   function addPage() {
     setPages((prev) => [
       ...prev,
-      { header: `Page ${prev.length + 1}`, description: "", video_link: "", duration_seconds: null },
+      { header: `Page ${prev.length + 1}`, description: "", video_link: "", duration_seconds: null, video_seconds: null },
     ]);
   }
   function removePage(i: number) {
@@ -130,6 +133,8 @@ export default function PresentationBuilder({
           video_link: p.video_link.trim(),
           duration_seconds:
             p.duration_seconds && p.duration_seconds > 0 ? Math.floor(p.duration_seconds) : null,
+          video_seconds:
+            p.video_seconds && p.video_seconds > 0 ? Math.floor(p.video_seconds) : null,
         })),
         hr_codes: Array.from(assigned),
       };
@@ -423,7 +428,26 @@ export default function PresentationBuilder({
                   className={inputCls}
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                  Countdown starts on first Play. Blank = no timer. Video always loops.
+                  Countdown starts on first Play. Blank = no timer.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">
+                  Video length (seconds, for looping)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={p.video_seconds ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    updatePage(i, { video_seconds: v ? Math.max(0, parseInt(v, 10)) : null });
+                  }}
+                  placeholder="No loop"
+                  className={inputCls}
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                  Drive can't natively loop. Set the video's length in seconds and the viewer will reload it at that interval to simulate a loop.
                 </p>
               </div>
               {driveId && (

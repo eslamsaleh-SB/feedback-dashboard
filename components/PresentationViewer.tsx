@@ -10,6 +10,9 @@ type Page = {
   drive_file_id: string | null;
   // v59: per-slide countdown in seconds. Null = no timer for this slide.
   duration_seconds?: number | null;
+  // v59: video length in seconds — used to reload the Drive iframe to
+  // simulate a loop.
+  video_seconds?: number | null;
 };
 
 // v59: Presentation viewer with a per-slide timer + auto-loop workaround.
@@ -68,18 +71,23 @@ export default function PresentationViewer({
     return () => clearInterval(t);
   }, [startedAt]);
 
-  // Auto-refresh the iframe every 60s while running so short clips loop.
+  // Auto-refresh the iframe every N seconds while running so the clip loops.
+  // N = the admin-set video length (Video length field). Fallback: 60s.
   const loopRef = useRef<number | null>(null);
+  const loopSeconds =
+    page && page.video_seconds && page.video_seconds > 0
+      ? Math.floor(page.video_seconds)
+      : 60;
   useEffect(() => {
     if (startedAt == null) return;
     loopRef.current = window.setInterval(() => {
       setIframeNonce((n) => n + 1);
-    }, 60_000);
+    }, loopSeconds * 1000);
     return () => {
       if (loopRef.current != null) window.clearInterval(loopRef.current);
       loopRef.current = null;
     };
-  }, [startedAt]);
+  }, [startedAt, loopSeconds]);
 
   const elapsed = startedAt == null ? 0 : Math.floor((now - startedAt) / 1000);
   const remaining =

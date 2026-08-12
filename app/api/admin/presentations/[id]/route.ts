@@ -78,6 +78,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       p.duration_seconds != null && Number(p.duration_seconds) > 0
         ? Math.floor(Number(p.duration_seconds))
         : null,
+    video_seconds:
+      p.video_seconds != null && Number(p.video_seconds) > 0
+        ? Math.floor(Number(p.video_seconds))
+        : null,
   }));
   const { error: insertErr } = await supabase.from("presentation_pages").insert(pageRows);
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 400 });

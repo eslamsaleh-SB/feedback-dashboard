@@ -103,6 +103,10 @@ export async function POST(req: NextRequest) {
       p.duration_seconds != null && Number(p.duration_seconds) > 0
         ? Math.floor(Number(p.duration_seconds))
         : null,
+    video_seconds:
+      p.video_seconds != null && Number(p.video_seconds) > 0
+        ? Math.floor(Number(p.video_seconds))
+        : null,
   }));
   const { error: pagesErr } = await supabase.from("presentation_pages").insert(pageRows);
   if (pagesErr) {
