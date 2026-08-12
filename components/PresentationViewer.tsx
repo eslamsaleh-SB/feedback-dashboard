@@ -49,11 +49,16 @@ export default function PresentationViewer({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(Date.now());
   const [iframeNonce, setIframeNonce] = useState(0);
+  // v59: try native <video loop> first (real seamless loop), fall back to
+  // Drive iframe if the direct URL is blocked / not a playable file.
+  const [videoMode, setVideoMode] = useState<"native" | "iframe">("native");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Reset when the slide changes.
   useEffect(() => {
     setStartedAt(null);
     setIframeNonce(0);
+    setVideoMode("native");
   }, [idx]);
 
   // Ticker while the timer is running.
@@ -150,15 +155,31 @@ export default function PresentationViewer({
         )}
 
         {page!.drive_file_id ? (
-          <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 relative">
-            <iframe
-              key={iframeNonce}
-              src={iframeSrc ?? ""}
-              className="w-full"
-              style={{ height: "480px" }}
-              allow="autoplay; fullscreen"
-              allowFullScreen
-            />
+          <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 relative bg-black">
+            {videoMode === "native" ? (
+              <video
+                ref={videoRef}
+                key={`native-${iframeNonce}`}
+                src={`https://drive.google.com/uc?export=download&id=${page!.drive_file_id}`}
+                className="w-full block bg-black"
+                style={{ height: "480px" }}
+                loop
+                autoPlay={startedAt != null}
+                muted
+                playsInline
+                controls
+                onError={() => setVideoMode("iframe")}
+              />
+            ) : (
+              <iframe
+                key={`iframe-${iframeNonce}`}
+                src={iframeSrc ?? ""}
+                className="w-full"
+                style={{ height: "480px" }}
+                allow="autoplay; fullscreen"
+                allowFullScreen
+              />
+            )}
             {expired && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-white">
                 <div className="text-center space-y-3">
@@ -193,7 +214,17 @@ export default function PresentationViewer({
             {startedAt == null ? (
               <button
                 type="button"
-                onClick={() => { setStartedAt(Date.now()); setNow(Date.now()); setIframeNonce((n) => n + 1); }}
+                onClick={() => {
+                  setStartedAt(Date.now());
+                  setNow(Date.now());
+                  setIframeNonce((n) => n + 1);
+                  // For native mode, trigger play imperatively (user gesture
+                  // satisfies autoplay policy). Muted so browsers allow it.
+                  setTimeout(() => {
+                    const v = videoRef.current;
+                    if (v) { v.muted = true; v.play().catch(() => {}); }
+                  }, 50);
+                }}
                 className="rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 font-medium"
               >
                 ▶ Play video {duration != null ? `(start timer)` : ""}
