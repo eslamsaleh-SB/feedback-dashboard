@@ -24,6 +24,9 @@ export type Session = {
   is_group: boolean;
   location: string | null;
   meet_link: string | null;
+  // v59: duration + free-text topic captured at booking time.
+  duration_minutes?: number | null;
+  topic?: string | null;
   attendees: Attendee[];
 };
 
@@ -68,6 +71,20 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
   const now = new Date();
   const [fromDate, setFromDate] = useState<string>(`${now.getFullYear()}-01-01`);
   const [toDate, setToDate] = useState<string>(isoDate(now));
+
+  // v59: Feedback Analysis links land here with ?from=&to=&status=<csv>.
+  // Preload those into state on mount so drill-through filters apply.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    const f = q.get("from");
+    const t = q.get("to");
+    const s = q.get("status");
+    if (f && /^\d{4}-\d{2}-\d{2}$/.test(f)) setFromDate(f);
+    if (t && /^\d{4}-\d{2}-\d{2}$/.test(t)) setToDate(t);
+    if (s) setStatusFilter(s.split(",").map((v) => v.trim()).filter(Boolean));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -355,6 +372,16 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
                   >
                     {s.meet_link}
                   </a>
+                )}
+                {s.duration_minutes != null && s.duration_minutes > 0 && (
+                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">
+                    {s.duration_minutes} min
+                  </span>
+                )}
+                {s.topic && (
+                  <span className="text-slate-600 dark:text-slate-300 italic truncate max-w-[320px]" title={s.topic}>
+                    Topic: {s.topic}
+                  </span>
                 )}
               </div>
 

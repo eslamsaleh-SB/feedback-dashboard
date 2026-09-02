@@ -37,6 +37,9 @@ export default function FeedbackReservationForm({
   const [sessionDate, setSessionDate] = useState("");
   const [sessionTime, setSessionTime] = useState("");
   const [shift, setShift] = useState<"" | Shift>("");
+  // v59: duration (minutes) + free-text topic.
+  const [durationMinutes, setDurationMinutes] = useState<string>("");
+  const [topic, setTopic] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -108,6 +111,8 @@ export default function FeedbackReservationForm({
         is_group: isGroup,
         location: mode === "Offline" ? location : null,
         meet_link: mode === "Online" ? meetLink.trim() || null : null,
+        duration_minutes: durationMinutes ? Math.max(0, parseInt(durationMinutes, 10)) : null,
+        topic: topic.trim() || null,
       })
       .select("id")
       .single();
@@ -329,6 +334,27 @@ export default function FeedbackReservationForm({
               ))}
             </select>
           </div>
+          <div className="w-36">
+            <label className={labelCls}>Duration (min)</label>
+            <input
+              type="number"
+              min={0}
+              value={durationMinutes}
+              onChange={(e) => setDurationMinutes(e.target.value)}
+              placeholder="e.g. 30"
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className={labelCls}>Topic</label>
+          <input
+            type="text"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder="What will be discussed…"
+            className={inputCls}
+          />
         </div>
       </div>
 
