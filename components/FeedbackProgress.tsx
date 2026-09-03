@@ -80,9 +80,11 @@ export default function FeedbackProgress({ initial }: { initial: Session[] }) {
     const f = q.get("from");
     const t = q.get("to");
     const s = q.get("status");
+    const c = q.get("collector");
     if (f && /^\d{4}-\d{2}-\d{2}$/.test(f)) setFromDate(f);
     if (t && /^\d{4}-\d{2}-\d{2}$/.test(t)) setToDate(t);
     if (s) setStatusFilter(s.split(",").map((v) => v.trim()).filter(Boolean));
+    if (c) setCollectorFilter(c.split(",").map((v) => v.trim()).filter(Boolean));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

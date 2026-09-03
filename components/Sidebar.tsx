@@ -107,6 +107,8 @@ function buildNav(role: AppRole): NavEntry[] {
       { href: "/admin-quizzes", label: "Quiz Analytics" },
       // v59: weekly feedback outcome rollup, drills into Feedback Progress.
       { href: "/feedback-analysis", label: "Feedback Analysis" },
+      // v59: per-collector attendance totals, drills into Feedback Progress.
+      { href: "/collector-attendance", label: "Collector Attendance" },
     ];
     if (role === "Admin") {
       adminItems.push(
