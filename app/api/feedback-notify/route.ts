@@ -51,15 +51,46 @@ export async function POST(req: NextRequest) {
 
   const { data: profileRows } = await admin
     .from("users")
-    .select("hr_code, id")
+    .select("hr_code, id, squad")
     .in("hr_code", hr_codes);
 
-  const userIds = (profileRows ?? []).map((p: any) => p.id as string);
+  // Resolve TeamLeader emails per squad (one query, dedup squads)
+  const squads = Array.from(
+    new Set(
+      (profileRows ?? [])
+        .map((p: any) => (p.squad ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+  const tlEmailBySquad = new Map<string, string[]>();
+  if (squads.length > 0) {
+    const { data: tlRows } = await admin
+      .from("users")
+      .select("id, squad")
+      .in("squad", squads)
+      .eq("role", "TeamLeader");
+    for (const tl of (tlRows ?? []) as any[]) {
+      const { data: { user: tlUser } } = await admin.auth.admin.getUserById(tl.id);
+      if (!tlUser?.email) continue;
+      const s = (tl.squad ?? "").trim();
+      if (!s) continue;
+      const list = tlEmailBySquad.get(s) ?? [];
+      list.push(tlUser.email);
+      tlEmailBySquad.set(s, list);
+    }
+  }
 
-  const emailPromises = userIds.map(async (uid) => {
-    const { data: { user: u } } = await admin.auth.admin.getUserById(uid);
+  const profilesWithIds = (profileRows ?? []) as Array<{
+    id: string;
+    hr_code: string;
+    squad: string | null;
+  }>;
+
+  const emailPromises = profilesWithIds.map(async (p) => {
+    const { data: { user: u } } = await admin.auth.admin.getUserById(p.id);
     const email = u?.email;
     if (!email) return;
+    const tlCcs = p.squad ? tlEmailBySquad.get(p.squad.trim()) ?? [] : [];
 
     const timeStr = session_time ? ` at ${session_time}` : "";
     const shiftStr = shift ? ` (${shift} shift)` : "";
@@ -98,9 +129,10 @@ export async function POST(req: NextRequest) {
       subject: `Feedback session scheduled - ${session_date}`,
       html,
       text,
+      cc: tlCcs,
     });
   });
 
   await Promise.allSettled(emailPromises);
-  return NextResponse.json({ ok: true, sent: userIds.length });
+  return NextResponse.json({ ok: true, sent: profilesWithIds.length });
 }
