@@ -1,6 +1,6 @@
 "use client";
 // v60: admin edit/delete feedback reservations
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
@@ -111,6 +111,68 @@ export default function FeedbackProgress({
   // Admin: delete session
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Admin: per-attendee edit (reschedule / remove)
+  const [editAttId, setEditAttId] = useState<string | null>(null);
+  const [attDraft, setAttDraft] = useState<{ session_date: string; session_time: string }>({
+    session_date: "",
+    session_time: "",
+  });
+  const [attSaving, setAttSaving] = useState(false);
+  const [attMsg, setAttMsg] = useState<string | null>(null);
+  const [confirmDelAttId, setConfirmDelAttId] = useState<string | null>(null);
+  const [attDeleting, setAttDeleting] = useState(false);
+
+  function openEditAttendee(s: Session, aid: string) {
+    setEditAttId(aid);
+    setAttDraft({
+      session_date: s.session_date ?? "",
+      session_time: s.session_time ?? "",
+    });
+    setAttMsg(null);
+  }
+
+  async function saveAttendee() {
+    if (!editAttId) return;
+    setAttSaving(true);
+    setAttMsg(null);
+    const res = await fetch(`/api/admin/feedback-attendee/${editAttId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_date: attDraft.session_date,
+        session_time: attDraft.session_time,
+      }),
+    });
+    const json = await res.json();
+    setAttSaving(false);
+    if (!res.ok) {
+      setAttMsg(json.error ?? "Error saving");
+      return;
+    }
+    // Simplest: reload to reflect the new reservation grouping.
+    window.location.reload();
+  }
+
+  async function deleteAttendee(aid: string) {
+    setAttDeleting(true);
+    const res = await fetch(`/api/admin/feedback-attendee/${aid}`, {
+      method: "DELETE",
+    });
+    setAttDeleting(false);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setAttMsg(json.error ?? "Error deleting");
+      return;
+    }
+    // Remove from local state
+    setSessions((prev) =>
+      prev
+        .map((s) => ({ ...s, attendees: s.attendees.filter((a) => a.id !== aid) }))
+        .filter((s) => s.attendees.length > 0)
+    );
+    setConfirmDelAttId(null);
+  }
 
   function openEdit(s: Session) {
     setEditingId(s.id);
@@ -583,7 +645,8 @@ export default function FeedbackProgress({
                   </thead>
                   <tbody>
                     {s.attendees.map((a) => (
-                      <tr key={a.id} className="border-t border-slate-100 dark:border-slate-800 align-top">
+                      <Fragment key={a.id}>
+                      <tr className="border-t border-slate-100 dark:border-slate-800 align-top">
                         <td className="px-4 py-2.5 whitespace-nowrap">
                           <span className="font-medium text-slate-800 dark:text-slate-100">{a.hr_code}</span>
                           {a.name && a.name !== a.hr_code && (
@@ -618,15 +681,113 @@ export default function FeedbackProgress({
                           />
                         </td>
                         <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => save(s, a)}
-                            disabled={savingId === a.id}
-                            className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
-                          >
-                            {savingId === a.id ? "Saving..." : savedId === a.id ? "Saved" : "Save"}
-                          </button>
+                          <div className="flex items-center gap-2 justify-end">
+                            <button
+                              onClick={() => save(s, a)}
+                              disabled={savingId === a.id}
+                              className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50"
+                            >
+                              {savingId === a.id ? "Saving..." : savedId === a.id ? "Saved" : "Save"}
+                            </button>
+                            {isAdmin && editAttId !== a.id && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditAttendee(s, a.id)}
+                                  title="Reschedule this collector"
+                                  className="rounded-lg border border-slate-200 dark:border-slate-700 p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDelAttId(a.id)}
+                                  title="Remove this collector"
+                                  className="rounded-lg border border-red-200 dark:border-red-800 p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 100 2h12a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM5 8a1 1 0 011-1h8a1 1 0 011 1v8a2 2 0 01-2 2H7a2 2 0 01-2-2V8z" clipRule="evenodd" />
+                                  </svg>
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
+                      {isAdmin && editAttId === a.id && (
+                        <tr className="bg-amber-50 dark:bg-amber-900/10 border-t border-amber-200 dark:border-amber-800">
+                          <td colSpan={4} className="px-4 py-3">
+                            <div className="flex flex-wrap items-end gap-3">
+                              <div>
+                                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">New date</label>
+                                <input
+                                  type="date"
+                                  value={attDraft.session_date}
+                                  onChange={(e) => setAttDraft((d) => ({ ...d, session_date: e.target.value }))}
+                                  className={inputCls}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">New time</label>
+                                <input
+                                  type="time"
+                                  value={attDraft.session_time}
+                                  onChange={(e) => setAttDraft((d) => ({ ...d, session_time: e.target.value }))}
+                                  className={inputCls}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={saveAttendee}
+                                disabled={attSaving}
+                                className="rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 text-sm font-medium disabled:opacity-50"
+                              >
+                                {attSaving ? "Saving..." : "Reschedule"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setEditAttId(null); setAttMsg(null); }}
+                                className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            {attMsg && <p className="mt-2 text-xs text-red-600">{attMsg}</p>}
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                              This moves the collector to a new session with the new date/time (same mode, shift, topic). An email will be sent.
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                      {isAdmin && confirmDelAttId === a.id && (
+                        <tr className="bg-red-50 dark:bg-red-900/10 border-t border-red-200 dark:border-red-800">
+                          <td colSpan={4} className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <p className="text-sm text-red-600 font-medium">
+                                Remove {a.hr_code} from this session? A cancellation email will be sent.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => deleteAttendee(a.id)}
+                                disabled={attDeleting}
+                                className="rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-medium disabled:opacity-50 hover:bg-red-700"
+                              >
+                                {attDeleting ? "Removing..." : "Yes, remove & notify"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelAttId(null)}
+                                className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
