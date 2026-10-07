@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
     meet_link,
     location,
     shift,
+    topic,
+    comment,
   } = body as {
     hr_codes: string[];
     session_date: string;
@@ -33,6 +35,8 @@ export async function POST(req: NextRequest) {
     meet_link: string | null;
     location: string | null;
     shift: string;
+    topic: string | null;
+    comment: string | null;
   };
 
   if (!hr_codes?.length) return NextResponse.json({ ok: true, sent: 0 });
@@ -103,12 +107,16 @@ export async function POST(req: NextRequest) {
             ? `<li><strong>Location:</strong> ${escapeText(location)}</li>`
             : ""
         }
+        ${topic ? `<li><strong>Topic:</strong> ${escapeText(topic)}</li>` : ""}
+        ${comment ? `<li><strong>Comment:</strong> ${escapeText(comment)}</li>` : ""}
       </ul>
     `;
     const bodyText =
       `Date: ${session_date}${timeStr}${shiftStr}\n` +
       `Mode: ${mode}` +
-      (mode === "Offline" && location ? `\nLocation: ${location}` : "");
+      (mode === "Offline" && location ? `\nLocation: ${location}` : "") +
+      (topic ? `\nTopic: ${topic}` : "") +
+      (comment ? `\nComment: ${comment}` : "");
 
     const cta =
       mode === "Online" && meet_link

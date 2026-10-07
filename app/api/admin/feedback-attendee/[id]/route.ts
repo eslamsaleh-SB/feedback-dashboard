@@ -82,7 +82,7 @@ export async function PATCH(
   const { data: attendee } = await supabase
     .from("feedback_attendees")
     .select(
-      "id, hr_code, reservation_id, feedback_reservations(session_date, session_time, shift, mode, is_group, location, meet_link, duration_minutes, topic)"
+      "id, hr_code, reservation_id, feedback_reservations(session_date, session_time, shift, mode, is_group, location, meet_link, duration_minutes, topic, comment)"
     )
     .eq("id", params.id)
     .single();
@@ -100,6 +100,7 @@ export async function PATCH(
     meet_link: string | null;
     duration_minutes: number | null;
     topic: string | null;
+    comment: string | null;
   };
 
   // If nothing changed, bail.
@@ -123,6 +124,7 @@ export async function PATCH(
       meet_link: oldRes.meet_link,
       duration_minutes: oldRes.duration_minutes,
       topic: oldRes.topic,
+      comment: oldRes.comment,
     })
     .select("id")
     .single();

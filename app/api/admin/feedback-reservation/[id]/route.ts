@@ -55,7 +55,7 @@ export async function PATCH(
   // Fetch current row (needed for diff + attendee list)
   const { data: current } = await supabase
     .from("feedback_reservations")
-    .select("session_date, session_time, topic, feedback_attendees(hr_code)")
+    .select("session_date, session_time, topic, comment, feedback_attendees(hr_code)")
     .eq("id", params.id)
     .single();
 
@@ -80,6 +80,13 @@ export async function PATCH(
     patch.topic = val;
     if (val !== ((current as any)?.topic ?? null))
       changes.push(val ? `Topic: ${val}` : "Topic: removed");
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "comment")) {
+    const val =
+      typeof body.comment === "string" ? body.comment.trim() || null : null;
+    patch.comment = val;
+    if (val !== ((current as any)?.comment ?? null))
+      changes.push(val ? `Comment: ${val}` : "Comment: removed");
   }
 
   if (Object.keys(patch).length === 0)

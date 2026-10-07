@@ -40,6 +40,7 @@ export default function FeedbackReservationForm({
   // v59: duration (minutes) + free-text topic.
   const [durationMinutes, setDurationMinutes] = useState<string>("");
   const [topic, setTopic] = useState("");
+  const [comment, setComment] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -113,6 +114,7 @@ export default function FeedbackReservationForm({
         meet_link: mode === "Online" ? meetLink.trim() || null : null,
         duration_minutes: durationMinutes ? Math.max(0, parseInt(durationMinutes, 10)) : null,
         topic: topic.trim() || null,
+        comment: comment.trim() || null,
       })
       .select("id")
       .single();
@@ -148,6 +150,8 @@ export default function FeedbackReservationForm({
         meet_link: meetLink_,
         location: location_,
         shift,
+        topic: topic.trim() || null,
+        comment: comment.trim() || null,
       }),
     }).catch(() => {}); // ignore errors - email is best-effort
 
@@ -353,6 +357,16 @@ export default function FeedbackReservationForm({
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="What will be discussed…"
+            className={inputCls}
+          />
+        </div>
+        <div className="mt-4">
+          <label className={labelCls}>Comment</label>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Any extra note for the collector…"
+            rows={3}
             className={inputCls}
           />
         </div>

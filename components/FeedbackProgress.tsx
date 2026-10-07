@@ -27,6 +27,7 @@ export type Session = {
   // v59: duration + free-text topic captured at booking time.
   duration_minutes?: number | null;
   topic?: string | null;
+  comment?: string | null;
   attendees: Attendee[];
 };
 
@@ -104,7 +105,8 @@ export default function FeedbackProgress({
     session_date: string;
     session_time: string;
     topic: string;
-  }>({ session_date: "", session_time: "", topic: "" });
+    comment: string;
+  }>({ session_date: "", session_time: "", topic: "", comment: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
 
@@ -180,6 +182,7 @@ export default function FeedbackProgress({
       session_date: s.session_date ?? "",
       session_time: s.session_time ?? "",
       topic: s.topic ?? "",
+      comment: s.comment ?? "",
     });
     setEditMsg(null);
   }
@@ -195,6 +198,7 @@ export default function FeedbackProgress({
         session_date: editDraft.session_date,
         session_time: editDraft.session_time,
         topic: editDraft.topic,
+        comment: editDraft.comment,
       }),
     });
     const json = await res.json();
@@ -213,6 +217,7 @@ export default function FeedbackProgress({
               session_date: editDraft.session_date || s.session_date,
               session_time: editDraft.session_time || null,
               topic: editDraft.topic || null,
+              comment: editDraft.comment || null,
             }
       )
     );
@@ -574,6 +579,16 @@ export default function FeedbackProgress({
                         value={editDraft.topic}
                         onChange={(e) => setEditDraft((d) => ({ ...d, topic: e.target.value }))}
                         placeholder="e.g. Freeze frame mistakes"
+                        className={`${inputCls} w-full`}
+                      />
+                    </div>
+                    <div className="w-full">
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Comment</label>
+                      <textarea
+                        value={editDraft.comment}
+                        onChange={(e) => setEditDraft((d) => ({ ...d, comment: e.target.value }))}
+                        placeholder="Any extra note…"
+                        rows={2}
                         className={`${inputCls} w-full`}
                       />
                     </div>

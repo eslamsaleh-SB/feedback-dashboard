@@ -22,7 +22,7 @@ export default async function FeedbackProgressPage() {
   const { data: reservations } = await supabase
     .from("feedback_reservations")
     .select(
-      "id, session_date, session_time, shift, mode, is_group, location, meet_link, duration_minutes, topic, feedback_attendees(id, hr_code, attendance, comment)"
+      "id, session_date, session_time, shift, mode, is_group, location, meet_link, duration_minutes, topic, comment, feedback_attendees(id, hr_code, attendance, comment)"
     )
     .order("session_date", { ascending: false })
     .order("session_time", { ascending: true });
@@ -49,6 +49,7 @@ export default async function FeedbackProgressPage() {
     meet_link: r.meet_link,
     duration_minutes: (r.duration_minutes ?? null) as number | null,
     topic: (r.topic ?? null) as string | null,
+    comment: (r.comment ?? null) as string | null,
     attendees: (r.feedback_attendees ?? []).map((a: any) => ({
       id: a.id,
       hr_code: a.hr_code,
