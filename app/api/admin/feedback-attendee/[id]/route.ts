@@ -13,10 +13,13 @@ function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** Resolve auth email for an hr_code via the service-role client. */
-async function getCollectorEmail(hrCode: string): Promise<string | null> {
+/** Resolve collector email + their TeamLeader emails (CC) for an hr_code. */
+async function resolveRecipients(hrCode: string): Promise<{
+  email: string | null;
+  tlCcs: string[];
+}> {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceKey || !hrCode) return null;
+  if (!serviceKey || !hrCode) return { email: null, tlCcs: [] };
   const admin = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceKey,
@@ -24,14 +27,30 @@ async function getCollectorEmail(hrCode: string): Promise<string | null> {
   );
   const { data: row } = await admin
     .from("users")
-    .select("id")
+    .select("id, squad")
     .eq("hr_code", hrCode)
     .single();
-  if (!row) return null;
+  if (!row) return { email: null, tlCcs: [] };
   const {
     data: { user },
   } = await admin.auth.admin.getUserById((row as any).id);
-  return user?.email ?? null;
+  const email = user?.email ?? null;
+
+  // Find TLs in the same squad
+  const squad = ((row as any).squad ?? "").trim();
+  const tlCcs: string[] = [];
+  if (squad) {
+    const { data: tlRows } = await admin
+      .from("users")
+      .select("id")
+      .eq("squad", squad)
+      .eq("role", "TeamLeader");
+    for (const tl of (tlRows ?? []) as any[]) {
+      const { data: { user: tlUser } } = await admin.auth.admin.getUserById(tl.id);
+      if (tlUser?.email && tlUser.email !== email) tlCcs.push(tlUser.email);
+    }
+  }
+  return { email, tlCcs };
 }
 
 // ---------------------------------------------------------------------------
@@ -136,10 +155,10 @@ export async function PATCH(
   }
 
   // Notification email
-  const email = await getCollectorEmail((attendee as any).hr_code);
+  const { email, tlCcs } = await resolveRecipients((attendee as any).hr_code);
   if (email) {
     const timeStr = newTime ? ` at ${newTime}` : "";
-    const subject = `Feedback session rescheduled - ${newDate}`;
+    const subject = `Feedback session updated - ${newDate}`;
     const bodyHtml = `
       <ul style="margin:0 0 12px 18px;padding:0;color:#374151;">
         <li><strong>Previous:</strong> ${esc(oldRes.session_date)}${
@@ -151,7 +170,7 @@ export async function PATCH(
       oldRes.session_time ? ` at ${oldRes.session_time}` : ""
     }\nNew: ${newDate}${timeStr}`;
     const { html, text } = renderEmail({
-      heading: "Feedback session rescheduled",
+      heading: "Feedback session updated",
       intro: "Your feedback session has been rescheduled.",
       bodyHtml,
       bodyText,
@@ -161,7 +180,7 @@ export async function PATCH(
       },
       closing: "Please log in to the dashboard for full details.",
     });
-    sendEmail({ to: email, subject, html, text }).catch(() => {});
+    sendEmail({ to: email, subject, html, text, cc: tlCcs }).catch(() => {});
   }
 
   return NextResponse.json({ ok: true, new_reservation_id: (newRes as any).id });
@@ -209,7 +228,7 @@ export async function DELETE(
   }
 
   // Notification email
-  const email = await getCollectorEmail((attendee as any).hr_code);
+  const { email, tlCcs } = await resolveRecipients((attendee as any).hr_code);
   if (email) {
     const res = (attendee as any).feedback_reservations as {
       session_date: string;
@@ -237,7 +256,7 @@ export async function DELETE(
       },
       closing: "Please contact your reviewer if you have any questions.",
     });
-    sendEmail({ to: email, subject, html, text }).catch(() => {});
+    sendEmail({ to: email, subject, html, text, cc: tlCcs }).catch(() => {});
   }
 
   return NextResponse.json({ ok: true });
