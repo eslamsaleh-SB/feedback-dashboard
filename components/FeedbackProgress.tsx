@@ -1,6 +1,6 @@
 "use client";
 // v60: admin edit/delete feedback reservations
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import MultiSelectCombobox, { type MSOption } from "@/components/MultiSelectCombobox";
 
@@ -248,6 +248,21 @@ export default function FeedbackProgress({
           : { ...s, attendees: s.attendees.map((a) => (a.id === aid ? { ...a, ...patch } : a)) }
       )
     );
+  }
+
+  // Auto-save: attendance saves immediately; comment saves 800ms after the
+  // last keystroke (or instantly on blur).
+  const commentTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  function scheduleCommentSave(sess: Session, a: Attendee) {
+    clearTimeout(commentTimers.current[a.id]);
+    commentTimers.current[a.id] = setTimeout(() => save(sess, a), 800);
+  }
+  function flushCommentSave(sess: Session, a: Attendee) {
+    if (commentTimers.current[a.id]) {
+      clearTimeout(commentTimers.current[a.id]);
+      delete commentTimers.current[a.id];
+      save(sess, a);
+    }
   }
 
   async function save(_sess: Session, a: Attendee) {
@@ -718,11 +733,11 @@ export default function FeedbackProgress({
                         <td className="px-4 py-2.5">
                           <select
                             value={a.attendance ?? ""}
-                            onChange={(e) =>
-                              editAttendee(s.id, a.id, {
-                                attendance: (e.target.value || null) as Attendance | null,
-                              })
-                            }
+                            onChange={(e) => {
+                              const attendance = (e.target.value || null) as Attendance | null;
+                              editAttendee(s.id, a.id, { attendance });
+                              save(s, { ...a, attendance });
+                            }}
                             className={`rounded-lg border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-sm ${
                               statusStyle[a.attendance ?? ""]
                             }`}
@@ -736,7 +751,12 @@ export default function FeedbackProgress({
                         <td className="px-4 py-2.5 w-[40%]">
                           <input
                             value={a.comment ?? ""}
-                            onChange={(e) => editAttendee(s.id, a.id, { comment: e.target.value })}
+                            onChange={(e) => {
+                              const comment = e.target.value;
+                              editAttendee(s.id, a.id, { comment });
+                              scheduleCommentSave(s, { ...a, comment });
+                            }}
+                            onBlur={() => flushCommentSave(s, a)}
                             placeholder="Reason / notes (late by..., absence reason, etc.)"
                             className="w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm"
                           />
