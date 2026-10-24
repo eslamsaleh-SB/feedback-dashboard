@@ -336,6 +336,41 @@ export default function FeedbackProgress({
     return { total, completed, notCompleted, attended, late, absent, cancelled, notMarked };
   }, [visible]);
 
+  // Export the currently filtered sessions (one row per attendee) as CSV.
+  function exportCsv() {
+    const q = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const header = [
+      "Session Date", "Session Time", "Shift", "Mode", "Location", "Meet Link",
+      "Group", "Duration (min)", "Topic", "Session Comment",
+      "HR Code", "Collector Name", "Team", "Attendance", "Attendee Comment",
+    ];
+    const lines = [header.map(q).join(",")];
+    for (const s of visible) {
+      for (const a of s.attendees) {
+        lines.push(
+          [
+            s.session_date, s.session_time, s.shift, s.mode, s.location, s.meet_link,
+            s.is_group ? "Yes" : "No", s.duration_minutes, s.topic, s.comment,
+            a.hr_code, a.name, a.team, a.attendance ?? "Not marked", a.comment,
+          ].map(q).join(",")
+        );
+      }
+    }
+    // BOM so Excel opens UTF-8 (Arabic names) correctly.
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `feedback-sessions_${fromDate}_to_${toDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   const cards = [
     { label: "Total sessions", value: stats.total, color: "text-slate-800 dark:text-slate-100" },
     { label: "Completed", value: stats.completed, color: "text-emerald-600" },
@@ -460,6 +495,17 @@ export default function FeedbackProgress({
             </label>
           </div>
         )}
+
+        <div className="flex items-end">
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={visible.length === 0}
+            className="rounded-lg bg-emerald-600 text-white px-3 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+          >
+            Export CSV
+          </button>
+        </div>
 
         {anyFilter && (
           <div className="flex items-end">
