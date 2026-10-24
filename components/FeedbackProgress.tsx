@@ -269,17 +269,28 @@ export default function FeedbackProgress({
     setSavingId(a.id);
     setSavedId(null);
     setMsg(null);
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("feedback_attendees")
       .update({ attendance: a.attendance, comment: a.comment })
-      .eq("id", a.id);
-    if (error) {
-      setSavingId(null);
-      return setMsg(error.message);
-    }
+      .eq("id", a.id)
+      .select("id");
     setSavingId(null);
+    if (error || !data || data.length === 0) {
+      // 0 rows = blocked by RLS (no permission) or row no longer exists.
+      const text = error?.message ?? "Not saved - no permission to update this row.";
+      setMsg(text);
+      showToast(text, false);
+      return;
+    }
     setSavedId(a.id);
+    showToast(`Saved ${a.hr_code}`, true);
     setTimeout(() => setSavedId((s) => (s === a.id ? null : s)), 1500);
+  }
+
+  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
+  function showToast(text: string, ok: boolean) {
+    setToast({ text, ok });
+    setTimeout(() => setToast((t) => (t && t.text === text ? null : t)), ok ? 1500 : 5000);
   }
 
   const teamOptions = useMemo(() => {
@@ -542,6 +553,16 @@ export default function FeedbackProgress({
       </div>
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
+
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+            toast.ok ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
 
       <div className="text-sm text-slate-500 dark:text-slate-400">
         {visible.length} session(s) between {fromDate} and {toDate}
