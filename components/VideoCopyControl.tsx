@@ -5,6 +5,28 @@ import { createClient } from "@/lib/supabase/client";
 
 const BUCKET = "presentation-videos";
 
+/**
+ * Drive download link forced to open with a specific Google account.
+ * Without authuser, Chrome uses its default (often personal Gmail) account and
+ * Drive answers 403 for Hudl-only files.
+ */
+export function driveDownloadUrl(driveId: string, account: string | null) {
+  const u = `https://drive.google.com/uc?export=download&id=${driveId}`;
+  return account ? `${u}&authuser=${encodeURIComponent(account)}` : u;
+}
+
+/** The logged-in dashboard user's email (their Hudl account). */
+export function useMyEmail() {
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => setEmail(data.user?.email ?? null))
+      .catch(() => {});
+  }, []);
+  return email;
+}
+
 /** Upload a local file as the Supabase copy of a Drive video. Throws on error. */
 export async function uploadVideoCopy(driveId: string, file: File) {
   const supabase = createClient();
@@ -45,6 +67,7 @@ export default function VideoCopyControl({
   refreshKey?: number;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const myEmail = useMyEmail();
   const [copied, setCopied] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -90,7 +113,7 @@ export default function VideoCopyControl({
           {copied == null ? "Checking..." : copied ? "Visible to everyone" : "Drive only - collectors can't see it"}
         </span>
         <a
-          href={`https://drive.google.com/uc?export=download&id=${driveId}`}
+          href={driveDownloadUrl(driveId, myEmail)}
           target="_blank"
           rel="noreferrer"
           className={btn}

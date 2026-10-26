@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchCopiedIds, uploadVideoCopy } from "@/components/VideoCopyControl";
+import {
+  driveDownloadUrl,
+  fetchCopiedIds,
+  uploadVideoCopy,
+  useMyEmail,
+} from "@/components/VideoCopyControl";
 
 type Slide = { index: number; header: string; driveId: string };
 type Row = { file: File; slideIdx: number | null; status: "ready" | "uploading" | "done" | "error"; err?: string };
@@ -22,6 +27,7 @@ export default function BulkVideoCopy({
   onDone?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const myEmail = useMyEmail();
   const [copied, setCopied] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
   const [nextDl, setNextDl] = useState(0);
@@ -46,7 +52,7 @@ export default function BulkVideoCopy({
   function downloadNext() {
     const s = missing[nextDl];
     if (!s) return;
-    window.open(`https://drive.google.com/uc?export=download&id=${s.driveId}`, "_blank", "noopener");
+    window.open(driveDownloadUrl(s.driveId, myEmail), "_blank", "noopener");
     setNextDl((n) => n + 1);
   }
 
