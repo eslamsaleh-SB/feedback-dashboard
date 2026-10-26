@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import VideoCopyControl from "@/components/VideoCopyControl";
+import BulkVideoCopy from "@/components/BulkVideoCopy";
 
 type Page = {
   header: string;
@@ -66,6 +67,7 @@ export default function PresentationBuilder({
   const [assignedDate, setAssignedDate] = useState<string>(
     initial?.assigned_date ?? todayIso()
   );
+  const [videoRefresh, setVideoRefresh] = useState(0);
   const [pages, setPages] = useState<Page[]>(
     initial?.pages && initial.pages.length > 0
       ? initial.pages
@@ -327,6 +329,13 @@ export default function PresentationBuilder({
         </div>
       </div>
 
+      <BulkVideoCopy
+        slides={pages
+          .map((p, i) => ({ index: i, header: p.header, driveId: extractDriveId(p.video_link) ?? "" }))
+          .filter((s) => s.driveId)}
+        onDone={() => setVideoRefresh((n) => n + 1)}
+      />
+
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -465,7 +474,7 @@ export default function PresentationBuilder({
                   />
                 </div>
               )}
-              {driveId && <VideoCopyControl driveId={driveId} />}
+              {driveId && <VideoCopyControl driveId={driveId} refreshKey={videoRefresh} />}
             </div>
           );
         })}

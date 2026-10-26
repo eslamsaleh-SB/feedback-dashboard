@@ -5,12 +5,45 @@ import { createClient } from "@/lib/supabase/client";
 
 const BUCKET = "presentation-videos";
 
+/** Upload a local file as the Supabase copy of a Drive video. Throws on error. */
+export async function uploadVideoCopy(driveId: string, file: File) {
+  const supabase = createClient();
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "mp4";
+  const res = await fetch("/api/admin/presentation-video-upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ drive_id: driveId, ext }),
+  });
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error ?? "Could not start upload");
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .uploadToSignedUrl(j.path, j.token, file, { contentType: file.type || "video/mp4" });
+  if (error) throw new Error(error.message);
+}
+
+/** Which of these Drive ids already have a Supabase copy. */
+export async function fetchCopiedIds(driveIds: string[]): Promise<string[]> {
+  if (driveIds.length === 0) return [];
+  const r = await fetch(
+    `/api/admin/presentation-video-upload?drive_ids=${encodeURIComponent(driveIds.join(","))}`,
+    { cache: "no-store" }
+  );
+  const j = await r.json().catch(() => ({}));
+  return Array.isArray(j.copied) ? j.copied : [];
+}
+
 // Admin helper shown under each slide's Drive link.
 // 1) "Download from Drive" opens the file with the admin's own Hudl access.
 // 2) "Upload copy" stores that file in the private Supabase bucket, so every
 //    logged-in collector can play it without Drive permissions.
-export default function VideoCopyControl({ driveId }: { driveId: string }) {
-  const supabase = createClient();
+export default function VideoCopyControl({
+  driveId,
+  refreshKey = 0,
+}: {
+  driveId: string;
+  refreshKey?: number;
+}) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [copied, setCopied] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -18,31 +51,19 @@ export default function VideoCopyControl({ driveId }: { driveId: string }) {
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/admin/presentation-video-upload?drive_ids=${encodeURIComponent(driveId)}`)
-      .then((r) => r.json())
-      .then((j) => alive && setCopied(Array.isArray(j.copied) && j.copied.includes(driveId)))
+    fetchCopiedIds([driveId])
+      .then((ids) => alive && setCopied(ids.includes(driveId)))
       .catch(() => alive && setCopied(false));
     return () => {
       alive = false;
     };
-  }, [driveId]);
+  }, [driveId, refreshKey]);
 
   async function upload(file: File) {
     setBusy(true);
     setMsg(null);
     try {
-      const ext = file.name.includes(".") ? file.name.split(".").pop() : "mp4";
-      const res = await fetch("/api/admin/presentation-video-upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ drive_id: driveId, ext }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "Could not start upload");
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .uploadToSignedUrl(j.path, j.token, file, { contentType: file.type || "video/mp4" });
-      if (error) throw new Error(error.message);
+      await uploadVideoCopy(driveId, file);
       setCopied(true);
       setMsg("Uploaded - collectors can watch this video now.");
     } catch (e: any) {
