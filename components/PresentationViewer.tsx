@@ -167,8 +167,8 @@ export default function PresentationViewer({
             {videoMode === "native" ? (
               <video
                 ref={videoRef}
-                key={`native-${iframeNonce}`}
-                src={`https://drive.google.com/uc?export=download&id=${page!.drive_file_id}`}
+                key={`native-${page!.drive_file_id}`}
+                src={`/api/presentation-video/${encodeURIComponent(page!.drive_file_id)}`}
                 className="w-full block bg-black"
                 style={{ height: "480px" }}
                 loop

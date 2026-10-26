@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import VideoCopyControl from "@/components/VideoCopyControl";
 
 type Page = {
   header: string;
@@ -409,7 +410,7 @@ export default function PresentationBuilder({
                   className={inputCls}
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                  The link must be shared as "Anyone with the link".
+                  Collectors outside Hudl can't open Drive links - use "Upload copy" below so everyone can watch.
                 </p>
               </div>
               <div>
@@ -464,6 +465,7 @@ export default function PresentationBuilder({
                   />
                 </div>
               )}
+              {driveId && <VideoCopyControl driveId={driveId} />}
             </div>
           );
         })}
