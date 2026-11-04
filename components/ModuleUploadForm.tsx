@@ -32,7 +32,7 @@ function decodeBytes(buf: ArrayBuffer): string {
 function toRecords(rows: string[][]): Record<string, string>[] {
   const norm = (c: string) => String(c).trim().toLowerCase().replace(/\s+/g, "");
   const headerIdx = rows.findIndex((r) =>
-    r.some((c) => ["matchid", "match_id"].includes(norm(c)))
+    r.some((c) => ["matchid", "match_id", "match_id_global"].includes(norm(c)))
   );
   if (headerIdx < 0) return [];
   const headers = rows[headerIdx].map((h) => String(h).trim());
@@ -50,6 +50,75 @@ function toRecords(rows: string[][]): Record<string, string>[] {
   return out;
 }
 
+// "key (reviewed_matches)" -> "key", "match_id_global" -> "match_id", ...
+const canon = (h: string) =>
+  h.trim().toLowerCase().replace(/\s*\(.*?\)\s*/g, "").replace(/_global$/, "").replace(/\s+/g, "_");
+
+type DetailInfo = { rawRows: number; duplicates: number; noKey: number; module: string | null };
+
+// Tableau "details" export = one row per mistake with a unique `key`.
+// Collapse it in the browser to one total per match part, dropping duplicate
+// keys, so even 50+ MB files upload (the server only receives the totals).
+function aggregateDetails(
+  recs: Record<string, string>[]
+): { rows: Record<string, string>[]; info: DetailInfo } | null {
+  if (recs.length === 0) return null;
+  const col: Record<string, string> = {};
+  for (const h of Object.keys(recs[0])) {
+    const c = canon(h);
+    if (!(c in col)) col[c] = h;
+  }
+  const keyCol = col["key"];
+  const matchCol = col["match_id"] ?? col["matchid"];
+  const partCol = col["part_id"] ?? col["partid"];
+  const hrCol = col["hc_hr_code"] ?? col["collector_hr_code"] ?? col["hr_code"] ?? col["collector"];
+  const dateCol = col["review_date"];
+  if (!keyCol || !matchCol || !partCol) return null;
+
+  const seen = new Set<string>();
+  const parts = new Map<string, { matchid: string; partid: string; collector: string; review_date: string; n: number }>();
+  const modules = new Set<string>();
+  let duplicates = 0;
+  let noKey = 0;
+  for (const r of recs) {
+    const key = (r[keyCol] ?? "").trim();
+    if (!key) noKey++;
+    else if (seen.has(key)) { duplicates++; continue; }
+    else seen.add(key);
+    const matchid = (r[matchCol] ?? "").trim();
+    const partid = (r[partCol] ?? "").trim();
+    if (!matchid || !partid) continue;
+    if (col["module"] && r[col["module"]]) modules.add(r[col["module"]].trim().toLowerCase());
+    const k = `${matchid}|${partid}`;
+    const date = dateCol ? (r[dateCol] ?? "").trim() : "";
+    const hr = hrCol ? (r[hrCol] ?? "").trim() : "";
+    const cur = parts.get(k);
+    if (cur) {
+      cur.n++;
+      if (!cur.collector && hr) cur.collector = hr;
+      if (date && date > cur.review_date) cur.review_date = date;
+    } else {
+      parts.set(k, { matchid, partid, collector: hr, review_date: date, n: 1 });
+    }
+  }
+  const rows = Array.from(parts.values()).map((p) => ({
+    matchid: p.matchid,
+    partid: p.partid,
+    collector: p.collector,
+    review_date: p.review_date,
+    total_mistakes: String(p.n),
+  }));
+  return {
+    rows,
+    info: {
+      rawRows: recs.length,
+      duplicates,
+      noKey,
+      module: modules.size === 1 ? Array.from(modules)[0] : null,
+    },
+  };
+}
+
 export default function ModuleUploadForm({
   collectors = [],
 }: {
@@ -65,6 +134,8 @@ export default function ModuleUploadForm({
   const [parsing, setParsing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [detail, setDetail] = useState<DetailInfo | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const inputCls = "w-full rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900";
 
@@ -73,6 +144,7 @@ export default function ModuleUploadForm({
     setMsg(null);
     setHeaders([]);
     setRecords([]);
+    setDetail(null);
     if (!file) return;
     setFileName(file.name);
     setParsing(true);
@@ -88,8 +160,18 @@ export default function ModuleUploadForm({
         if (recs.length === 0) {
           setMsg({ type: "err", text: "Couldn't find a header row with a 'matchid' column." });
         } else {
-          setHeaders(Object.keys(recs[0]));
-          setRecords(recs);
+          const agg = aggregateDetails(recs);
+          if (agg) {
+            setDetail(agg.info);
+            if (agg.info.module && MODULES.some((m) => m.value === agg.info.module)) {
+              setModule(agg.info.module);
+            }
+            setHeaders(Object.keys(agg.rows[0] ?? {}));
+            setRecords(agg.rows);
+          } else {
+            setHeaders(Object.keys(recs[0]));
+            setRecords(recs);
+          }
         }
       } catch (err: any) {
         setMsg({ type: "err", text: `Could not read file: ${err.message}` });
@@ -115,23 +197,47 @@ export default function ModuleUploadForm({
 
     setLoading(true);
     try {
-      const res = await fetch("/api/modules/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ module, rows: records }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Upload failed");
+      // Pre-aggregated totals are sent in batches to stay under Vercel's
+      // ~4.5 MB request limit. Raw per-mistake files must go in one request
+      // (the server counts them), so those still need to be small.
+      const BATCH = detail ? 5000 : records.length;
+      let parts = 0, mistakes = 0, skipped = 0;
+      let touched = 0;
+      for (let i = 0; i < records.length; i += BATCH) {
+        if (records.length > BATCH) {
+          setProgress(`Saving ${Math.min(i + BATCH, records.length).toLocaleString()} of ${records.length.toLocaleString()}…`);
+        }
+        const res = await fetch("/api/modules/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ module, rows: records.slice(i, i + BATCH) }),
+        });
+        const json = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
+        if (!res.ok) {
+          throw new Error(
+            (json.error || "Upload failed") +
+              (i > 0 ? ` (first ${i.toLocaleString()} parts were saved)` : "")
+          );
+        }
+        parts += json.parts_upserted ?? 0;
+        mistakes += json.mistakes_total ?? 0;
+        skipped += json.skipped ?? 0;
+        touched = Math.max(touched, json.collectors_touched ?? 0);
+      }
+      setProgress(null);
+      const hrSet = new Set(records.map((r) => r.collector || r.hr_code).filter(Boolean));
 
       const bits = [
-        `${json.parts_upserted} match-part total(s) saved for ${json.module}`,
-        `${json.mistakes_total} mistakes`,
-        `${json.collectors_touched} collector(s)`,
+        `${parts.toLocaleString()} match-part total(s) saved for ${module}`,
+        `${mistakes.toLocaleString()} mistakes`,
+        `${(detail ? hrSet.size : touched).toLocaleString()} collector(s)`,
       ];
-      if (json.skipped > 0) bits.push(`${json.skipped} row(s) skipped`);
+      if (detail?.duplicates) bits.push(`${detail.duplicates.toLocaleString()} duplicate key(s) ignored`);
+      if (skipped > 0) bits.push(`${skipped} row(s) skipped`);
       setMsg({ type: "ok", text: bits.join(", ") + ". Redirecting…" });
       setTimeout(() => router.push("/analytics"), 1600);
     } catch (err: any) {
+      setProgress(null);
       setMsg({ type: "err", text: err.message });
       setLoading(false);
     }
@@ -170,7 +276,10 @@ export default function ModuleUploadForm({
             Expected columns: <span className="font-mono">matchid, partid,
             collector (HR code), review_date</span> and either{" "}
             <span className="font-mono">total_mistakes</span> (pre-aggregated) or
-            one row per mistake (counted automatically).
+            one row per mistake (counted automatically). Tableau
+            &quot;details&quot; exports with a <span className="font-mono">key</span> column
+            are counted in the browser, duplicate keys are dropped, and the
+            module is picked from <span className="font-mono">module_global</span>.
           </p>
         </div>
 
@@ -179,7 +288,7 @@ export default function ModuleUploadForm({
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.tsv,.txt,text/csv"
             onChange={handleFile}
             className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-white"
           />
@@ -193,10 +302,21 @@ export default function ModuleUploadForm({
                 : ""}
             </p>
           )}
-          <p className="text-xs text-amber-600 mt-1">
-            Keep files under ~4 MB (Vercel request limit). Aggregated exports are
-            tiny; split larger raw files.
-          </p>
+          {detail && (
+            <p className="text-xs text-emerald-600 mt-1">
+              Details file: {detail.rawRows.toLocaleString()} mistake rows →{" "}
+              {records.length.toLocaleString()} match parts
+              {detail.duplicates > 0 && ` · ${detail.duplicates.toLocaleString()} duplicate key(s) removed`}
+              {detail.noKey > 0 && ` · ${detail.noKey.toLocaleString()} row(s) without a key`}
+              {detail.module && ` · module: ${detail.module}`}
+            </p>
+          )}
+          {!detail && (
+            <p className="text-xs text-amber-600 mt-1">
+              Files without a key column must stay under ~4 MB (Vercel request
+              limit). Details exports with a key column can be any size.
+            </p>
+          )}
         </div>
 
         {preview.length > 0 && (
@@ -248,7 +368,7 @@ export default function ModuleUploadForm({
           {loading && (
             <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
           )}
-          {loading ? "Uploading…" : "Upload & save totals"}
+          {loading ? progress ?? "Uploading…" : "Upload & save totals"}
         </button>
 
         {msg && (
