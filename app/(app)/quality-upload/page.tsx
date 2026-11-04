@@ -69,7 +69,7 @@ export default function QualityUploadPage() {
         <p className="text-slate-500 dark:text-slate-400 mt-1">
           Upload monthly quality score files (Module Score or Freeze Frame Score).
           Re-uploading the same month overwrites previous data.
-          A Module file with a <b>Month</b> column (e.g. &quot;Calculation Modules - Total&quot;) can hold
+          A Module or Freeze Frame file with a <b>Month</b> column can hold
           many months at once: each row goes to its own month in the selected Year.
         </p>
       </div>
@@ -145,7 +145,7 @@ export default function QualityUploadPage() {
           disabled={!file || uploading}
           className="w-full rounded-lg bg-slate-900 text-white py-2 font-medium disabled:opacity-50"
         >
-          {uploading ? "Uploading..." : type === "module" ? `Upload (${year} / ${monthLabel} if no Month column)` : `Upload for ${monthLabel}`}
+          {uploading ? "Uploading..." : `Upload (${year} / ${monthLabel} if no Month column)`}
         </button>
 
         {result && (

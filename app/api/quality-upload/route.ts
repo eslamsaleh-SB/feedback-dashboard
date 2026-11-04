@@ -179,10 +179,18 @@ export async function POST(req: NextRequest) {
     upserted = inserts.length;
     months = Array.from(new Set(inserts.map((x) => String(x.upload_month).slice(0, 7)))).sort();
   } else if (type === "freeze_frame") {
-    // Expected columns: collector_hr_code, Avg. ff_score, match_count
+    // Columns: hr_code, ff_score/score (+ optional: Month, match_count,
+    // total_errors, total_reviewed_events). Month column works like the module file.
     const hrIdx    = headers.findIndex((h) => h.includes("hr_code"));
-    const scoreIdx = headers.findIndex((h) => h.includes("ff_score") || h.includes("score"));
+    const scoreIdx = (() => {
+      const ff = headers.findIndex((h) => h.includes("ff_score"));
+      return ff >= 0 ? ff : headers.findIndex((h) => h === "score" || h.endsWith("_score") || h.includes("score"));
+    })();
+    const monthIdx = headers.findIndex((h) => h === "month");
+    const errIdx   = headers.findIndex((h) => h.includes("total_errors") || h === "errors");
+    const revIdx   = headers.findIndex((h) => h.includes("reviewed_events") || h.includes("event_count"));
     const matchIdx = headers.findIndex((h) => h.includes("match_count"));
+    const year     = month.slice(0, 4);
 
     if (hrIdx < 0 || scoreIdx < 0) {
       return NextResponse.json(
@@ -191,32 +199,49 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const inserts: any[] = [];
+    const byKey = new Map<string, any>();
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i];
-      const hr    = r[hrIdx]?.trim();
+      const hr = r[hrIdx]?.trim();
+      if (!hr) continue;                                // empty / #DIV/0! filler rows
+      let rowMonth = uploadMonth;
+      if (monthIdx >= 0) {
+        const m = monthNum(r[monthIdx] ?? "");
+        if (!m) { errors.push(`Row ${i + 1}: unknown month "${r[monthIdx] ?? ""}"`); continue; }
+        rowMonth = `${year}-${String(m).padStart(2, "0")}-01`;
+      }
       const score = parsePct(r[scoreIdx] ?? "");
-      const mc    = matchIdx >= 0 ? parseNum(r[matchIdx] ?? "") : null;
-      if (!hr || score === null) continue;
-      inserts.push({
+      if (score === null) { errors.push(`Row ${i + 1}: skipped (hr=${hr}, score=${r[scoreIdx]})`); continue; }
+      const row: any = {
         hr_code: hr,
         score,
-        match_count: mc,
-        upload_month: uploadMonth,
+        match_count: matchIdx >= 0 ? parseNum(r[matchIdx] ?? "") : null,
+        upload_month: rowMonth,
         uploaded_by: user.id,
-      });
+      };
+      if (errIdx >= 0) row.total_errors = parseNum(r[errIdx] ?? "");
+      if (revIdx >= 0) row.total_reviewed_events = parseNum(r[revIdx] ?? "");
+      byKey.set(`${hr}|${rowMonth}`, row);
     }
+    const inserts = Array.from(byKey.values());
 
     if (inserts.length === 0) {
       return NextResponse.json({ error: "No valid rows found in the file" }, { status: 400 });
     }
 
-    const { error: dbErr } = await supabase
-      .from("freeze_frame_scores")
-      .upsert(inserts, { onConflict: "hr_code,upload_month" });
-
-    if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
+    for (let k = 0; k < inserts.length; k += 1000) {
+      const { error: dbErr } = await supabase
+        .from("freeze_frame_scores")
+        .upsert(inserts.slice(k, k + 1000), { onConflict: "hr_code,upload_month" });
+      if (dbErr) {
+        return NextResponse.json(
+          { error: `${dbErr.message} (saved ${k} of ${inserts.length} rows before the error)` },
+          { status: 500 }
+        );
+      }
+    }
     upserted = inserts.length;
+    months = Array.from(new Set(inserts.map((x) => String(x.upload_month).slice(0, 7)))).sort();
   } else {
     return NextResponse.json({ error: "Unknown type" }, { status: 400 });
   }
