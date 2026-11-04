@@ -24,6 +24,8 @@ export default function QualityUploadPage() {
   const [result, setResult] = useState<{
     ok?: boolean;
     upserted?: number;
+    months?: string[];
+    warningCount?: number;
     warnings?: string[];
     error?: string;
   } | null>(null);
@@ -67,6 +69,8 @@ export default function QualityUploadPage() {
         <p className="text-slate-500 dark:text-slate-400 mt-1">
           Upload monthly quality score files (Module Score or Freeze Frame Score).
           Re-uploading the same month overwrites previous data.
+          A Module file with a <b>Month</b> column (e.g. &quot;Calculation Modules - Total&quot;) can hold
+          many months at once: each row goes to its own month in the selected Year.
         </p>
       </div>
 
@@ -141,7 +145,7 @@ export default function QualityUploadPage() {
           disabled={!file || uploading}
           className="w-full rounded-lg bg-slate-900 text-white py-2 font-medium disabled:opacity-50"
         >
-          {uploading ? "Uploading..." : `Upload for ${monthLabel}`}
+          {uploading ? "Uploading..." : type === "module" ? `Upload (${year} / ${monthLabel} if no Month column)` : `Upload for ${monthLabel}`}
         </button>
 
         {result && (
@@ -155,8 +159,17 @@ export default function QualityUploadPage() {
             {result.ok ? (
               <>
                 <p className="font-semibold">
-                  Uploaded {result.upserted} rows for {monthLabel}.
+                  Uploaded {result.upserted?.toLocaleString()} rows for{" "}
+                  {(result.months && result.months.length > 0 ? result.months : [monthValue])
+                    .map((m) => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`)
+                    .join(", ")}
+                  .
                 </p>
+                {!!result.warningCount && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    {result.warningCount} row(s) skipped{result.warningCount > 10 ? " - first 10 below" : ""}:
+                  </p>
+                )}
                 {result.warnings && result.warnings.length > 0 && (
                   <ul className="mt-2 space-y-1 text-xs text-amber-700">
                     {result.warnings.map((w, i) => (
