@@ -1,19 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const BUCKET = "presentation-videos";
-
-/**
- * Drive download link forced to open with a specific Google account.
- * Without authuser, Chrome uses its default (often personal Gmail) account and
- * Drive answers 403 for Hudl-only files.
- */
-export function driveDownloadUrl(driveId: string, account: string | null) {
-  const u = `https://drive.google.com/uc?export=download&id=${driveId}`;
-  return account ? `${u}&authuser=${encodeURIComponent(account)}` : u;
-}
 
 /** The logged-in dashboard user's email (their Hudl account). */
 export function useMyEmail() {
@@ -66,11 +56,7 @@ export default function VideoCopyControl({
   driveId: string;
   refreshKey?: number;
 }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const myEmail = useMyEmail();
   const [copied, setCopied] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -82,59 +68,15 @@ export default function VideoCopyControl({
     };
   }, [driveId, refreshKey]);
 
-  async function upload(file: File) {
-    setBusy(true);
-    setMsg(null);
-    try {
-      await uploadVideoCopy(driveId, file);
-      setCopied(true);
-      setMsg("Uploaded - collectors can watch this video now.");
-    } catch (e: any) {
-      setMsg(e?.message ?? "Upload failed");
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  }
-
-  const btn =
-    "rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50";
-
   return (
-    <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-            copied
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-              : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-          }`}
-        >
-          {copied == null ? "Checking..." : copied ? "Visible to everyone" : "Drive only - collectors can't see it"}
-        </span>
-        <a
-          href={driveDownloadUrl(driveId, myEmail)}
-          target="_blank"
-          rel="noreferrer"
-          className={btn}
-        >
-          1. Download from Drive
-        </a>
-        <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className={btn}>
-          {busy ? "Uploading..." : copied ? "2. Replace copy" : "2. Upload copy"}
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="video/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) upload(f);
-          }}
-        />
-      </div>
-      {msg && <p className="text-[11px] text-slate-500 dark:text-slate-400">{msg}</p>}
-    </div>
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
+        copied
+          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+          : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+      }`}
+    >
+      {copied == null ? "Checking..." : copied ? "Visible to everyone" : "Drive only - collectors can't see it yet"}
+    </span>
   );
 }

@@ -51,6 +51,7 @@ export default async function EditPresentationPage({ params }: { params: { id: s
 
   return (
     <PresentationBuilder
+      canCopyVideos={role === "Admin"}
       mode="edit"
       canDelete={role === "Admin"}
       collectors={(collectors ?? []).map((c: any) => ({

@@ -52,12 +52,15 @@ export default function PresentationBuilder({
   collectors,
   initial,
   canDelete = false,
+  canCopyVideos = false,
 }: {
   mode: "create" | "edit";
   collectors: CollectorOpt[];
   initial: InitialData | null;
   // v59: Delete is Admin-only; hide from Reviewer.
   canDelete?: boolean;
+  // Copying Drive videos needs an Admin with a Hudl Google account.
+  canCopyVideos?: boolean;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -329,12 +332,12 @@ export default function PresentationBuilder({
         </div>
       </div>
 
-      <BulkVideoCopy
+      {canCopyVideos && <BulkVideoCopy
         slides={pages
           .map((p, i) => ({ index: i, header: p.header, driveId: extractDriveId(p.video_link) ?? "" }))
           .filter((s) => s.driveId)}
         onDone={() => setVideoRefresh((n) => n + 1)}
-      />
+      />}
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -419,7 +422,7 @@ export default function PresentationBuilder({
                   className={inputCls}
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                  Collectors outside Hudl can't open Drive links - use "Upload copy" below so everyone can watch.
+                  Collectors outside Hudl can't open Drive links - an Admin copies the videos with "Copy all from Drive" so everyone can watch.
                 </p>
               </div>
               <div>
@@ -474,7 +477,7 @@ export default function PresentationBuilder({
                   />
                 </div>
               )}
-              {driveId && <VideoCopyControl driveId={driveId} refreshKey={videoRefresh} />}
+              {canCopyVideos && driveId && <VideoCopyControl driveId={driveId} refreshKey={videoRefresh} />}
             </div>
           );
         })}

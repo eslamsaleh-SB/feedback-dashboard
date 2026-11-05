@@ -21,6 +21,7 @@ export default async function NewPresentationPage() {
 
   return (
     <PresentationBuilder
+      canCopyVideos={role === "Admin"}
       mode="create"
       collectors={(collectors ?? []).map((c: any) => ({
         hr_code: c.hr_code as string,
