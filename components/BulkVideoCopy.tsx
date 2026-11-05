@@ -13,9 +13,12 @@ type Slide = { index: number; header: string; driveId: string };
 export default function BulkVideoCopy({
   slides,
   onDone,
+  itemLabel = "Page",
 }: {
   slides: Slide[];
   onDone?: () => void;
+  /** "Page" for presentations, "Question" for quizzes. */
+  itemLabel?: string;
 }) {
   const myEmail = useMyEmail();
   const [copied, setCopied] = useState<Set<string>>(new Set());
@@ -50,7 +53,7 @@ export default function BulkVideoCopy({
       const errs: string[] = [];
       for (let i = 0; i < missingUnique.length; i++) {
         const s = missingUnique[i];
-        const label = `Page ${s.index + 1}${s.header ? ` (${s.header})` : ""}`;
+        const label = `${itemLabel} ${s.index + 1}${s.header ? ` (${s.header})` : ""}`;
         setAuto({ done: i, total: missingUnique.length, current: label });
         try {
           setStep("downloading from Drive…");

@@ -59,6 +59,7 @@ export default async function AdminQuizDetailPage({ params }: { params: { id: st
   return (
     <div className="space-y-8">
       <QuizBuilder
+        canCopyVideos={role === "Admin"}
         mode="edit"
         canDelete={role === "Admin"}
         collectors={(collectors ?? []).map((u: any) => {

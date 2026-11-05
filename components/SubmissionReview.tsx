@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import DriveVideo from "@/components/DriveVideo";
 import { useRouter } from "next/navigation";
 
 type Question = {
@@ -127,15 +128,7 @@ export default function SubmissionReview({
             </div>
 
             {q.drive_file_id && (
-              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
-                <iframe
-                  src={`https://drive.google.com/file/d/${q.drive_file_id}/preview`}
-                  className="w-full"
-                  style={{ height: "260px" }}
-                  allow="autoplay; fullscreen"
-                  allowFullScreen
-                />
-              </div>
+              <DriveVideo driveId={q.drive_file_id} height={260} />
             )}
 
             <div>

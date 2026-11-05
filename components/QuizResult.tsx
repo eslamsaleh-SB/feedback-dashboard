@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import DriveVideo from "@/components/DriveVideo";
 
 type Question = {
   id: string;
@@ -165,15 +166,7 @@ export default function QuizResult({
 
             {/* Case video, shown below the answers - same style as the admin view. */}
             {q.drive_file_id && (
-              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
-                <iframe
-                  src={`https://drive.google.com/file/d/${q.drive_file_id}/preview`}
-                  className="w-full"
-                  style={{ height: "300px" }}
-                  allow="autoplay; fullscreen"
-                  allowFullScreen
-                />
-              </div>
+              <DriveVideo driveId={q.drive_file_id} height={300} />
             )}
           </div>
         );

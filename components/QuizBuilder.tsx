@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import BulkVideoCopy from "@/components/BulkVideoCopy";
+import VideoCopyControl from "@/components/VideoCopyControl";
 import { useRouter } from "next/navigation";
 import AssignmentPicker from "@/components/AssignmentPicker";
 
@@ -76,14 +78,18 @@ export default function QuizBuilder({
   collectors,
   initial,
   canDelete = false,
+  canCopyVideos = false,
 }: {
   mode: "create" | "edit";
   collectors: CollectorOpt[];
   initial: InitialData | null;
   // v59: Delete is Admin-only; hide from Reviewer.
   canDelete?: boolean;
+  // Copying Drive videos needs an Admin with a Hudl Google account.
+  canCopyVideos?: boolean;
 }) {
   const router = useRouter();
+  const [videoRefresh, setVideoRefresh] = useState(0);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [published, setPublished] = useState<boolean>(initial?.published ?? false);
@@ -303,6 +309,16 @@ export default function QuizBuilder({
           </button>
         </div>
 
+        {canCopyVideos && (
+          <BulkVideoCopy
+            itemLabel="Question"
+            slides={questions
+              .map((q, i) => ({ index: i, header: q.prompt, driveId: extractDriveId(q.video_link) ?? "" }))
+              .filter((x) => x.driveId)}
+            onDone={() => setVideoRefresh((n) => n + 1)}
+          />
+        )}
+
         {questions.map((q, i) => {
           const driveId = extractDriveId(q.video_link);
           const needsOptions = ["multiple_choice", "checkboxes", "multiple_choice_other"].includes(q.question_type);
@@ -462,6 +478,11 @@ export default function QuizBuilder({
                   placeholder="https://drive.google.com/file/d/..."
                   className={inputCls}
                 />
+                {canCopyVideos && driveId && (
+                  <div className="mt-2">
+                    <VideoCopyControl driveId={driveId} refreshKey={videoRefresh} />
+                  </div>
+                )}
                 {driveId && (
                   <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
                     <p className="text-[11px] text-slate-400 dark:text-slate-500 px-3 py-1.5 bg-slate-900 text-slate-100 truncate">
