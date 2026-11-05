@@ -7,6 +7,7 @@ import {
   uploadVideoCopy,
   useMyEmail,
 } from "@/components/VideoCopyControl";
+import { GOOGLE_CLIENT_ID, fetchDriveFile, getDriveToken } from "@/lib/googleDrive";
 
 type Slide = { index: number; header: string; driveId: string };
 type Row = { file: File; slideIdx: number | null; status: "ready" | "uploading" | "done" | "error"; err?: string };
@@ -33,6 +34,41 @@ export default function BulkVideoCopy({
   const [nextDl, setNextDl] = useState(0);
   const [rows, setRows] = useState<Row[]>([]);
   const [running, setRunning] = useState(false);
+  // Automatic copy (Drive API in the browser, no manual download).
+  const [auto, setAuto] = useState<{ done: number; total: number; current: string } | null>(null);
+  const [autoErrors, setAutoErrors] = useState<string[]>([]);
+
+  async function copyAllAutomatically() {
+    const todo = slides.filter((s) => !copied.has(s.driveId));
+    const unique = todo.filter((s, i) => todo.findIndex((x) => x.driveId === s.driveId) === i);
+    if (unique.length === 0) return;
+    setAutoErrors([]);
+    setRunning(true);
+    try {
+      const token = await getDriveToken(myEmail);
+      const errs: string[] = [];
+      for (let i = 0; i < unique.length; i++) {
+        const s = unique[i];
+        const label = `Page ${s.index + 1}${s.header ? ` (${s.header})` : ""}`;
+        setAuto({ done: i, total: unique.length, current: label });
+        try {
+          const file = await fetchDriveFile(s.driveId, token);
+          await uploadVideoCopy(s.driveId, file);
+          setCopied((prev) => new Set(prev).add(s.driveId));
+        } catch (e: any) {
+          errs.push(`${label}: ${e?.message ?? "failed"}`);
+        }
+      }
+      setAutoErrors(errs);
+      setAuto({ done: unique.length, total: unique.length, current: "" });
+    } catch (e: any) {
+      setAutoErrors([e?.message ?? "Google sign-in failed"]);
+    } finally {
+      setRunning(false);
+      await refresh();
+      onDone?.();
+    }
+  }
 
   const ids = useMemo(() => Array.from(new Set(slides.map((s) => s.driveId))), [slides]);
   const idsKey = ids.join(",");
@@ -121,8 +157,37 @@ export default function BulkVideoCopy({
         </span>
       </div>
 
+      {loaded && missing.length > 0 && GOOGLE_CLIENT_ID && (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={copyAllAutomatically}
+            disabled={running}
+            className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {running && auto
+              ? `Copying ${auto.done + 1} of ${auto.total}…`
+              : `Copy all ${missing.length} video(s) from Drive automatically`}
+          </button>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Sign in with your Hudl Google account once; videos go straight from Drive to the dashboard, nothing is downloaded.
+            {running && auto?.current ? ` Now: ${auto.current}` : ""}
+          </p>
+        </div>
+      )}
+      {autoErrors.length > 0 && (
+        <ul className="text-xs text-red-600 space-y-0.5">
+          {autoErrors.map((e, i) => (
+            <li key={i}>{e}</li>
+          ))}
+        </ul>
+      )}
+
       {loaded && missing.length > 0 && (
         <>
+          {GOOGLE_CLIENT_ID && (
+            <p className="text-xs text-slate-400 dark:text-slate-500">Or do it manually:</p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={downloadNext} disabled={nextDl >= missing.length} className={btn}>
               {nextDl >= missing.length
