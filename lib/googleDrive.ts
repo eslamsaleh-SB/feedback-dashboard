@@ -71,8 +71,9 @@ export async function fetchDriveFile(driveId: string, token: string): Promise<Fi
     throw new Error(`Drive error ${metaRes.status}`);
   }
   const meta = await metaRes.json();
-  if (meta.size && Number(meta.size) > 50 * 1024 * 1024) {
-    throw new Error(`Over 50 MB (${(Number(meta.size) / 1048576).toFixed(0)} MB)`);
+  // Big files are compressed in the browser afterwards; refuse only absurd sizes.
+  if (meta.size && Number(meta.size) > 1024 * 1024 * 1024) {
+    throw new Error(`Over 1 GB (${(Number(meta.size) / 1048576).toFixed(0)} MB) - too big to process in the browser`);
   }
 
   const res = await fetch(`${base}?alt=media&supportsAllDrives=true`, { headers: auth });
