@@ -55,7 +55,7 @@ export async function PATCH(
   // Fetch current row (needed for diff + attendee list)
   const { data: current } = await supabase
     .from("feedback_reservations")
-    .select("session_date, session_time, topic, comment, feedback_attendees(hr_code)")
+    .select("session_date, session_time, topic, comment, shift, mode, location, meet_link, feedback_attendees(hr_code)")
     .eq("id", params.id)
     .single();
 
@@ -88,6 +88,22 @@ export async function PATCH(
     if (val !== ((current as any)?.comment ?? null))
       changes.push(val ? `Comment: ${val}` : "Comment: removed");
   }
+
+  // Shift / mode / location / meet link
+  const textField = (name: "shift" | "location" | "meet_link", label: string) => {
+    if (!Object.prototype.hasOwnProperty.call(body, name)) return;
+    const val = typeof body[name] === "string" ? body[name].trim() || null : null;
+    patch[name] = val;
+    if (val !== ((current as any)?.[name] ?? null))
+      changes.push(val ? `${label}: ${val}` : `${label}: removed`);
+  };
+  if (body.mode === "Online" || body.mode === "Offline") {
+    patch.mode = body.mode;
+    if (body.mode !== (current as any)?.mode) changes.push(`Mode: ${body.mode}`);
+  }
+  textField("shift", "Shift");
+  textField("location", "Location");
+  textField("meet_link", "Meet link");
 
   if (Object.keys(patch).length === 0)
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

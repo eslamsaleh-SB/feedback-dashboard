@@ -39,6 +39,10 @@ const statusStyle: Record<string, string> = {
   "": "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
 };
 
+// Same options as the booking form (FeedbackReservationForm).
+const EDIT_SHIFTS = ["Morning", "Night", "Overnight"];
+const EDIT_LOCATIONS = ["Mahmoud El-Badry", "Hassan Ma'moun", "Maadi"];
+
 const first3 = (s: string | null) => (s ? s.trim().split(/\s+/).slice(0, 3).join(" ") : "");
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -106,7 +110,14 @@ export default function FeedbackProgress({
     session_time: string;
     topic: string;
     comment: string;
-  }>({ session_date: "", session_time: "", topic: "", comment: "" });
+    shift: string;
+    mode: "Online" | "Offline";
+    location: string;
+    meet_link: string;
+  }>({
+    session_date: "", session_time: "", topic: "", comment: "",
+    shift: "", mode: "Online", location: "", meet_link: "",
+  });
   const [editSaving, setEditSaving] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
 
@@ -183,6 +194,10 @@ export default function FeedbackProgress({
       session_time: s.session_time ?? "",
       topic: s.topic ?? "",
       comment: s.comment ?? "",
+      shift: s.shift ?? "",
+      mode: s.mode,
+      location: s.location ?? "",
+      meet_link: s.meet_link ?? "",
     });
     setEditMsg(null);
   }
@@ -199,6 +214,10 @@ export default function FeedbackProgress({
         session_time: editDraft.session_time,
         topic: editDraft.topic,
         comment: editDraft.comment,
+        shift: editDraft.shift,
+        mode: editDraft.mode,
+        location: editDraft.mode === "Offline" ? editDraft.location : "",
+        meet_link: editDraft.mode === "Online" ? editDraft.meet_link : "",
       }),
     });
     const json = await res.json();
@@ -218,6 +237,10 @@ export default function FeedbackProgress({
               session_time: editDraft.session_time || null,
               topic: editDraft.topic || null,
               comment: editDraft.comment || null,
+              shift: editDraft.shift || null,
+              mode: editDraft.mode,
+              location: editDraft.mode === "Offline" ? editDraft.location || null : null,
+              meet_link: editDraft.mode === "Online" ? editDraft.meet_link.trim() || null : null,
             }
       )
     );
@@ -654,6 +677,56 @@ export default function FeedbackProgress({
                         className={inputCls}
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Shift</label>
+                      <select
+                        value={editDraft.shift}
+                        onChange={(e) => setEditDraft((d) => ({ ...d, shift: e.target.value }))}
+                        className={inputCls}
+                      >
+                        <option value="">-</option>
+                        {EDIT_SHIFTS.map((sh) => (
+                          <option key={sh} value={sh}>{sh}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Mode</label>
+                      <select
+                        value={editDraft.mode}
+                        onChange={(e) => setEditDraft((d) => ({ ...d, mode: e.target.value as "Online" | "Offline" }))}
+                        className={inputCls}
+                      >
+                        <option value="Online">Online</option>
+                        <option value="Offline">Offline</option>
+                      </select>
+                    </div>
+                    {editDraft.mode === "Offline" ? (
+                      <div>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Location</label>
+                        <select
+                          value={editDraft.location}
+                          onChange={(e) => setEditDraft((d) => ({ ...d, location: e.target.value }))}
+                          className={inputCls}
+                        >
+                          <option value="">Select office...</option>
+                          {Array.from(new Set([...EDIT_LOCATIONS, ...(editDraft.location ? [editDraft.location] : [])])).map((l) => (
+                            <option key={l} value={l}>{l}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="min-w-[240px]">
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Meet link</label>
+                        <input
+                          type="text"
+                          value={editDraft.meet_link}
+                          onChange={(e) => setEditDraft((d) => ({ ...d, meet_link: e.target.value }))}
+                          placeholder="https://meet.google.com/..."
+                          className={`${inputCls} w-full`}
+                        />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-[220px]">
                       <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Topic</label>
                       <input
