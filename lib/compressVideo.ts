@@ -30,8 +30,19 @@ export async function compressVideo(
     const conversion = await mb.Conversion.init({
       input,
       output,
-      video: { codec: "avc", width, quality: new mb.Quality(videoBps), forceTranscode: true },
-      audio: { codec: "aac", quality: new mb.Quality(audioBps), forceTranscode: true },
+      // NOTE: new Quality(<number>) means a 0-1 quality LEVEL, not a bitrate -
+      // an explicit bitrate must be passed as { bitrate }.
+      video: {
+        codec: "avc",
+        width,
+        quality: new mb.Quality({ bitrate: videoBps, bitrateMode: "constant" }),
+        forceTranscode: true,
+      },
+      audio: {
+        codec: "aac",
+        quality: new mb.Quality({ bitrate: audioBps, bitrateMode: "constant" }),
+        forceTranscode: true,
+      },
       showWarnings: false,
     });
     if (!conversion.isValid) {
