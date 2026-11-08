@@ -33,30 +33,126 @@ function loadGis(): Promise<void> {
   return gisLoading;
 }
 
-let cached: { token: string; exp: number } | null = null;
+const READ_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+// Full Drive scope: needed to create folders/files inside an existing folder.
+const WRITE_SCOPE = "https://www.googleapis.com/auth/drive";
+const cached: Record<string, { token: string; exp: number }> = {};
 
-/** Opens the Google popup (first time) and returns a read-only Drive token. */
-export async function getDriveToken(loginHint?: string | null): Promise<string> {
+/** Opens the Google popup (first time) and returns a Drive token. */
+export async function getDriveToken(loginHint?: string | null, write = false): Promise<string> {
   if (!GOOGLE_CLIENT_ID) throw new Error("Google client ID is not configured");
-  if (cached && cached.exp > Date.now() + 60_000) return cached.token;
+  // A write token can also read.
+  const w = cached[WRITE_SCOPE];
+  if (w && w.exp > Date.now() + 60_000) return w.token;
+  const scope = write ? WRITE_SCOPE : READ_SCOPE;
+  const c = cached[scope];
+  if (c && c.exp > Date.now() + 60_000) return c.token;
   await loadGis();
   return new Promise((resolve, reject) => {
     const client = (window as any).google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
-      scope: "https://www.googleapis.com/auth/drive.readonly",
+      scope,
       hint: loginHint ?? undefined,
       callback: (resp: any) => {
         if (resp?.error || !resp?.access_token) {
           reject(new Error(resp?.error_description || resp?.error || "Google sign-in was cancelled"));
           return;
         }
-        cached = { token: resp.access_token, exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000 };
+        cached[scope] = { token: resp.access_token, exp: Date.now() + (Number(resp.expires_in) || 3600) * 1000 };
         resolve(resp.access_token);
       },
       error_callback: (err: any) => reject(new Error(err?.message || "Google sign-in was cancelled")),
     });
     client.requestAccessToken({ prompt: "" });
   });
+}
+
+const API = "https://www.googleapis.com/drive/v3/files";
+const UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
+const qEsc = (s: string) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+async function findChild(token: string, parentId: string, name: string, folder: boolean): Promise<string | null> {
+  const q =
+    `'${qEsc(parentId)}' in parents and name = '${qEsc(name)}' and trashed = false and ` +
+    (folder ? "mimeType = 'application/vnd.google-apps.folder'" : "mimeType != 'application/vnd.google-apps.folder'");
+  const r = await fetch(
+    `${API}?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!r.ok) throw new Error(`Drive search failed (${r.status})`);
+  const j = await r.json();
+  return j.files?.[0]?.id ?? null;
+}
+
+/** Returns the id of folder `name` inside `parentId`, creating it if needed. */
+export async function findOrCreateFolder(token: string, parentId: string, name: string): Promise<string> {
+  const found = await findChild(token, parentId, name, true);
+  if (found) return found;
+  const r = await fetch(`${API}?supportsAllDrives=true&fields=id`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] }),
+  });
+  if (!r.ok) {
+    if (r.status === 403 || r.status === 404) throw new Error("No permission to create a folder in the target Drive folder");
+    throw new Error(`Could not create the Drive folder (${r.status})`);
+  }
+  return (await r.json()).id;
+}
+
+/**
+ * Upload (or replace, if a file with the same name exists) a blob into a Drive
+ * folder with a resumable upload. Returns the file's Drive link.
+ */
+export async function uploadToDriveFolder(
+  token: string,
+  folderId: string,
+  name: string,
+  blob: Blob,
+  onProgress?: (fraction: number) => void
+): Promise<string> {
+  const existing = await findChild(token, folderId, name, false);
+  const type = blob.type || "video/mp4";
+  const init = await fetch(
+    existing
+      ? `${UPLOAD}/${existing}?uploadType=resumable&supportsAllDrives=true`
+      : `${UPLOAD}?uploadType=resumable&supportsAllDrives=true`,
+    {
+      method: existing ? "PATCH" : "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": type,
+        "X-Upload-Content-Length": String(blob.size),
+      },
+      body: JSON.stringify(existing ? { name } : { name, parents: [folderId], mimeType: type }),
+    }
+  );
+  const session = init.headers.get("Location");
+  if (!init.ok || !session) throw new Error(`Could not start the Drive upload (${init.status})`);
+
+  const CHUNK = 64 * 256 * 1024; // 16 MB (must be a multiple of 256 KB)
+  let offset = 0;
+  let fileId: string | null = existing;
+  while (offset < blob.size) {
+    const end = Math.min(offset + CHUNK, blob.size);
+    const r = await fetch(session, {
+      method: "PUT",
+      headers: { "Content-Range": `bytes ${offset}-${end - 1}/${blob.size}` },
+      body: blob.slice(offset, end),
+    });
+    if (r.status === 308) {
+      const range = r.headers.get("Range");
+      offset = range ? Number(range.split("-")[1]) + 1 : end;
+    } else if (r.ok) {
+      fileId = (await r.json()).id ?? fileId;
+      offset = blob.size;
+    } else {
+      throw new Error(`Drive upload failed (${r.status})`);
+    }
+    onProgress?.(offset / blob.size);
+  }
+  return fileId ? `https://drive.google.com/file/d/${fileId}/view` : `https://drive.google.com/drive/folders/${folderId}`;
 }
 
 /** Fetch one Drive file as a File object (name + type from Drive metadata). */
