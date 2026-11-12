@@ -176,6 +176,7 @@ export default function PresentationViewer({
                 muted
                 playsInline
                 controls
+                preload="metadata"
                 onError={() => setVideoMode("iframe")}
               />
             ) : (

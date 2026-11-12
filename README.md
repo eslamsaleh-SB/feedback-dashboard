@@ -1,67 +1,15 @@
-# v59 bundle — deploy notes
+# Update – reduce Supabase Cached Egress
 
-Everything below has been type-checked with `npx tsc --noEmit -p .` = exit 0.
-Upload the whole tree (code files at their exact repo paths) to GitHub main,
-wait for Vercel, then run the SQL in the order below.
+Copy these files over the same paths in the repo, then commit and deploy.
 
-## Scope
+1. `app/api/presentation-video/[drive_id]/route.ts`
+   Redirect Cache-Control changed from `no-store` to `private, max-age=3000`.
+   Before: every play got a new signed URL, so the browser re-downloaded the whole video each time.
+   After: the same signed URL is reused for ~50 min, so the browser cache serves repeat plays.
 
-1. **Weekly Quality Score: Pressure module column**
-   `weekly_quality_scores` was missing a `pressure` column; the upload parser
-   silently dropped rows for that module.
-2. **Quality Score charts: labels + delta % by default**
-   Every line chart on `/quality-score` now shows each point's `%` and a
-   green/red ▲/▼ delta vs the previous point. Delta sits above the score.
-3. **Performance Thresholds: Parts column**
-   Module Errors table + CSV now include a per-collector Parts count
-   (`count(distinct (matchid, partid))` per hr_code). Also added Pressure +
-   Squad rows to the Quality Scores filter, and removed the duplicate
-   `Event` row (parser aliases `event` → `base`).
-4. **Send Report / module upload fixes**
-   Client picker keyed on hr_code (was undefined), match_sessions insert
-   uses `hr_code` (v56 dropped `collector_id`), module upload no longer
-   writes the dropped `actor_id`.
-5. **Six stored SQL functions still saying 'Uploader'**
-   `alter type ... rename value` doesn't rewrite function bodies — patched.
-6. **Four remaining stale `collectors` refs** across `/my-reports`,
-   `/dashboard`, `/module-upload`, `/api/session-notify`.
-7. **Reply blocks: dark-mode contrast fix**
-   Sky-50 backgrounds now have `dark:` variants.
-8. **Quiz + Presentation: assign date**
-   New `assigned_date` column (defaults to today) with picker in the
-   Quiz/Presentation builders, shown next to titles on admin + collector
-   lists. Backfill inserts today's date on the existing 1 quiz + 1
-   presentation.
-9. **/api/inquiries/followup — DISABLED stub**
-   Collector reply-back on inquiries was scoped out. The route returns 404
-   and the SQL file `05_...` is a no-op. Safe to leave, safe to delete
-   later.
+2. `components/PresentationViewer.tsx`
+   Added `preload="metadata"` to the main `<video>` (DriveVideo.tsx already had it).
+   Before: the browser could pre-download the full video on page load, even if not played.
 
-## Deploy order
-
-1. Upload every file under `app/...` and `components/...` to GitHub main
-   (drag-and-drop preserving the folder shape). Vercel redeploys.
-2. In Supabase SQL Editor, run in order:
-   1. `sql/01_weekly_add_pressure.sql`
-   2. `sql/02_collector_module_totals_add_parts.sql`
-   3. `sql/03_rename_uploader_in_functions.sql`
-   4. `sql/04_quizzes_presentations_assigned_date.sql`
-   5. (skip `sql/05_...` — no-op, scoped out)
-3. Re-upload the latest weekly Module Score CSV to backfill pressure values.
-
-## Verification
-
-- `/quality-score` — every module chart shows month labels + green/red
-  ▲/▼ deltas above each point.
-- `/performance-thresholds` — Module Errors table now has a Parts column;
-  Pressure + Squad appear in the Quality Scores filter; Event is gone.
-- `/send-report` (from admin) — sending to a v57-created collector no
-  longer throws "No matching collector records" and no longer errors on
-  `actor_id` when uploading errors.
-- `/my-reports` (as Jimmy or any Viewer) — reports render, no
-  "not linked" banner.
-- `/quality-score` reply blocks — reviewer reply text is readable in dark
-  mode.
-- `/admin-quizzes/new` + `/admin-presentations/new` — Assign date picker,
-  defaults to today.
-- `/my-quizzes` + `/my-presentations` — "Assigned YYYY-MM-DD" line.
+Not in this update (bigger savings): compress the videos (720p, lower bitrate) before copying them to the
+`presentation-videos` bucket, or serve them from Drive / Cloudflare R2. Pro plan gives 250 GB cached egress.
