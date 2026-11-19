@@ -134,6 +134,28 @@ export default function CollectorAttendanceView({ rows }: { rows: Row[] }) {
   const collectorOptions: MSOption[] = collectors.map((c) => ({
     value: c.hr_code, label: `${c.hr_code} - ${c.name}`,
   }));
+  // Export the table exactly as shown (current filters + sort) as CSV.
+  function exportCsv() {
+    const q = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const header = ["HR Code", "Name", "Team", "Total", "Complete", "Attended", "Late",
+      "Absent", "Cancelled", "Not Marked", "Attendance %"];
+    const lines = [header.map(q).join(",")];
+    for (const g of sorted) {
+      lines.push([g.hr_code, g.name, g.team ?? "", g.total, g.attended + g.late, g.attended,
+        g.late, g.absent, g.cancelled, g.notMarked, `${pct(g)}%`].map(q).join(","));
+    }
+    const range = fromDate || toDate ? `_${fromDate || "start"}_to_${toDate || "today"}` : "";
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `collector-attendance${range}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   const sortIcon = (k: string) => (sortKey === k ? (sortDir === "asc" ? " ▲" : " ▼") : "");
 
   return (
@@ -182,6 +204,16 @@ export default function CollectorAttendanceView({ rows }: { rows: Row[] }) {
           <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">To</label>
           <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
             className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 bg-white dark:bg-slate-900 text-sm" />
+        </div>
+        <div>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={sorted.length === 0}
+            className="rounded-lg bg-emerald-600 text-white px-3 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+          >
+            Export CSV
+          </button>
         </div>
       </div>
 
