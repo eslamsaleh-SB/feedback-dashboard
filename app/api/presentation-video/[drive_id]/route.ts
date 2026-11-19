@@ -54,6 +54,8 @@ export async function GET(
 
   return NextResponse.redirect(signed.signedUrl, {
     status: 302,
-    headers: { "Cache-Control": "private, no-store" },
+    // Let the browser reuse this redirect (same signed URL) so the video file
+    // is served from the browser cache instead of re-downloaded from Supabase.
+    headers: { "Cache-Control": "private, max-age=3000" },
   });
 }
