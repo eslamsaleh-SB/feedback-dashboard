@@ -1,27 +1,26 @@
-# Update – remove Supabase video copies (Drive only)
+# Update – play Drive videos through a Google service account (no Supabase storage)
 
-## 1) Copy these files over the same paths in the repo
-- components/VideoCopyControl.tsx   (keeps only `useMyEmail`; upload code removed)
-- components/BulkVideoCopy.tsx      (now a no-op; "Copy all from Drive" button gone)
-- components/DriveVideo.tsx         (Drive iframe only, with `authuser=<viewer email>`)
-- components/PresentationViewer.tsx (Drive iframe only, with `authuser=<viewer email>`)
-- components/MergeToDrive.tsx       (reads clips from Drive only)
-- components/PresentationBuilder.tsx (help text updated)
+Assumes 2026-11-23_16-02 is already applied (VideoCopyControl / BulkVideoCopy stubs).
 
-## 2) DELETE these files from the repo
-- app/api/admin/presentation-video-upload/route.ts   (upload endpoint)
-- app/api/presentation-video/[drive_id]/route.ts     (served Supabase copies)
-- scripts/drive-to-supabase.gs                       (bulk copier)
+## Copy into the repo (same paths)
+- app/api/presentation-video/[drive_id]/route.ts  (NEW: streams from Drive with the service account)
+- components/DriveVideo.tsx          (native video first, Drive iframe fallback)
+- components/PresentationViewer.tsx  (native video first + preload="metadata")
+- components/MergeToDrive.tsx        (tries the dashboard route, then Drive)
+- components/PresentationBuilder.tsx (help text)
 
-## 3) Supabase / Google (manual)
-- Supabase -> Storage -> presentation-videos: delete all files (then delete the bucket).
-- If you ran drive-to-supabase.gs in script.google.com, delete that project / any trigger
-  so it cannot refill the bucket.
-- Optional: remove SUPABASE_SERVICE_ROLE_KEY from Vercel only if nothing else uses it
-  (other admin routes do, so normally keep it).
+## DELETE from the repo (if not yet deleted)
+- app/api/admin/presentation-video-upload/route.ts
+- scripts/drive-to-supabase.gs
 
-## Behaviour after this update
-Videos play from Google Drive. Drive links are Hudl-only, so the viewer must be signed in to a
-Hudl Google account in the browser. `authuser=<email>` makes Drive use the dashboard email's
-account when several Google accounts are signed in. Non-Hudl viewers will see Drive's
-"You need access" page.
+## Manual steps
+1. Google Drive: share the videos folder with
+   dashboard-videos@feedback-dashboard-499511.iam.gserviceaccount.com  (Viewer).
+2. Vercel -> Settings -> Environment Variables: GOOGLE_SERVICE_ACCOUNT_JSON = full contents of the
+   key JSON (or its base64). Redeploy.
+3. Supabase -> Storage -> presentation-videos: delete the files, then the bucket.
+4. Never commit the key JSON to GitHub.
+
+## Notes
+- Not shared with the service account -> route returns 404 -> player falls back to Drive iframe.
+- Video bytes pass through Vercel (60s limit per request; Range requests keep chunks short).

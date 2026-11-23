@@ -436,7 +436,7 @@ export default function PresentationBuilder({
                   className={inputCls}
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                  Drive links must be shared with Hudl accounts. Viewers need to be signed in to their Hudl Google account.
+                  Share the Drive file or folder with dashboard-videos@feedback-dashboard-499511.iam.gserviceaccount.com (Viewer) so every collector can watch it in the dashboard.
                 </p>
               </div>
               <div>
