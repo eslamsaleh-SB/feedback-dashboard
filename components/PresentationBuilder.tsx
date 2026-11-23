@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import VideoCopyControl from "@/components/VideoCopyControl";
 import BulkVideoCopy from "@/components/BulkVideoCopy";
-import MergeToDrive from "@/components/MergeToDrive";
 
 type Page = {
   header: string;
@@ -339,19 +338,6 @@ export default function PresentationBuilder({
           .filter((s) => s.driveId)}
         onDone={() => setVideoRefresh((n) => n + 1)}
       />}
-
-      {canCopyVideos && (
-        <MergeToDrive
-          title={title}
-          items={pages
-            .map((p, i) => ({
-              index: i,
-              title: (p.description || "").trim() || p.header,
-              driveId: extractDriveId(p.video_link) ?? "",
-            }))
-            .filter((x) => x.driveId)}
-        />
-      )}
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
