@@ -436,7 +436,7 @@ export default function PresentationBuilder({
                   className={inputCls}
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                  Collectors outside Hudl can't open Drive links - an Admin copies the videos with "Copy all from Drive" so everyone can watch.
+                  Drive links must be shared with Hudl accounts. Viewers need to be signed in to their Hudl Google account.
                 </p>
               </div>
               <div>

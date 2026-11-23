@@ -1,15 +1,27 @@
-# Update – reduce Supabase Cached Egress
+# Update – remove Supabase video copies (Drive only)
 
-Copy these files over the same paths in the repo, then commit and deploy.
+## 1) Copy these files over the same paths in the repo
+- components/VideoCopyControl.tsx   (keeps only `useMyEmail`; upload code removed)
+- components/BulkVideoCopy.tsx      (now a no-op; "Copy all from Drive" button gone)
+- components/DriveVideo.tsx         (Drive iframe only, with `authuser=<viewer email>`)
+- components/PresentationViewer.tsx (Drive iframe only, with `authuser=<viewer email>`)
+- components/MergeToDrive.tsx       (reads clips from Drive only)
+- components/PresentationBuilder.tsx (help text updated)
 
-1. `app/api/presentation-video/[drive_id]/route.ts`
-   Redirect Cache-Control changed from `no-store` to `private, max-age=3000`.
-   Before: every play got a new signed URL, so the browser re-downloaded the whole video each time.
-   After: the same signed URL is reused for ~50 min, so the browser cache serves repeat plays.
+## 2) DELETE these files from the repo
+- app/api/admin/presentation-video-upload/route.ts   (upload endpoint)
+- app/api/presentation-video/[drive_id]/route.ts     (served Supabase copies)
+- scripts/drive-to-supabase.gs                       (bulk copier)
 
-2. `components/PresentationViewer.tsx`
-   Added `preload="metadata"` to the main `<video>` (DriveVideo.tsx already had it).
-   Before: the browser could pre-download the full video on page load, even if not played.
+## 3) Supabase / Google (manual)
+- Supabase -> Storage -> presentation-videos: delete all files (then delete the bucket).
+- If you ran drive-to-supabase.gs in script.google.com, delete that project / any trigger
+  so it cannot refill the bucket.
+- Optional: remove SUPABASE_SERVICE_ROLE_KEY from Vercel only if nothing else uses it
+  (other admin routes do, so normally keep it).
 
-Not in this update (bigger savings): compress the videos (720p, lower bitrate) before copying them to the
-`presentation-videos` bucket, or serve them from Drive / Cloudflare R2. Pro plan gives 250 GB cached egress.
+## Behaviour after this update
+Videos play from Google Drive. Drive links are Hudl-only, so the viewer must be signed in to a
+Hudl Google account in the browser. `authuser=<email>` makes Drive use the dashboard email's
+account when several Google accounts are signed in. Non-Hudl viewers will see Drive's
+"You need access" page.

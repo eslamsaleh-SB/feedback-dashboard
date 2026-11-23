@@ -36,15 +36,12 @@ export default function MergeToDrive({ title, items }: { title: string; items: I
     try {
       const token = await getDriveToken(myEmail, true);
 
-      // 1. Collect clips (dashboard copy first, Drive as fallback).
+      // 1. Collect clips from Drive.
       const clips: { title: string; file: Blob }[] = [];
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         setStatus(`Getting video ${i + 1} of ${items.length}…`);
-        let blob: Blob | null = null;
-        const r = await fetch(`/api/presentation-video/${encodeURIComponent(it.driveId)}`);
-        if (r.ok) blob = await r.blob();
-        else blob = await fetchDriveFile(it.driveId, token);
+        const blob: Blob = await fetchDriveFile(it.driveId, token);
         clips.push({ title: it.title || `Page ${it.index + 1}`, file: blob });
       }
 

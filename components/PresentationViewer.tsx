@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useMyEmail } from "@/components/VideoCopyControl";
 
 type Page = {
   header: string;
@@ -52,16 +53,14 @@ export default function PresentationViewer({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(Date.now());
   const [iframeNonce, setIframeNonce] = useState(0);
-  // v59: try native <video loop> first (real seamless loop), fall back to
-  // Drive iframe if the direct URL is blocked / not a playable file.
-  const [videoMode, setVideoMode] = useState<"native" | "iframe">("native");
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Videos play only from Google Drive (Supabase copies were removed).
+  // Drive is restricted to Hudl accounts, so pass the viewer's email as authuser.
+  const myEmail = useMyEmail();
 
   // Reset when the slide changes.
   useEffect(() => {
     setStartedAt(null);
     setIframeNonce(0);
-    setVideoMode("native");
   }, [idx]);
 
   // Ticker while the timer is running.
@@ -104,8 +103,9 @@ export default function PresentationViewer({
     if (!page?.drive_file_id) return null;
     const autoplay = startedAt != null ? "1" : "0";
     // nonce forces the iframe to reload (loop) on interval.
-    return `https://drive.google.com/file/d/${page.drive_file_id}/preview?autoplay=${autoplay}&t=${iframeNonce}`;
-  }, [page?.drive_file_id, startedAt, iframeNonce]);
+    const au = myEmail ? `&authuser=${encodeURIComponent(myEmail)}` : "";
+    return `https://drive.google.com/file/d/${page.drive_file_id}/preview?autoplay=${autoplay}&t=${iframeNonce}${au}`;
+  }, [page?.drive_file_id, startedAt, iframeNonce, myEmail]);
 
   if (total === 0) {
     return (
@@ -164,22 +164,6 @@ export default function PresentationViewer({
 
         {page!.drive_file_id ? (
           <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 relative bg-black">
-            {videoMode === "native" ? (
-              <video
-                ref={videoRef}
-                key={`native-${page!.drive_file_id}`}
-                src={`/api/presentation-video/${encodeURIComponent(page!.drive_file_id)}`}
-                className="w-full block bg-black"
-                style={{ height: "480px" }}
-                loop
-                autoPlay={startedAt != null}
-                muted
-                playsInline
-                controls
-                preload="metadata"
-                onError={() => setVideoMode("iframe")}
-              />
-            ) : (
               <iframe
                 key={`iframe-${iframeNonce}`}
                 src={iframeSrc ?? ""}
@@ -188,7 +172,6 @@ export default function PresentationViewer({
                 allow="autoplay; fullscreen"
                 allowFullScreen
               />
-            )}
             {expired && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-white">
                 <div className="text-center space-y-3">
@@ -227,12 +210,6 @@ export default function PresentationViewer({
                   setStartedAt(Date.now());
                   setNow(Date.now());
                   setIframeNonce((n) => n + 1);
-                  // For native mode, trigger play imperatively (user gesture
-                  // satisfies autoplay policy). Muted so browsers allow it.
-                  setTimeout(() => {
-                    const v = videoRef.current;
-                    if (v) { v.muted = true; v.play().catch(() => {}); }
-                  }, 50);
                 }}
                 className="rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-4 py-2 font-medium"
               >
