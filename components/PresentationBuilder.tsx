@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import VideoCopyControl from "@/components/VideoCopyControl";
 import BulkVideoCopy from "@/components/BulkVideoCopy";
-import MergeToDrive from "@/components/MergeToDrive";
 
 type Page = {
   header: string;
@@ -340,19 +339,6 @@ export default function PresentationBuilder({
         onDone={() => setVideoRefresh((n) => n + 1)}
       />}
 
-      {canCopyVideos && (
-        <MergeToDrive
-          title={title}
-          items={pages
-            .map((p, i) => ({
-              index: i,
-              title: (p.description || "").trim() || p.header,
-              driveId: extractDriveId(p.video_link) ?? "",
-            }))
-            .filter((x) => x.driveId)}
-        />
-      )}
-
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -436,7 +422,7 @@ export default function PresentationBuilder({
                   className={inputCls}
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                  Collectors outside Hudl can't open Drive links - an Admin copies the videos with "Copy all from Drive" so everyone can watch.
+                  Share the Drive file or folder with dashboard-videos@feedback-dashboard-499511.iam.gserviceaccount.com (Viewer) so every collector can watch it in the dashboard.
                 </p>
               </div>
               <div>

@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 
-// Plays a Drive video for anyone logged in: first from the dashboard's own copy
-// (/api/presentation-video, filled by the Admin "Copy all from Drive" button),
-// and falls back to the Drive player if that video hasn't been copied yet.
+// Plays a Drive video for anyone logged in: first through the dashboard route
+// (/api/presentation-video, which streams from Drive using a service account),
+// and falls back to the Drive player if that video isn't shared with it.
 export default function DriveVideo({ driveId, height = 300 }: { driveId: string; height?: number }) {
   const [mode, setMode] = useState<"native" | "iframe">("native");
   return (

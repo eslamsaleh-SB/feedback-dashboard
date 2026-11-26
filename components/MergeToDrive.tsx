@@ -36,7 +36,7 @@ export default function MergeToDrive({ title, items }: { title: string; items: I
     try {
       const token = await getDriveToken(myEmail, true);
 
-      // 1. Collect clips (dashboard copy first, Drive as fallback).
+      // 1. Collect clips (dashboard route first, Drive as fallback).
       const clips: { title: string; file: Blob }[] = [];
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
