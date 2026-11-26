@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Combobox, { type ComboOption } from "@/components/Combobox";
+import SheetBookingImport from "@/components/SheetBookingImport";
 
 type CollectorOpt = { hr_code: string; name: string | null; team: string | null };
 type Mode = "Online" | "Offline";
@@ -170,11 +171,17 @@ export default function FeedbackReservationForm({
   const labelCls = "block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1";
 
   return (
-    <form onSubmit={submit} className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold">Feedback Reservation</h1>
         <p className="text-slate-500 dark:text-slate-400">Book a feedback session for one collector or a group.</p>
       </div>
+
+      <SheetBookingImport collectors={collectors} />
+
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Or book one session manually</p>
+
+    <form onSubmit={submit} className="space-y-6">
 
       {/* Session type */}
       <div className={card}>
@@ -391,5 +398,6 @@ export default function FeedbackReservationForm({
         {busy ? "Booking..." : "Book session"}
       </button>
     </form>
+    </div>
   );
 }
