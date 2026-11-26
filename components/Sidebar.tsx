@@ -117,7 +117,8 @@ function buildNav(role: AppRole): NavEntry[] {
         { href: "/feedback-progress", label: "Feedback Progress" },
         { href: "/admin-collector-reviewer", label: "Collector ↔ Reviewer" },
         { href: "/admin-reviewer-history", label: "Assignment History" },
-        { href: "/users", label: "Users" }
+        { href: "/users", label: "Users" },
+        { href: "/email-log", label: "Email Log" }
       );
     }
     entries.push({

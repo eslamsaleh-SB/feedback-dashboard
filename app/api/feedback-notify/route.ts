@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { sendEmail, renderEmail } from "@/lib/email";
+import { sendEmail, renderEmail, logEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +93,15 @@ export async function POST(req: NextRequest) {
   const emailPromises = profilesWithIds.map(async (p) => {
     const { data: { user: u } } = await admin.auth.admin.getUserById(p.id);
     const email = u?.email;
-    if (!email) return;
+    if (!email) {
+      await logEmail({
+        hr_code: p.hr_code,
+        subject: `Feedback session scheduled - ${session_date}`,
+        status: "skipped",
+        error: "User has no email / login account",
+      });
+      return;
+    }
     const tlCcs = p.squad ? tlEmailBySquad.get(p.squad.trim()) ?? [] : [];
 
     const timeStr = session_time ? ` at ${session_time}` : "";
@@ -140,6 +148,21 @@ export async function POST(req: NextRequest) {
       cc: tlCcs,
     });
   });
+
+  // Codes that aren't in Users at all never get an email - log them too.
+  const found = new Set(profilesWithIds.map((p) => p.hr_code));
+  for (const code of hr_codes) {
+    if (!found.has(code)) {
+      emailPromises.push(
+        logEmail({
+          hr_code: code,
+          subject: `Feedback session scheduled - ${session_date}`,
+          status: "skipped",
+          error: "Code not found in Users",
+        })
+      );
+    }
+  }
 
   await Promise.allSettled(emailPromises);
   return NextResponse.json({ ok: true, sent: profilesWithIds.length });

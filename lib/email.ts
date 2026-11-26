@@ -59,6 +59,34 @@ async function resolveTeamLeaderCcs(toAddresses: string[]): Promise<string[]> {
   }
 }
 
+// v60: record every send in public.email_log (Admin "Email Log" page).
+// Rows older than 1 month are deleted automatically. Logging never blocks or
+// breaks the email itself.
+const LOG_KEEP_DAYS = 30;
+export async function logEmail(entry: {
+  to_email?: string | null;
+  cc?: string | null;
+  subject?: string | null;
+  status: "sent" | "failed" | "skipped";
+  error?: string | null;
+  hr_code?: string | null;
+}) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+  try {
+    const a = createAdminClient(url, key, { auth: { persistSession: false } });
+    await a.from("email_log").insert(entry);
+    // Cheap housekeeping on ~1 in 20 writes.
+    if (Math.random() < 0.05) {
+      const cutoff = new Date(Date.now() - LOG_KEEP_DAYS * 86400000).toISOString();
+      await a.from("email_log").delete().lt("created_at", cutoff);
+    }
+  } catch (e: any) {
+    console.warn("[email] log failed:", e?.message ?? e);
+  }
+}
+
 const DASHBOARD_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://feedback-dashboard-7i8h.vercel.app";
 
@@ -103,6 +131,7 @@ export async function sendEmail({
   const pass = process.env.GMAIL_APP_PASSWORD;
   if (!user || !pass) {
     console.warn("[email] GMAIL_USER / GMAIL_APP_PASSWORD not set - email skipped");
+    await logEmail({ to_email: to, subject, status: "failed", error: "Email sending is not configured" });
     return false;
   }
 
@@ -143,9 +172,17 @@ export async function sendEmail({
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
     });
+    await logEmail({ to_email: to, cc: ccMerged.join(", ") || null, subject, status: "sent" });
     return true;
   } catch (e: any) {
     console.error(`[email] sendMail failed for ${to}: ${e?.message ?? e}`);
+    await logEmail({
+      to_email: to,
+      cc: ccMerged.join(", ") || null,
+      subject,
+      status: "failed",
+      error: String(e?.message ?? e).slice(0, 500),
+    });
     return false;
   }
 }
